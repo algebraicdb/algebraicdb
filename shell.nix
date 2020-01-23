@@ -10,5 +10,6 @@ in
       pkgconfig
       nix
       rustChannels.stable.rust # replace stable with nighly or beta as needed
+      rls
       ];
   }
