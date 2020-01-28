@@ -3,6 +3,8 @@ mod types;
 use std::mem::size_of;
 
 use crate::types::*;
+//mod types;
+
 
 /*
 Thing = Var1 Int Int | Var2 Float

@@ -4,13 +4,13 @@ use std::mem::size_of;
 
 type EnumTag = u32;
 #[derive(Debug)]
-enum Type {
+pub enum Type {
     Int,
     Sum(Vec<(String, Vec<Type>)>),
 }
 
 impl Type {
-    fn size_of(&self) -> usize {
+    pub fn size_of(&self) -> usize {
         match self {
             Type::Int => size_of::<i32>(),
             Type::Sum(variants) => {
@@ -23,7 +23,7 @@ impl Type {
         }
     }
 
-    fn parse(&self, bytes: &[u8]) -> bincode::Result<()> {
+    /*fn parse(&self, bytes: &[u8]) -> bincode::Result<()> {
         assert_eq!(self.size_of(), bytes.len());
 
         match self {
@@ -38,5 +38,5 @@ impl Type {
         }
 
         Ok(())
-    }
+    }*/
 }
