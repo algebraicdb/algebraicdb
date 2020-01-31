@@ -1,10 +1,9 @@
 mod types;
 
-use std::mem::size_of;
+use std::collections::HashMap;
 
 use crate::types::*;
 //mod types;
-
 
 /*
 Thing = Var1 Int Int | Var2 Float
@@ -13,10 +12,12 @@ all_types: HashMap<String, Type>;
 */
 
 fn main() {
-    let example: Type = Type::Sum(vec![
-        ("Var1".into(), vec![Type::Int]),
-        ("Var2".into(), vec![]),
-    ]);
+    let mut types = HashMap::new();
+    types.insert(0, Type::Int);
+    types.insert(
+        0,
+        Type::Sum(vec![("Var1".into(), vec![]), ("Var2".into(), vec![0])]),
+    );
 
-    println!("Size of {:#?}: {}", example, example.size_of());
+    println!("Size of {:#?}: {}", types[&1], types[&1].size_of(&types));
 }
