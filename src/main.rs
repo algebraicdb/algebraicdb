@@ -1,3 +1,4 @@
+mod table;
 mod types;
 
 use std::collections::HashMap;
