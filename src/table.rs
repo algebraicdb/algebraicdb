@@ -3,7 +3,7 @@ use crate::types::{TypeId, TypeMap, Value};
 pub type Schema = Vec<TypeId>;
 
 pub struct Table {
-    schema: Vec<TypeId>,
+    schema: Schema,
     data: Vec<u8>,
     row_size: usize,
 }

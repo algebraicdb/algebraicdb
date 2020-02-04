@@ -1,0 +1,93 @@
+use std::str::FromStr;
+use crate::ast::{Stmt, Select, SelectFrom,  Expr}; // (0)
+
+grammar;
+// List of all terminals
+
+match {
+    "SELECT" => SELECT,
+    "FROM" => FROM,
+    "INSERT" => INSERT,
+    "INTO" => INTO,
+    "VALUES" => VALUES,
+    "\"" => QUOTE,
+    ";" => SEMICOLON,
+    "+" => PLUS,
+    "-" => MINUS,
+    "*" => STAR,
+    "/" => SLASH,
+    "," => COMMA,
+    ")" => RPAREN,
+    "(" => LPAREN,
+} else {
+    r"[0-9]+" => INTEGER,
+    r"[A-z_]+" => IDENTIFIER,
+    r#""[^"]*""# => STR,
+    _
+}
+
+Comma<E>: Vec<E> =
+    <v0:(<E> COMMA)*> <e1:E?> =>
+        v0.into_iter().chain(e1).collect();
+
+Ident: String = {
+    IDENTIFIER => String::from(<>),
+}
+
+Expr: Expr = {
+    <id:Ident> => Expr::Ident(id),
+    <int:Integer> => Expr::Integer(int),
+    <s:Str> => Expr::Str(s),
+}
+
+SelectFrom: SelectFrom = {
+    FROM <id:Ident> => SelectFrom::Table(id),
+    FROM LPAREN <s:Select> RPAREN => SelectFrom::Select(Box::new(s)),
+}
+
+InsertValues: Vec<Expr> = {
+    VALUES LPAREN <vals:Comma<Expr>> RPAREN => vals,
+}
+
+Select: Select = {
+    SELECT
+        <exprs:Comma<Expr>>
+        <from:(SelectFrom?)>
+    => Select {
+        exprs,
+        from,
+    },
+}
+
+pub Stmt: Stmt = {
+    <select:Select> SEMICOLON => Stmt::Select(select), 
+    INSERT INTO <table:Ident>
+        <columns:(LPAREN Comma<Ident> RPAREN)?>
+        <values:InsertValues?>
+        SEMICOLON
+    => {
+        Stmt::Insert {
+            into: table,
+            columns: columns.map(|(_, cols, _)| cols).unwrap_or(vec![]),
+            values: values.unwrap_or(vec![]),
+        }
+    },
+}
+
+// SELECT x FROM SELECT PATTERN (Val1 y x) FROM table WHERE y > 0
+// SELECT 1 FROM //()
+
+
+
+Str: String = {
+    <s:STR> => {
+        let mut s = String::from(s);
+        s.pop();
+        s.remove(0);
+        s
+    },
+}
+
+Integer: i32 = {
+    INTEGER => i32::from_str(<>).unwrap()
+};
