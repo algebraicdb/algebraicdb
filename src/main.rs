@@ -1,7 +1,7 @@
 mod table;
 mod types;
 mod ast;
-mod my_grammar;
+mod grammar;
 
 use std::collections::HashMap;
 

@@ -30,6 +30,7 @@ pub enum Stmt {
 
 #[test]
 fn select() {
+    use crate::grammar::StmtParser;
 
     let examples = vec![ 
         r#"SELECT hello, ma, boi FROM feffe;"#,
@@ -43,7 +44,7 @@ fn select() {
 
     for ex in examples {
         println!("Trying to parse {}", ex);
-        let out = crate::my_grammar::StmtParser::new()
+        let out = StmtParser::new()
             .parse(ex)
             .expect("Parsing failed");
 
