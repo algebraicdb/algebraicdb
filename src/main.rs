@@ -1,18 +1,12 @@
+#![feature(str_strip)]
+
 mod table;
 mod types;
 mod ast;
 mod grammar;
 
 use std::collections::HashMap;
-
 use crate::types::*;
-//mod types;
-
-/*
-Thing = Var1 Int Int | Var2 Float
-
-all_types: HashMap<String, Type>;
-*/
 
 fn main() {
     let mut types = HashMap::new();

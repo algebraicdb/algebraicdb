@@ -1,9 +1,11 @@
 use std::str::FromStr;
-use crate::ast::{Stmt, Select, SelectFrom,  Expr}; // (0)
+use crate::ast::{Stmt, Select, SelectFrom,  Expr};
 
 grammar;
-// List of all terminals
 
+// List of all terminals, and their prescedence
+// Terminals within the same block have the same prescedence except that regexes have lower.
+// Terminals in else-blocks have lower prescedence than the blocks before.
 match {
     "SELECT" => SELECT,
     "FROM" => FROM,
@@ -23,43 +25,10 @@ match {
     r"[0-9]+" => INTEGER,
     r"[A-z_]+" => IDENTIFIER,
     r#""[^"]*""# => STR,
-    _
 }
 
-Comma<E>: Vec<E> =
-    <v0:(<E> COMMA)*> <e1:E?> =>
-        v0.into_iter().chain(e1).collect();
-
-Ident: String = {
-    IDENTIFIER => String::from(<>),
-}
-
-Expr: Expr = {
-    <id:Ident> => Expr::Ident(id),
-    <int:Integer> => Expr::Integer(int),
-    <s:Str> => Expr::Str(s),
-}
-
-SelectFrom: SelectFrom = {
-    FROM <id:Ident> => SelectFrom::Table(id),
-    FROM LPAREN <s:Select> RPAREN => SelectFrom::Select(Box::new(s)),
-}
-
-InsertValues: Vec<Expr> = {
-    VALUES LPAREN <vals:Comma<Expr>> RPAREN => vals,
-}
-
-Select: Select = {
-    SELECT
-        <exprs:Comma<Expr>>
-        <from:(SelectFrom?)>
-    => Select {
-        exprs,
-        from,
-    },
-}
-
-pub Stmt: Stmt = {
+// Main production
+pub Stmt: Stmt<'input> = {
     <select:Select> SEMICOLON => Stmt::Select(select), 
     INSERT INTO <table:Ident>
         <columns:(LPAREN Comma<Ident> RPAREN)?>
@@ -74,20 +43,47 @@ pub Stmt: Stmt = {
     },
 }
 
-// SELECT x FROM SELECT PATTERN (Val1 y x) FROM table WHERE y > 0
-// SELECT 1 FROM //()
+Select: Select<'input> = {
+    SELECT
+        <exprs:Comma<Expr>>
+        <from:(SelectFrom?)>
+    => Select {
+        exprs,
+        from,
+    },
+}
 
+SelectFrom: SelectFrom<'input> = {
+    FROM <id:Ident> => SelectFrom::Table(id),
+    FROM LPAREN <s:Select> RPAREN => SelectFrom::Select(Box::new(s)),
+}
 
+Expr: Expr<'input> = {
+    <id:Ident> => Expr::Ident(id),
+    <int:Integer> => Expr::Integer(int),
+    <s:Str> => Expr::Str(s),
+}
 
-Str: String = {
+Ident: &'input str = {
+    IDENTIFIER => <>
+}
+
+InsertValues: Vec<Expr<'input>> = {
+    VALUES LPAREN <vals:Comma<Expr>> RPAREN => vals,
+}
+
+Str: &'input str = {
     <s:STR> => {
-        let mut s = String::from(s);
-        s.pop();
-        s.remove(0);
-        s
+        s.strip_prefix('"').unwrap().strip_suffix('"').unwrap()
     },
 }
 
 Integer: i32 = {
     INTEGER => i32::from_str(<>).unwrap()
 };
+
+// Generic helper-rule for comma-separated lists
+Comma<E>: Vec<E> =
+    <v0:(<E> COMMA)*> <e1:E?> =>
+        v0.into_iter().chain(e1).collect();
+

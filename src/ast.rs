@@ -1,30 +1,30 @@
 
 #[derive(Debug)]
-pub enum Expr {
-    Ident(String),
+pub enum Expr<'a> {
+    Ident(&'a str),
     Integer(i32),
-    Str(String),
+    Str(&'a str),
 }
 
 #[derive(Debug)]
-pub struct Select {
-    pub exprs: Vec<Expr>,
-    pub from: Option<SelectFrom>,
+pub struct Select<'a> {
+    pub exprs: Vec<Expr<'a>>,
+    pub from: Option<SelectFrom<'a>>,
 }
 
 #[derive(Debug)]
-pub enum SelectFrom {
-    Table(String),
-    Select(Box<Select>),
+pub enum SelectFrom<'a> {
+    Table(&'a str),
+    Select(Box<Select<'a>>),
 }
 
 #[derive(Debug)]
-pub enum Stmt {
-    Select(Select),
+pub enum Stmt<'a> {
+    Select(Select<'a>),
     Insert {
-        into: String,
-        columns: Vec<String>,
-        values: Vec<Expr>,
+        into: &'a str,
+        columns: Vec<&'a str>,
+        values: Vec<Expr<'a>>,
     },
 }
 
@@ -32,17 +32,24 @@ pub enum Stmt {
 fn select() {
     use crate::grammar::StmtParser;
 
-    let examples = vec![ 
+    let valid_examples = vec![
         r#"SELECT hello, ma, boi FROM feffe;"#,
         r#"SELECT hello, asdsad FROM adssad;"#,
         r#"INSERT INTO empty;"#,
         r#"INSERT INTO empty () VALUES ();"#,
         r#"INSERT INTO empty VALUES ();"#,
-        r#"INSERT INTO feffes_mom (foo, bar, baz) VALUES (1,myself,"hello");"#,
+        r#"INSERT INTO feffes_mom (foo, bar, baz) VALUES (1, myself, "hello");"#,
         r#"SELECT bleh FROM (SELECT 3);"#,
     ];
 
-    for ex in examples {
+    let invalid_examples = vec![
+        r#"SELECT hello, ma boi FROM feffe;"#,
+        r#"SELECT hello FROM "sup dawg";"#,
+        r#"INSERT INTO empty"#,
+        r#"INSERT INTO empty (2) VALUES ();"#,
+    ];
+
+    for ex in valid_examples {
         println!("Trying to parse {}", ex);
         let out = StmtParser::new()
             .parse(ex)
@@ -51,5 +58,12 @@ fn select() {
         println!("parsed: {:#?}", out);
     }
 
-    assert!(false);
+    for ex in invalid_examples {
+        println!("Trying to parse invalid input {}", ex);
+        let _out = StmtParser::new()
+            .parse(ex)
+            .expect_err("Parsing succeeded when it should have failed");
+    }
+
+    //assert!(false);
 }
