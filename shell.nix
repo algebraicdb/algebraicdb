@@ -9,7 +9,7 @@ in
       cargo
       pkgconfig
       nix
-      rustChannels.stable.rust # replace stable with nighly or beta as needed
+      rustChannels.nightly.rust # replace stable with nighly or beta as needed
       rls
       ];
   }

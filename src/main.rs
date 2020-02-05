@@ -1,4 +1,5 @@
 #![feature(str_strip)]
+#![feature(box_syntax)]
 
 mod table;
 mod types;
