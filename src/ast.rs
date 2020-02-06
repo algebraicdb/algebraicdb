@@ -99,6 +99,11 @@ fn select() {
         r#"UPDATE feffe SET hair_length = "short";"#,
         r#"UPDATE feffe SET hair_length = short WHERE hej=3;"#,
         r#"SELECT col FROM t1 LEFT JOIN t2 LEFT JOIN t3 ON 3=5;"#,
+        r#"SELECT col FROM t1 LEFT JOIN (t2 LEFT JOIN t3 ON 3=5);"#,
+        r#"SELECT col FROM t1 LEFT JOIN (t2 LEFT JOIN t3) ON 3=5;"#,
+        r#"SELECT col FROM (t1 LEFT JOIN t2) LEFT JOIN t3 ON 3=5;"#,
+        r#"SELECT col FROM t1 LEFT JOIN t2 ON 3 = 5 LEFT JOIN t3 ON 3 < 4;"#,
+        r#"SELECT col FROM t1 LEFT JOIN t2 LEFT JOIN t3;"#,
     ];
 
     let invalid_examples = vec![

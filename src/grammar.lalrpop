@@ -24,48 +24,40 @@ match {
     "SET" => SET,
     "ON" => ON,
     "\"" => QUOTE,
-    ";" => SEMICOLON,
-    "+" => PLUS,
-    "-" => MINUS,
-    "*" => STAR,
-    "/" => SLASH,
-    "," => COMMA,
-    ")" => RPAREN,
-    "(" => LPAREN,
-    "=" => EQUALS,
-    "!=" => NOT_EQUALS,
-    "<=" => LESS_OR_EQUALS,
-    ">=" => GREATER_OR_EQUALS,
-    "<" => LESS,
-    ">" => GREATER,
-} else {
+    ",",
+    ")",
+    "(",
+    "=",
+    "!=",
+    "<=",
+    ">=",
+    "<",
+    ">",
+    ";",
     r"[0-9]+" => INTEGER,
-    r"[A-z][A-z0-9_]*" => Ident,
+    r"[A-z][A-z0-9_]*" => IDENT,
     r#""[^"]*""# => STR,
 }
 
 // Main production
 pub Stmt: Stmt<'input> = {
-    <select:Select> SEMICOLON => Stmt::Select(select), 
-    <insert:Insert> SEMICOLON => Stmt::Insert(insert),
-    <delete:Delete> SEMICOLON => Stmt::Delete(delete),
-    <update:Update> SEMICOLON => Stmt::Update(update),
+    <select:Select> ";" => Stmt::Select(select),
+    <insert:Insert> ";" => Stmt::Insert(insert),
+    <delete:Delete> ";" => Stmt::Delete(delete),
+    <update:Update> ";" => Stmt::Update(update),
 }
 
-
 Delete: Delete<'input> = {
-    DELETE FROM <table:Ident> <where_clause:(WhereClause?)>=> Delete {
+    DELETE FROM <table:IDENT> <where_clause:(WhereClause?)> => Delete {
         table,
         where_clause,
     },
-
 }
 
-
 Update: Update<'input> = {
-    UPDATE 
-    <table:Ident> SET 
-    <ass:Comma<Ass>> 
+    UPDATE
+    <table:IDENT> SET
+    <ass:Comma<Ass>>
     <where_clause:(WhereClause?)>
     => Update {
         table,
@@ -74,59 +66,45 @@ Update: Update<'input> = {
     },
 }
 
-
 Select: Select<'input> = {
     SELECT
         <exprs:Comma<Expr>>
-        <from:(FROM SelectFrom)?>
-        <where_clause:(WhereClause?)>
+        <from:(FROM <SelectFrom>)?>
+        <where_clause:WhereClause?>
     => Select {
         exprs,
-        from: from.map(|(_, from)| from),
+        from: from,
         where_clause,
     },
 }
 
-// TODO: Resolve ambiguity of this expression:
-// t1 LEFT JOIN t2 LEFT JOIN t3 ON expr
-SelectFrom2: SelectFrom<'input> = {
-    LPAREN <s:Select> RPAREN => SelectFrom::Select(box s),
-    <id:Ident> => SelectFrom::Table(id),
-}
-
-SelectFrom1: SelectFrom<'input> = {
-    <table_a:SelectFrom2> <join_type:JoinType> <table_b:SelectFrom>
-        ON <on_clause:Expr>
-    => SelectFrom::Join(box Join{
+SelectFrom: SelectFrom<'input> = {
+    <table_a:SelectFrom>
+        <join_type:JoinType>
+        <table_b:SelectFrom2>
+        <on_clause:(ON <Expr>)?>
+    => SelectFrom::Join(box Join {
         table_a,
         table_b,
         join_type,
         on_clause,
     }),
-    SelectFrom2 => <>,
+    SelectFrom2,
 }
 
-SelectFrom: SelectFrom<'input> = {
-    <table_a:SelectFrom1> <join_type:JoinType> LPAREN <table_b:SelectFrom> RPAREN
-        <on_clause:(ON Expr)?>
-    => SelectFrom::Join(box Join{
-        table_a,
-        table_b,
-        join_type,
-        on_clause: on_clause.map(|(_, on_clause)| on_clause), 
-    }),
-    SelectFrom1 => <>,
+SelectFrom2: SelectFrom<'input> = {
+    "(" <s:Select> ")" => SelectFrom::Select(box s),
+    <id:IDENT> => SelectFrom::Table(id),
+    "(" <SelectFrom> ")",
 }
 
 WhereClause: WhereClause<'input> = {
     WHERE <condition:Expr> => WhereClause(condition),
 }
 
-// SELECT * FROM t1 LEFT JOIN t2 LEFT JOIN t3 ON expr 
-
 Insert: Insert<'input> = {
-    INSERT INTO <table:Ident>
-        <columns:(LPAREN Comma<Ident> RPAREN)?>
+    INSERT INTO <table:IDENT>
+        <columns:("(" Comma<IDENT> ")")?>
         <values:InsertValues?>
     => Insert {
         table,
@@ -143,31 +121,31 @@ JoinType: JoinType = {
 }
 
 Expr1: Expr<'input> = {
-    <id:Ident> => Expr::Ident(id),
+    <id:IDENT> => Expr::Ident(id),
     <int:Integer> => Expr::Integer(int),
     <s:Str> => Expr::Str(s),
-    LPAREN <e:Expr> RPAREN => e,
+    "(" <e:Expr> ")" => e,
 }
 
 Expr: Expr<'input> = {
-    <e1:Expr1> EQUALS            <e2:Expr> => Expr::Equals(box e1, box e2),
-    <e1:Expr1> NOT_EQUALS        <e2:Expr> => Expr::NotEquals(box e1, box e2),
-    <e1:Expr1> LESS_OR_EQUALS    <e2:Expr> => Expr::LessEquals(box e1, box e2),
-    <e1:Expr1> GREATER_OR_EQUALS <e2:Expr> => Expr::GreaterEquals(box e1, box e2),
-    <e1:Expr1> LESS              <e2:Expr> => Expr::LessThan(box e1, box e2),
-    <e1:Expr1> GREATER           <e2:Expr> => Expr::GreaterThan(box e1, box e2),
-    Expr1 => <>,
+    <e1:Expr1> "="  <e2:Expr> => Expr::Equals(box e1, box e2),
+    <e1:Expr1> "!=" <e2:Expr> => Expr::NotEquals(box e1, box e2),
+    <e1:Expr1> "<=" <e2:Expr> => Expr::LessEquals(box e1, box e2),
+    <e1:Expr1> ">=" <e2:Expr> => Expr::GreaterEquals(box e1, box e2),
+    <e1:Expr1> "<"  <e2:Expr> => Expr::LessThan(box e1, box e2),
+    <e1:Expr1> ">"  <e2:Expr> => Expr::GreaterThan(box e1, box e2),
+    Expr1,
 }
 
 Ass: Ass<'input> = {
-    <col:Ident> EQUALS <expr:Expr> => Ass {
+    <col:IDENT> "=" <expr:Expr> => Ass {
         col,
         expr,
     }
 }
 
 InsertValues: Vec<Expr<'input>> = {
-    VALUES LPAREN <vals:Comma<Expr>> RPAREN => vals,
+    VALUES "(" <vals:Comma<Expr>> ")" => vals,
 }
 
 Str: &'input str = {
@@ -182,6 +160,6 @@ Integer: i32 = {
 
 // Generic helper-rule for comma-separated lists
 Comma<E>: Vec<E> =
-    <v0:(<E> COMMA)*> <e1:E?> =>
+    <v0:(<E> ",")*> <e1:E?> =>
         v0.into_iter().chain(e1).collect();
 
