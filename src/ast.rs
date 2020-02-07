@@ -136,6 +136,4 @@ fn select() {
             .parse(ex)
             .expect_err("Parsing succeeded when it should have failed");
     }
-
-    assert!(false);
 }
