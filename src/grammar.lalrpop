@@ -3,9 +3,9 @@ use std::str::FromStr;
 
 grammar;
 
-// List of all terminals, and their prescedence
-// Terminals within the same block have the same prescedence except that regexes have lower.
-// Terminals in else-blocks have lower prescedence than the blocks before.
+// List of all terminals, and their precedence
+// Terminals within the same block have the same precedence except that regexes have lower.
+// Terminals in else-blocks have lower precedence than the blocks before.
 match {
     "SELECT" => SELECT,
     "FROM" => FROM,
@@ -23,6 +23,8 @@ match {
     "FULL" => FULL,
     "SET" => SET,
     "ON" => ON,
+    "AND" => AND,
+    "OR" => OR,
     "\"" => QUOTE,
     ",",
     ")",
@@ -120,20 +122,26 @@ JoinType: JoinType = {
     INNER? JOIN => JoinType::Inner,
 }
 
-Expr1: Expr<'input> = {
+Expr2: Expr<'input> = {
     <id:IDENT> => Expr::Ident(id),
     <int:Integer> => Expr::Integer(int),
     <s:Str> => Expr::Str(s),
     "(" <e:Expr> ")" => e,
 }
 
+Expr1: Expr<'input> = {
+    <e1:Expr1> "="  <e2:Expr2> => Expr::Equals(box e1, box e2),
+    <e1:Expr1> "!=" <e2:Expr2> => Expr::NotEquals(box e1, box e2),
+    <e1:Expr1> "<=" <e2:Expr2> => Expr::LessEquals(box e1, box e2),
+    <e1:Expr1> ">=" <e2:Expr2> => Expr::GreaterEquals(box e1, box e2),
+    <e1:Expr1> "<"  <e2:Expr2> => Expr::LessThan(box e1, box e2),
+    <e1:Expr1> ">"  <e2:Expr2> => Expr::GreaterThan(box e1, box e2),
+    Expr2,
+}
+
 Expr: Expr<'input> = {
-    <e1:Expr1> "="  <e2:Expr> => Expr::Equals(box e1, box e2),
-    <e1:Expr1> "!=" <e2:Expr> => Expr::NotEquals(box e1, box e2),
-    <e1:Expr1> "<=" <e2:Expr> => Expr::LessEquals(box e1, box e2),
-    <e1:Expr1> ">=" <e2:Expr> => Expr::GreaterEquals(box e1, box e2),
-    <e1:Expr1> "<"  <e2:Expr> => Expr::LessThan(box e1, box e2),
-    <e1:Expr1> ">"  <e2:Expr> => Expr::GreaterThan(box e1, box e2),
+    <e1:Expr> AND  <e2:Expr1> => Expr::And(box e1, box e2),
+    <e1:Expr> OR   <e2:Expr1> => Expr::Or(box e1, box e2),
     Expr1,
 }
 

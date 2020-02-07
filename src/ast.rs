@@ -1,4 +1,3 @@
-
 #[derive(Debug)]
 pub enum Expr<'a> {
     Ident(&'a str),
@@ -10,6 +9,8 @@ pub enum Expr<'a> {
     LessThan(Box<Expr<'a>>, Box<Expr<'a>>),
     GreaterThan(Box<Expr<'a>>, Box<Expr<'a>>),
     GreaterEquals(Box<Expr<'a>>, Box<Expr<'a>>),
+    And(Box<Expr<'a>>, Box<Expr<'a>>),
+    Or(Box<Expr<'a>>, Box<Expr<'a>>),
 }
 
 #[derive(Debug)]
@@ -33,7 +34,7 @@ pub enum SelectFrom<'a> {
 }
 
 #[derive(Debug)]
-pub struct Join<'a>{
+pub struct Join<'a> {
     pub table_a: SelectFrom<'a>,
     pub table_b: SelectFrom<'a>,
     pub join_type: JoinType,
@@ -41,7 +42,7 @@ pub struct Join<'a>{
 }
 
 #[derive(Debug, Clone, Copy)]
-pub enum JoinType{
+pub enum JoinType {
     Inner,
     LeftOuter,
     RightOuter,
@@ -73,7 +74,7 @@ pub enum Stmt<'a> {
 }
 
 #[derive(Debug)]
-pub struct Update <'a> {
+pub struct Update<'a> {
     pub table: &'a str,
     pub ass: Vec<Ass<'a>>,
     pub where_clause: Option<WhereClause<'a>>,
@@ -104,6 +105,7 @@ fn select() {
         r#"SELECT col FROM (t1 LEFT JOIN t2) LEFT JOIN t3 ON 3=5;"#,
         r#"SELECT col FROM t1 LEFT JOIN t2 ON 3 = 5 LEFT JOIN t3 ON 3 < 4;"#,
         r#"SELECT col FROM t1 LEFT JOIN t2 LEFT JOIN t3;"#,
+        r#"UPDATE feffe SET hair_length = short WHERE hej=3 AND true OR false;"#,
     ];
 
     let invalid_examples = vec![
@@ -122,9 +124,7 @@ fn select() {
 
     for ex in valid_examples {
         println!("Trying to parse {}", ex);
-        let out = StmtParser::new()
-            .parse(ex)
-            .expect("Parsing failed");
+        let out = StmtParser::new().parse(ex).expect("Parsing failed");
 
         println!("parsed: {:#?}", out);
     }
