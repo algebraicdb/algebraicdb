@@ -106,6 +106,7 @@ fn select() {
         r#"SELECT col FROM t1 LEFT JOIN t2 ON 3 = 5 LEFT JOIN t3 ON 3 < 4;"#,
         r#"SELECT col FROM t1 LEFT JOIN t2 LEFT JOIN t3;"#,
         r#"UPDATE feffe SET hair_length = short WHERE hej=3 AND true OR false;"#,
+        r#"SELECT c FROM t WHERE a AND b OR c AND d;"#,
     ];
 
     let invalid_examples = vec![

@@ -122,26 +122,30 @@ JoinType: JoinType = {
     INNER? JOIN => JoinType::Inner,
 }
 
-Expr2: Expr<'input> = {
+Expr3: Expr<'input> = {
     <id:IDENT> => Expr::Ident(id),
     <int:Integer> => Expr::Integer(int),
     <s:Str> => Expr::Str(s),
     "(" <e:Expr> ")" => e,
 }
 
+Expr2: Expr<'input> = {
+    <e1:Expr2> "="  <e2:Expr3> => Expr::Equals(box e1, box e2),
+    <e1:Expr2> "!=" <e2:Expr3> => Expr::NotEquals(box e1, box e2),
+    <e1:Expr2> "<=" <e2:Expr3> => Expr::LessEquals(box e1, box e2),
+    <e1:Expr2> ">=" <e2:Expr3> => Expr::GreaterEquals(box e1, box e2),
+    <e1:Expr2> "<"  <e2:Expr3> => Expr::LessThan(box e1, box e2),
+    <e1:Expr2> ">"  <e2:Expr3> => Expr::GreaterThan(box e1, box e2),
+    Expr3,
+}
+
 Expr1: Expr<'input> = {
-    <e1:Expr1> "="  <e2:Expr2> => Expr::Equals(box e1, box e2),
-    <e1:Expr1> "!=" <e2:Expr2> => Expr::NotEquals(box e1, box e2),
-    <e1:Expr1> "<=" <e2:Expr2> => Expr::LessEquals(box e1, box e2),
-    <e1:Expr1> ">=" <e2:Expr2> => Expr::GreaterEquals(box e1, box e2),
-    <e1:Expr1> "<"  <e2:Expr2> => Expr::LessThan(box e1, box e2),
-    <e1:Expr1> ">"  <e2:Expr2> => Expr::GreaterThan(box e1, box e2),
-    Expr2,
+    <e1:Expr1> AND <e2:Expr2> => Expr::And(box e1, box e2),
+    Expr2
 }
 
 Expr: Expr<'input> = {
-    <e1:Expr> AND  <e2:Expr1> => Expr::And(box e1, box e2),
-    <e1:Expr> OR   <e2:Expr1> => Expr::Or(box e1, box e2),
+    <e1:Expr> OR <e2:Expr1> => Expr::Or(box e1, box e2),
     Expr1,
 }
 
