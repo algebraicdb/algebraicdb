@@ -12,26 +12,26 @@ pub type TypeMap = HashMap<TypeId, Type>;
 
 #[derive(Debug)]
 pub enum Type {
-    Int,
-    Bool,
+    Integer,
     Double,
+    Bool,
     Sum(Vec<(String, Vec<TypeId>)>),
 }
 
 #[derive(Debug, PartialEq)]
 pub enum Value {
-    Int(i32),
-    Bool(bool),
+    Integer(i32),
     Double(f64),
+    Bool(bool),
     Sum(String, Vec<Value>),
 }
 
 impl Display for Value {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         match self {
-            Value::Int(v) => write!(f, "{}", v),
-            Value::Bool(v) => write!(f, "{}", v),
+            Value::Integer(v) => write!(f, "{}", v),
             Value::Double(v) => write!(f, "{}", v),
+            Value::Bool(v) => write!(f, "{}", v),
             Value::Sum(variant, values) => {
                 write!(f, "({}", variant)?;
                 for value in values {
@@ -47,9 +47,9 @@ impl Value {
     pub fn to_bytes<W: Write>(&self, writer: &mut W, types: &TypeMap, t: &Type) {
         let size = t.size_of(types);
         match self {
-            Value::Int(val) => serialize_into(writer, val).unwrap(),
-            Value::Bool(val) => serialize_into(writer, val).unwrap(),
+            Value::Integer(val) => serialize_into(writer, val).unwrap(),
             Value::Double(val) => serialize_into(writer, val).unwrap(),
+            Value::Bool(val) => serialize_into(writer, val).unwrap(),
             Value::Sum(variant, values) => {
                 if let Type::Sum(variants) = t {
                     let (tag, variant_types) = variants
@@ -83,7 +83,7 @@ impl Value {
 impl Type {
     pub fn size_of(&self, types: &TypeMap) -> usize {
         match self {
-            Type::Int => size_of::<i32>(),
+            Type::Integer => size_of::<i32>(),
             Type::Bool => size_of::<bool>(),
             Type::Double => size_of::<f64>(),
             Type::Sum(variants) => {
@@ -100,7 +100,7 @@ impl Type {
         assert_eq!(self.size_of(types), bytes.len());
 
         match self {
-            Type::Int => deserialize(bytes).map(|v| Value::Int(v)),
+            Type::Integer => deserialize(bytes).map(|v| Value::Integer(v)),
             Type::Bool => deserialize(bytes).map(|v| Value::Bool(v)),
             Type::Double => deserialize(bytes).map(|v| Value::Double(v)),
             Type::Sum(variants) => {
@@ -132,7 +132,7 @@ impl Type {
 
     pub fn random_value(&self, types: &TypeMap) -> Value {
         match self {
-            Type::Int => Value::Int(rand::random::<i32>()),
+            Type::Integer => Value::Integer(rand::random::<i32>()),
             Type::Bool => Value::Bool(rand::random::<bool>()),
             Type::Double => Value::Double(rand::random::<f64>()),
             Type::Sum(variants) => {
@@ -155,7 +155,7 @@ mod tests {
     #[test]
     fn test_to_bytes_and_back_again() {
         let mut types: TypeMap = HashMap::new();
-        types.insert(0, Type::Int);
+        types.insert(0, Type::Integer);
         types.insert(1, Type::Bool);
         types.insert(2, Type::Double);
         types.insert(

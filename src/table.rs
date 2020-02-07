@@ -140,7 +140,7 @@ impl PartialOrd for Cell<'_, '_> {
         debug_assert_eq!(self.type_id, other.type_id);
 
         match &self.types[&self.type_id] {
-            Type::Int => deserialize::<i32>(self.data)
+            Type::Integer => deserialize::<i32>(self.data)
                 .unwrap()
                 .partial_cmp(&deserialize(other.data).unwrap()),
             Type::Bool => deserialize::<bool>(self.data)
@@ -199,7 +199,7 @@ mod tests {
 
     fn create_type_map() -> TypeMap {
         let mut types: TypeMap = HashMap::new();
-        types.insert(0, Type::Int);
+        types.insert(0, Type::Integer);
         types.insert(1, Type::Bool);
         types.insert(2, Type::Double);
         types.insert(
@@ -269,10 +269,10 @@ mod tests {
         let schema = vec![0];
         let mut table = Table::new(schema.clone(), &types);
 
-        table.push_row(&[Value::Int(1)], &types);
-        table.push_row(&[Value::Int(2)], &types);
-        table.push_row(&[Value::Int(3)], &types);
-        table.push_row(&[Value::Int(9001)], &types);
+        table.push_row(&[Value::Integer(1)], &types);
+        table.push_row(&[Value::Integer(2)], &types);
+        table.push_row(&[Value::Integer(3)], &types);
+        table.push_row(&[Value::Integer(9001)], &types);
 
         for i in 0..table.row_count() {
             let row_i = table.get_row(i);

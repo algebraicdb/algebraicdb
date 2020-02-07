@@ -1,8 +1,10 @@
+use crate::pattern::Pattern;
+use crate::types::Value;
+
 #[derive(Debug)]
 pub enum Expr<'a> {
     Ident(&'a str),
-    Integer(i32),
-    Str(&'a str),
+    Value(Value),
     Equals(Box<Expr<'a>>, Box<Expr<'a>>),
     NotEquals(Box<Expr<'a>>, Box<Expr<'a>>),
     LessEquals(Box<Expr<'a>>, Box<Expr<'a>>),
@@ -21,9 +23,15 @@ pub struct Ass<'a> {
 
 #[derive(Debug)]
 pub struct Select<'a> {
-    pub exprs: Vec<Expr<'a>>,
+    pub items: Vec<SelectItem<'a>>,
     pub from: Option<SelectFrom<'a>>,
     pub where_clause: Option<WhereClause<'a>>,
+}
+
+#[derive(Debug)]
+pub enum SelectItem<'a> {
+    Expr(Expr<'a>),
+    Pattern(&'a str, Pattern<'a>),
 }
 
 #[derive(Debug)]
@@ -81,7 +89,7 @@ pub struct Update<'a> {
 }
 
 #[test]
-fn select() {
+fn ast_grammar() {
     use crate::grammar::StmtParser;
 
     let valid_examples = vec![
@@ -90,14 +98,14 @@ fn select() {
         r#"INSERT INTO empty;"#,
         r#"INSERT INTO empty () VALUES ();"#,
         r#"INSERT INTO empty VALUES ();"#,
-        r#"INSERT INTO feffes_mom (foo, bar, baz) VALUES (1, myself, "hello");"#,
+        r#"INSERT INTO feffes_mom (foo, bar, baz) VALUES (1, myself, hello);"#,
         r#"SELECT bleh FROM (SELECT 3);"#,
         r#"DELETE FROM feffe WHERE goblin;"#,
         r#"SELECT col FROM t1 LEFT JOIN t2;"#,
         r#"SELECT col FROM t1 RIGHT JOIN t2;"#,
         r#"SELECT col FROM t1 RIGHT OUTER JOIN t2;"#,
         r#"SELECT col FROM t1 FULL OUTER JOIN t2;"#,
-        r#"UPDATE feffe SET hair_length = "short";"#,
+        r#"UPDATE feffe SET hair_length = -3.14;"#,
         r#"UPDATE feffe SET hair_length = short WHERE hej=3;"#,
         r#"SELECT col FROM t1 LEFT JOIN t2 LEFT JOIN t3 ON 3=5;"#,
         r#"SELECT col FROM t1 LEFT JOIN (t2 LEFT JOIN t3 ON 3=5);"#,
@@ -107,14 +115,17 @@ fn select() {
         r#"SELECT col FROM t1 LEFT JOIN t2 LEFT JOIN t3;"#,
         r#"UPDATE feffe SET hair_length = short WHERE hej=3 AND true OR false;"#,
         r#"SELECT c FROM t WHERE a AND b OR c AND d;"#,
+        r#"SELECT x: 1, y FROM t;"#,
+        r#"SELECT x: Val1(1, InnerVal2(true, _), y) FROM t;"#,
+        r#"INSERT INTO table VALUES (Val1(1, 2, Val2()), true);"#,
     ];
 
     let invalid_examples = vec![
         r#"SELECT hello, ma boi FROM feffe;"#,
-        r#"SELECT hello FROM "sup dawg";"#,
+        r#"SELECT hello FROM 3;"#,
         r#"INSERT INTO empty"#,
-        r#"SELECT * FROM t1 INNER LEFT JOIN t2;"#,
-        r#"SELECT * FROM t1 INNER OUTER JOIN t2;"#,
+        r#"SELECT c FROM t1 INNER LEFT JOIN t2;"#,
+        r#"SELECT c FROM t1 INNER OUTER JOIN t2;"#,
         r#"INSERT INTO empty (2) VALUES ();"#,
         r#"DELETE just;"#,
         r#"DELETE FROM just WHERE ;"#,

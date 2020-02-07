@@ -1,5 +1,7 @@
 use crate::ast::*;
 use std::str::FromStr;
+use crate::pattern::Pattern;
+use crate::types::Value;
 
 grammar;
 
@@ -26,6 +28,7 @@ match {
     "AND" => AND,
     "OR" => OR,
     "\"" => QUOTE,
+    "_",
     ",",
     ")",
     "(",
@@ -36,17 +39,22 @@ match {
     "<",
     ">",
     ";",
-    r"[0-9]+" => INTEGER,
+    ":",
+    "true",
+    "false",
+    r"-?[0-9]+" => INTEGER,
+    // TODO: make sure this regex for floats conform to standards
+    r"-?[0-9]+(\.[0-9]+)([eE]-?[0-9]+)?" => FLOAT,
     r"[A-z][A-z0-9_]*" => IDENT,
     r#""[^"]*""# => STR,
 }
 
 // Main production
 pub Stmt: Stmt<'input> = {
-    <select:Select> ";" => Stmt::Select(select),
-    <insert:Insert> ";" => Stmt::Insert(insert),
-    <delete:Delete> ";" => Stmt::Delete(delete),
-    <update:Update> ";" => Stmt::Update(update),
+    <Select> ";" => Stmt::Select(<>),
+    <Insert> ";" => Stmt::Insert(<>),
+    <Delete> ";" => Stmt::Delete(<>),
+    <Update> ";" => Stmt::Update(<>),
 }
 
 Delete: Delete<'input> = {
@@ -70,14 +78,19 @@ Update: Update<'input> = {
 
 Select: Select<'input> = {
     SELECT
-        <exprs:Comma<Expr>>
+        <items:Comma<SelectItem>>
         <from:(FROM <SelectFrom>)?>
         <where_clause:WhereClause?>
     => Select {
-        exprs,
+        items,
         from: from,
         where_clause,
     },
+}
+
+SelectItem: SelectItem<'input> = {
+    <variant:IDENT> ":" <pattern:Pattern> => SelectItem::Pattern(variant, pattern),
+    Expr => SelectItem::Expr(<>),
 }
 
 SelectFrom: SelectFrom<'input> = {
@@ -95,13 +108,13 @@ SelectFrom: SelectFrom<'input> = {
 }
 
 SelectFrom2: SelectFrom<'input> = {
-    "(" <s:Select> ")" => SelectFrom::Select(box s),
-    <id:IDENT> => SelectFrom::Table(id),
+    "(" <Select> ")" => SelectFrom::Select(box <>),
+    IDENT => SelectFrom::Table(<>),
     "(" <SelectFrom> ")",
 }
 
 WhereClause: WhereClause<'input> = {
-    WHERE <condition:Expr> => WhereClause(condition),
+    WHERE <Expr> => WhereClause(<>),
 }
 
 Insert: Insert<'input> = {
@@ -122,11 +135,19 @@ JoinType: JoinType = {
     INNER? JOIN => JoinType::Inner,
 }
 
+Value: Value = {
+    Integer => Value::Integer(<>),
+    Double => Value::Double(<>),
+    Bool => Value::Bool(<>),
+    Str => unimplemented!("Strings aren't supported"),
+    // TODO: This grammar will probably conflict with function calls...
+    <variant:IDENT> "(" <values:Comma<Value>> ")" => Value::Sum(variant.to_string(), values),
+}
+
 Expr3: Expr<'input> = {
-    <id:IDENT> => Expr::Ident(id),
-    <int:Integer> => Expr::Integer(int),
-    <s:Str> => Expr::Str(s),
-    "(" <e:Expr> ")" => e,
+    IDENT => Expr::Ident(<>),
+    Value => Expr::Value(<>),
+    "(" <Expr> ")",
 }
 
 Expr2: Expr<'input> = {
@@ -157,17 +178,33 @@ Ass: Ass<'input> = {
 }
 
 InsertValues: Vec<Expr<'input>> = {
-    VALUES "(" <vals:Comma<Expr>> ")" => vals,
+    VALUES "(" <Comma<Expr>> ")",
+}
+
+pub Pattern: Pattern<'input> = {
+    "_" => Pattern::Ignore,
+    Integer => Pattern::Int(<>),
+    Bool => Pattern::Bool(<>),
+    Double => Pattern::Double(<>),
+    IDENT => Pattern::Binding(<>),
+    <id:IDENT> "(" <ps:Comma<Pattern>> ")" => Pattern::Variant(id, ps),
 }
 
 Str: &'input str = {
-    <s:STR> => {
-        s.strip_prefix('"').unwrap().strip_suffix('"').unwrap()
-    },
+    STR => <>.strip_prefix('"').unwrap().strip_suffix('"').unwrap(),
 }
 
 Integer: i32 = {
     INTEGER => i32::from_str(<>).unwrap()
+};
+
+Double: f64 = {
+    FLOAT => f64::from_str(<>).unwrap()
+}
+
+Bool: bool = {
+    "true" => true,
+    "false" => true,
 };
 
 // Generic helper-rule for comma-separated lists
