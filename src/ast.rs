@@ -118,6 +118,8 @@ fn ast_grammar() {
         r#"SELECT x: 1, y FROM t;"#,
         r#"SELECT x: Val1(1, InnerVal2(true, _), y) FROM t;"#,
         r#"INSERT INTO table VALUES (Val1(1, 2, Val2()), true);"#,
+        r#"SELECT x: Val1(1, InnerVal2(true, _), y) FROM t WHERE true;"#,
+
     ];
 
     let invalid_examples = vec![

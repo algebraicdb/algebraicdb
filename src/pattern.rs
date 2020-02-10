@@ -19,6 +19,7 @@ pub enum Pattern<'a> {
     Binding(&'a str),
 }
 
+
 #[test]
 fn pattern_grammar() {
     use crate::grammar::PatternParser;

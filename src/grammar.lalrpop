@@ -89,7 +89,7 @@ Select: Select<'input> = {
 }
 
 SelectItem: SelectItem<'input> = {
-    <variant:IDENT> ":" <pattern:Pattern> => SelectItem::Pattern(variant, pattern),
+    <col:IDENT> ":" <pattern:Pattern> => (SelectItem::Pattern(col, pattern)),
     Expr => SelectItem::Expr(<>),
 }
 
