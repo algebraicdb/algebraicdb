@@ -27,11 +27,17 @@ match {
     "ON" => ON,
     "AND" => AND,
     "OR" => OR,
+    "CREATE" => CREATE,
+    "TYPE" => TYPE,
+    "AS" => AS,
+    "VARIANT" => VARIANT,
     "\"" => QUOTE,
     "_",
     ",",
     ")",
     "(",
+    "{",
+    "}",
     "=",
     "!=",
     "<=",
@@ -55,6 +61,7 @@ pub Stmt: Stmt<'input> = {
     <Insert> ";" => Stmt::Insert(<>),
     <Delete> ";" => Stmt::Delete(<>),
     <Update> ";" => Stmt::Update(<>),
+    <CreateType> ";" => Stmt::CreateType(<>),
 }
 
 Delete: Delete<'input> = {
@@ -133,6 +140,18 @@ JoinType: JoinType = {
     RIGHT OUTER? JOIN => JoinType::RightOuter,
     FULL OUTER? JOIN => JoinType::FullOuter,
     INNER? JOIN => JoinType::Inner,
+}
+
+VarDef: (&'input str, Vec<&'input str>) = {
+    <name:IDENT> "(" <variants:Comma<IDENT>> ")" => (name, variants),
+}
+
+CreateType: CreateType<'input> = {
+    CREATE TYPE
+        <name:IDENT>
+        AS VARIANT
+        "{" <variants:Comma<VarDef>> "}"
+        => CreateType::Variant(name, variants),
 }
 
 Value: Value = {

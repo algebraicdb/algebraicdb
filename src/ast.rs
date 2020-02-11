@@ -79,6 +79,7 @@ pub enum Stmt<'a> {
     Insert(Insert<'a>),
     Delete(Delete<'a>),
     Update(Update<'a>),
+    CreateType(CreateType<'a>),
 }
 
 #[derive(Debug)]
@@ -86,6 +87,11 @@ pub struct Update<'a> {
     pub table: &'a str,
     pub ass: Vec<Ass<'a>>,
     pub where_clause: Option<WhereClause<'a>>,
+}
+
+#[derive(Debug)]
+pub enum CreateType<'a> {
+    Variant(&'a str, Vec<(&'a str, Vec<&'a str>)>),
 }
 
 #[test]
@@ -119,7 +125,12 @@ fn ast_grammar() {
         r#"SELECT x: Val1(1, InnerVal2(true, _), y) FROM t;"#,
         r#"INSERT INTO table VALUES (Val1(1, 2, Val2()), true);"#,
         r#"SELECT x: Val1(1, InnerVal2(true, _), y) FROM t WHERE true;"#,
-
+        r#"CREATE TYPE newCoolType AS VARIANT {};"#,
+        r#"CREATE TYPE newCoolType AS VARIANT {
+            Var1(),
+            Var1(Bool),
+            Var1(newCoolType, alsoCoolType),
+        };"#,
     ];
 
     let invalid_examples = vec![
