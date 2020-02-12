@@ -1,20 +1,25 @@
+#![feature(str_strip)]
+#![feature(box_syntax)]
+
+mod ast;
+mod grammar;
+mod pattern;
+mod pre_typechecker;
+mod primitive;
+mod table;
+mod typechecker;
 mod types;
 
-use std::mem::size_of;
-
 use crate::types::*;
-
-/*
-Thing = Var1 Int Int | Var2 Float
-
-all_types: HashMap<String, Type>;
-*/
+use std::collections::HashMap;
 
 fn main() {
-    let example: Type = Type::Sum(vec![
-        ("Var1".into(), vec![Type::Int]),
-        ("Var2".into(), vec![]),
-    ]);
+    let mut types = HashMap::new();
+    types.insert(0, Type::Integer);
+    types.insert(
+        0,
+        Type::Sum(vec![("Var1".into(), vec![]), ("Var2".into(), vec![0])]),
+    );
 
-    println!("Size of {:#?}: {}", example, example.size_of());
+    println!("Size of {:#?}: {}", types[&1], types[&1].size_of(&types));
 }

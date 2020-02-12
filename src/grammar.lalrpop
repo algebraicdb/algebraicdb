@@ -1,0 +1,237 @@
+use crate::ast::*;
+use std::str::FromStr;
+use crate::pattern::Pattern;
+use crate::types::Value;
+
+grammar;
+
+// List of all terminals, and their precedence
+// Terminals within the same block have the same precedence except that regexes have lower.
+// Terminals in else-blocks have lower precedence than the blocks before.
+match {
+    "SELECT" => SELECT,
+    "FROM" => FROM,
+    "WHERE" => WHERE,
+    "INSERT" => INSERT,
+    "INTO" => INTO,
+    "VALUES" => VALUES,
+    "DELETE" => DELETE,
+    "UPDATE" => UPDATE,
+    "JOIN" => JOIN,
+    "LEFT" => LEFT,
+    "RIGHT" => RIGHT,
+    "INNER" => INNER,
+    "OUTER" => OUTER,
+    "FULL" => FULL,
+    "SET" => SET,
+    "ON" => ON,
+    "AND" => AND,
+    "OR" => OR,
+    "CREATE" => CREATE,
+    "TYPE" => TYPE,
+    "AS" => AS,
+    "VARIANT" => VARIANT,
+    "\"" => QUOTE,
+    "_",
+    ",",
+    ")",
+    "(",
+    "{",
+    "}",
+    "=",
+    "!=",
+    "<=",
+    ">=",
+    "<",
+    ">",
+    ";",
+    ":",
+    "true",
+    "false",
+    r"-?[0-9]+" => INTEGER,
+    // TODO: make sure this regex for floats conform to standards
+    r"-?[0-9]+(\.[0-9]+)([eE]-?[0-9]+)?" => FLOAT,
+    r"[A-z][A-z0-9_]*" => IDENT,
+    r#""[^"]*""# => STR,
+}
+
+// Main production
+pub Stmt: Stmt = {
+    <Select> ";" => Stmt::Select(<>),
+    <Insert> ";" => Stmt::Insert(<>),
+    <Delete> ";" => Stmt::Delete(<>),
+    <Update> ";" => Stmt::Update(<>),
+    <CreateType> ";" => Stmt::CreateType(<>),
+}
+
+Delete: Delete = {
+    DELETE FROM <table:Ident> <where_clause:(WhereClause?)> => Delete {
+        table,
+        where_clause,
+    },
+}
+
+Update: Update = {
+    UPDATE
+    <table:Ident> SET
+    <ass:Comma<Ass>>
+    <where_clause:(WhereClause?)>
+    => Update {
+        table,
+        ass,
+        where_clause,
+    },
+}
+
+Select: Select = {
+    SELECT
+        <items:Comma<SelectItem>>
+        <from:(FROM <SelectFrom>)?>
+        <where_clause:WhereClause?>
+    => Select {
+        items,
+        from: from,
+        where_clause,
+    },
+}
+
+SelectItem: SelectItem = {
+    <col:Ident> ":" <pattern:Pattern> => (SelectItem::Pattern(col, pattern)),
+    Expr => SelectItem::Expr(<>),
+}
+
+SelectFrom: SelectFrom = {
+    <table_a:SelectFrom>
+        <join_type:JoinType>
+        <table_b:SelectFrom2>
+        <on_clause:(ON <Expr>)?>
+    => SelectFrom::Join(box Join {
+        table_a,
+        table_b,
+        join_type,
+        on_clause,
+    }),
+    SelectFrom2,
+}
+
+SelectFrom2: SelectFrom = {
+    "(" <Select> ")" => SelectFrom::Select(box <>),
+    Ident => SelectFrom::Table(<>),
+    "(" <SelectFrom> ")",
+}
+
+WhereClause: WhereClause = {
+    WHERE <Expr> => WhereClause(<>),
+}
+
+Insert: Insert = {
+    INSERT INTO <table:Ident>
+        <columns:("(" Comma<Ident> ")")?>
+        <values:InsertValues?>
+    => Insert {
+        table,
+        columns: columns.map(|(_, cols, _)| cols).unwrap_or(vec![]),
+        values: values.unwrap_or(vec![]),
+    }
+}
+
+JoinType: JoinType = {
+    LEFT OUTER? JOIN => JoinType::LeftOuter,
+    RIGHT OUTER? JOIN => JoinType::RightOuter,
+    FULL OUTER? JOIN => JoinType::FullOuter,
+    INNER? JOIN => JoinType::Inner,
+}
+
+VarDef: (String, Vec<String>) = {
+    <name:Ident> "(" <variants:Comma<Ident>> ")" => (name, variants),
+}
+
+CreateType: CreateType = {
+    CREATE TYPE
+        <name:Ident>
+        AS VARIANT
+        "{" <variants:Comma<VarDef>> "}"
+        => CreateType::Variant(name, variants),
+}
+
+Value: Value = {
+    Integer => Value::Integer(<>),
+    Double => Value::Double(<>),
+    Bool => Value::Bool(<>),
+    Str => unimplemented!("Strings aren't supported"),
+    // TODO: This grammar will probably conflict with function calls...
+    <variant:Ident> "(" <values:Comma<Value>> ")" => Value::Sum(variant.to_string(), values),
+}
+
+Expr3: Expr = {
+    Ident => Expr::Ident(<>),
+    Value => Expr::Value(<>),
+    "(" <Expr> ")",
+}
+
+Expr2: Expr = {
+    <e1:Expr2> "="  <e2:Expr3> => Expr::Equals(box e1, box e2),
+    <e1:Expr2> "!=" <e2:Expr3> => Expr::NotEquals(box e1, box e2),
+    <e1:Expr2> "<=" <e2:Expr3> => Expr::LessEquals(box e1, box e2),
+    <e1:Expr2> ">=" <e2:Expr3> => Expr::GreaterEquals(box e1, box e2),
+    <e1:Expr2> "<"  <e2:Expr3> => Expr::LessThan(box e1, box e2),
+    <e1:Expr2> ">"  <e2:Expr3> => Expr::GreaterThan(box e1, box e2),
+    Expr3,
+}
+
+Expr1: Expr = {
+    <e1:Expr1> AND <e2:Expr2> => Expr::And(box e1, box e2),
+    Expr2
+}
+
+Expr: Expr = {
+    <e1:Expr> OR <e2:Expr1> => Expr::Or(box e1, box e2),
+    Expr1,
+}
+
+Ass: Ass = {
+    <col:Ident> "=" <expr:Expr> => Ass {
+        col,
+        expr,
+    }
+}
+
+InsertValues: Vec<Expr> = {
+    VALUES "(" <Comma<Expr>> ")",
+}
+
+pub Pattern: Pattern = {
+    "_" => Pattern::Ignore,
+    Integer => Pattern::Int(<>),
+    Bool => Pattern::Bool(<>),
+    Double => Pattern::Double(<>),
+    Ident => Pattern::Binding(<>),
+    <id:Ident> "(" <ps:Comma<Pattern>> ")" => Pattern::Variant(id, ps),
+}
+
+Ident: String = {
+    IDENT => String::from(<>),
+}
+
+Str: String = {
+    STR => String::from(<>.strip_prefix('"').unwrap().strip_suffix('"').unwrap()),
+}
+
+Integer: i32 = {
+    INTEGER => i32::from_str(<>).unwrap()
+};
+
+Double: f64 = {
+    FLOAT => f64::from_str(<>).unwrap()
+}
+
+Bool: bool = {
+    "true" => true,
+    "false" => true,
+};
+
+// Generic helper-rule for comma-separated lists
+Comma<E>: Vec<E> =
+    <v0:(<E> ",")*> <e1:E?> =>
+        v0.into_iter().chain(e1).collect();
+

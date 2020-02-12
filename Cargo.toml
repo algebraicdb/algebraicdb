@@ -3,8 +3,16 @@ name = "algebraicdb"
 version = "0.1.0"
 authors = ["feffe <feffe@feffe.dev>"]
 edition = "2018"
+build = "build.rs" # LALRPOP preprocessing
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
 bincode = "1.2.1"
+rand = "0.7.3"
+lalrpop-util = "0.17.2"
+regex = "0.2.0"
+smallvec = "1.2.0"
+
+[build-dependencies]
+lalrpop = "0.17.2"
