@@ -1,10 +1,17 @@
-use crate::types::{EnumTag, Type, TypeId, TypeMap, Value};
 use crate::pattern::CompiledPattern;
+use crate::types::{EnumTag, Type, TypeId, TypeMap, Value};
 use bincode::deserialize;
 use std::cmp::{Ord, Ordering, PartialOrd};
 
 pub type Schema = Vec<(String, TypeId)>;
 
+#[derive(Debug, Clone)]
+pub struct Column {
+    col_type: TypeId,
+    name: String,
+}
+
+// Table defines
 pub struct Table {
     schema: Schema,
     data: Vec<u8>,
@@ -61,7 +68,11 @@ impl Table {
         }
     }
 
-    pub fn pattern_iter<'p, 'ts, 'tb>(&'tb self, pattern: &'p CompiledPattern, types: &'ts TypeMap) -> RowPatternIter<'p, 'ts, 'tb> {
+    pub fn pattern_iter<'p, 'ts, 'tb>(
+        &'tb self,
+        pattern: &'p CompiledPattern,
+        types: &'ts TypeMap,
+    ) -> RowPatternIter<'p, 'ts, 'tb> {
         RowPatternIter {
             pattern,
             table: self,
@@ -141,7 +152,7 @@ impl<'p, 'ts, 'tb> Iterator for RowPatternIter<'p, 'ts, 'tb> {
             self.row += 1;
             for (i, value) in &self.pattern.matches {
                 for j in 0..value.len() {
-                    if row.data[i+j] != value[j] {
+                    if row.data[i + j] != value[j] {
                         continue 'outer;
                     }
                 }
@@ -161,7 +172,9 @@ impl<'p, 'ts, 'tb> Iterator for CellPatternIter<'p, 'ts, 'tb> {
     type Item = (&'p str, Cell<'ts, 'tb>);
 
     fn next(&mut self) -> Option<Self::Item> {
-        self.pattern.bindings.get(self.cursor)
+        self.pattern
+            .bindings
+            .get(self.cursor)
             .map(|(index, type_id, ident)| {
                 self.cursor += 1;
 
@@ -202,38 +215,38 @@ impl<'tb, 'ts> Row<'tb> {
 }
 
 impl PartialEq for Cell<'_, '_> {
-fn eq(&self, other: &Self) -> bool {
-    debug_assert_eq!(self.type_id, other.type_id);
-    self.data == other.data
-}
+    fn eq(&self, other: &Self) -> bool {
+        debug_assert_eq!(self.type_id, other.type_id);
+        self.data == other.data
+    }
 }
 
 impl PartialOrd for Cell<'_, '_> {
-fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-    debug_assert_eq!(self.type_id, other.type_id);
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        debug_assert_eq!(self.type_id, other.type_id);
 
-    match &self.types[&self.type_id] {
-        Type::Integer => deserialize::<i32>(self.data)
-            .unwrap()
-            .partial_cmp(&deserialize(other.data).unwrap()),
-        Type::Bool => deserialize::<bool>(self.data)
-            .unwrap()
-            .partial_cmp(&deserialize(other.data).unwrap()),
-        Type::Double => deserialize::<f64>(self.data)
-            .unwrap()
-            .partial_cmp(&deserialize(other.data).unwrap()),
-        Type::Sum(variants) => {
-            let mut data1 = self.data;
-            let mut data2 = other.data;
+        match &self.types[&self.type_id] {
+            Type::Integer => deserialize::<i32>(self.data)
+                .unwrap()
+                .partial_cmp(&deserialize(other.data).unwrap()),
+            Type::Bool => deserialize::<bool>(self.data)
+                .unwrap()
+                .partial_cmp(&deserialize(other.data).unwrap()),
+            Type::Double => deserialize::<f64>(self.data)
+                .unwrap()
+                .partial_cmp(&deserialize(other.data).unwrap()),
+            Type::Sum(variants) => {
+                let mut data1 = self.data;
+                let mut data2 = other.data;
 
-            let tag_size = std::mem::size_of::<EnumTag>();
-            let tag1: EnumTag = deserialize(&data1[..tag_size]).unwrap();
-            let tag2: EnumTag = deserialize(&data2[..tag_size]).unwrap();
+                let tag_size = std::mem::size_of::<EnumTag>();
+                let tag1: EnumTag = deserialize(&data1[..tag_size]).unwrap();
+                let tag2: EnumTag = deserialize(&data2[..tag_size]).unwrap();
 
-            data1 = &data1[tag_size..];
-            data2 = &data2[tag_size..];
+                data1 = &data1[tag_size..];
+                data2 = &data2[tag_size..];
 
-            match tag1.cmp(&tag2) {
+                match tag1.cmp(&tag2) {
                     Ordering::Equal => {
                         let (_name, members) = &variants[tag1];
                         for &type_id in members {
@@ -299,11 +312,7 @@ mod tests {
     #[test]
     fn test_table() {
         let types = create_type_map();
-        let schema = vec![
-            ("i".into(), 0),
-            ("b".into(), 1),
-            ("s".into(), 5),
-        ];
+        let schema = vec![("i".into(), 0), ("b".into(), 1), ("s".into(), 5)];
         let mut table = Table::new(schema.clone(), &types);
 
         assert_eq!(table.row_count(), 0);
@@ -404,8 +413,8 @@ mod tests {
 
     #[test]
     fn test_pattern_iter() {
-        use crate::grammar::StmtParser;
         use crate::ast::*;
+        use crate::grammar::StmtParser;
 
         let types = create_type_map();
         let schema = vec![("x".into(), 3), ("y".into(), 3)];
@@ -436,9 +445,9 @@ mod tests {
         let parse_pattern = |input: &str| -> CompiledPattern {
             let stmt = StmtParser::new().parse(input).unwrap();
             match stmt {
-                Stmt::Select(Select{
-                    items, ..
-                }) => CompiledPattern::compile(&items, &schema, &types),
+                Stmt::Select(Select { items, .. }) => {
+                    CompiledPattern::compile(&items, &schema, &types)
+                }
                 _ => panic!("Not a select statement"),
             }
         };
