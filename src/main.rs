@@ -1,15 +1,16 @@
 #![feature(str_strip)]
 #![feature(box_syntax)]
 
-mod table;
-mod types;
 mod ast;
 mod grammar;
 mod pattern;
+mod pre_typechecker;
 mod primitive;
+mod table;
+mod types;
 
-use std::collections::HashMap;
 use crate::types::*;
+use std::collections::HashMap;
 
 fn main() {
     let mut types = HashMap::new();
