@@ -6,7 +6,7 @@ pub struct TablePermissions<'a> {
     perm: Permission,
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq, Eq)]
 pub enum Permission {
     R,
     RW,
@@ -50,5 +50,35 @@ fn get_select<'a>(sel: &'a SelectFrom) -> Vec<TablePermissions<'a>> {
             vec.extend(get_select(&jon.table_b));
             vec
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+
+    use crate::ast::*;
+    use crate::grammar::*;
+    use crate::pre_typechecker::*;
+
+    #[test]
+    fn test_get_permissions() {
+        let parser = StmtParser::new();
+
+        let ex1 = parser
+            .parse(r#"SELECT hello, ma, boi FROM feffe;"#)
+            .unwrap();
+        let ex2 = parser
+            .parse(r#"SELECT col FROM faffe LEFT JOIN feffe LEFT JOIN foffe ON 3=5;"#)
+            .unwrap();
+
+        let ex1r = get_table_permissions(&ex1);
+        let ex2r = get_table_permissions(&ex2);
+
+        println!("{}", ex2r[2].name);
+
+        assert!(ex1r[0].name == "feffe" && ex1r[0].perm == Permission::R && ex1r.len() == 1);
+        assert!(ex2r[0].name == "faffe" && ex2r[0].perm == Permission::R);
+        assert!(ex2r[2].name == "foffe" && ex2r[2].perm == Permission::R);
+        assert!(ex2r[1].name == "feffe" && ex2r[1].perm == Permission::R && ex2r.len() == 3)
     }
 }
