@@ -2,51 +2,51 @@ use crate::pattern::Pattern;
 use crate::types::Value;
 
 #[derive(Debug)]
-pub enum Expr<'a> {
-    Ident(&'a str),
+pub enum Expr {
+    Ident(String),
     Value(Value),
-    Equals(Box<Expr<'a>>, Box<Expr<'a>>),
-    NotEquals(Box<Expr<'a>>, Box<Expr<'a>>),
-    LessEquals(Box<Expr<'a>>, Box<Expr<'a>>),
-    LessThan(Box<Expr<'a>>, Box<Expr<'a>>),
-    GreaterThan(Box<Expr<'a>>, Box<Expr<'a>>),
-    GreaterEquals(Box<Expr<'a>>, Box<Expr<'a>>),
-    And(Box<Expr<'a>>, Box<Expr<'a>>),
-    Or(Box<Expr<'a>>, Box<Expr<'a>>),
+    Equals(Box<Expr>, Box<Expr>),
+    NotEquals(Box<Expr>, Box<Expr>),
+    LessEquals(Box<Expr>, Box<Expr>),
+    LessThan(Box<Expr>, Box<Expr>),
+    GreaterThan(Box<Expr>, Box<Expr>),
+    GreaterEquals(Box<Expr>, Box<Expr>),
+    And(Box<Expr>, Box<Expr>),
+    Or(Box<Expr>, Box<Expr>),
 }
 
 #[derive(Debug)]
-pub struct Ass<'a> {
-    pub col: &'a str,
-    pub expr: Expr<'a>,
+pub struct Ass {
+    pub col: String,
+    pub expr: Expr,
 }
 
 #[derive(Debug)]
-pub struct Select<'a> {
-    pub items: Vec<SelectItem<'a>>,
-    pub from: Option<SelectFrom<'a>>,
-    pub where_clause: Option<WhereClause<'a>>,
+pub struct Select {
+    pub items: Vec<SelectItem>,
+    pub from: Option<SelectFrom>,
+    pub where_clause: Option<WhereClause>,
 }
 
 #[derive(Debug)]
-pub enum SelectItem<'a> {
-    Expr(Expr<'a>),
-    Pattern(&'a str, Pattern<'a>),
+pub enum SelectItem {
+    Expr(Expr),
+    Pattern(String, Pattern),
 }
 
 #[derive(Debug)]
-pub enum SelectFrom<'a> {
-    Table(&'a str),
-    Select(Box<Select<'a>>),
-    Join(Box<Join<'a>>),
+pub enum SelectFrom {
+    Table(String),
+    Select(Box<Select>),
+    Join(Box<Join>),
 }
 
 #[derive(Debug)]
-pub struct Join<'a> {
-    pub table_a: SelectFrom<'a>,
-    pub table_b: SelectFrom<'a>,
+pub struct Join {
+    pub table_a: SelectFrom,
+    pub table_b: SelectFrom,
     pub join_type: JoinType,
-    pub on_clause: Option<Expr<'a>>,
+    pub on_clause: Option<Expr>,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -58,40 +58,40 @@ pub enum JoinType {
 }
 
 #[derive(Debug)]
-pub struct WhereClause<'a>(pub Expr<'a>);
+pub struct WhereClause(pub Expr);
 
 #[derive(Debug)]
-pub struct Delete<'a> {
-    pub table: &'a str,
-    pub where_clause: Option<WhereClause<'a>>,
+pub struct Delete {
+    pub table: String,
+    pub where_clause: Option<WhereClause>,
 }
 
 #[derive(Debug)]
-pub struct Insert<'a> {
-    pub table: &'a str,
-    pub columns: Vec<&'a str>,
-    pub values: Vec<Expr<'a>>,
+pub struct Insert {
+    pub table: String,
+    pub columns: Vec<String>,
+    pub values: Vec<Expr>,
 }
 
 #[derive(Debug)]
-pub enum Stmt<'a> {
-    Select(Select<'a>),
-    Insert(Insert<'a>),
-    Delete(Delete<'a>),
-    Update(Update<'a>),
-    CreateType(CreateType<'a>),
+pub enum Stmt {
+    Select(Select),
+    Insert(Insert),
+    Delete(Delete),
+    Update(Update),
+    CreateType(CreateType),
 }
 
 #[derive(Debug)]
-pub struct Update<'a> {
-    pub table: &'a str,
-    pub ass: Vec<Ass<'a>>,
-    pub where_clause: Option<WhereClause<'a>>,
+pub struct Update {
+    pub table: String,
+    pub ass: Vec<Ass>,
+    pub where_clause: Option<WhereClause>,
 }
 
 #[derive(Debug)]
-pub enum CreateType<'a> {
-    Variant(&'a str, Vec<(&'a str, Vec<&'a str>)>),
+pub enum CreateType {
+    Variant(String, Vec<(String, Vec<String>)>),
 }
 
 #[test]

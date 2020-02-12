@@ -56,7 +56,7 @@ match {
 }
 
 // Main production
-pub Stmt: Stmt<'input> = {
+pub Stmt: Stmt = {
     <Select> ";" => Stmt::Select(<>),
     <Insert> ";" => Stmt::Insert(<>),
     <Delete> ";" => Stmt::Delete(<>),
@@ -64,16 +64,16 @@ pub Stmt: Stmt<'input> = {
     <CreateType> ";" => Stmt::CreateType(<>),
 }
 
-Delete: Delete<'input> = {
-    DELETE FROM <table:IDENT> <where_clause:(WhereClause?)> => Delete {
+Delete: Delete = {
+    DELETE FROM <table:Ident> <where_clause:(WhereClause?)> => Delete {
         table,
         where_clause,
     },
 }
 
-Update: Update<'input> = {
+Update: Update = {
     UPDATE
-    <table:IDENT> SET
+    <table:Ident> SET
     <ass:Comma<Ass>>
     <where_clause:(WhereClause?)>
     => Update {
@@ -83,7 +83,7 @@ Update: Update<'input> = {
     },
 }
 
-Select: Select<'input> = {
+Select: Select = {
     SELECT
         <items:Comma<SelectItem>>
         <from:(FROM <SelectFrom>)?>
@@ -95,12 +95,12 @@ Select: Select<'input> = {
     },
 }
 
-SelectItem: SelectItem<'input> = {
-    <col:IDENT> ":" <pattern:Pattern> => (SelectItem::Pattern(col, pattern)),
+SelectItem: SelectItem = {
+    <col:Ident> ":" <pattern:Pattern> => (SelectItem::Pattern(col, pattern)),
     Expr => SelectItem::Expr(<>),
 }
 
-SelectFrom: SelectFrom<'input> = {
+SelectFrom: SelectFrom = {
     <table_a:SelectFrom>
         <join_type:JoinType>
         <table_b:SelectFrom2>
@@ -114,19 +114,19 @@ SelectFrom: SelectFrom<'input> = {
     SelectFrom2,
 }
 
-SelectFrom2: SelectFrom<'input> = {
+SelectFrom2: SelectFrom = {
     "(" <Select> ")" => SelectFrom::Select(box <>),
-    IDENT => SelectFrom::Table(<>),
+    Ident => SelectFrom::Table(<>),
     "(" <SelectFrom> ")",
 }
 
-WhereClause: WhereClause<'input> = {
+WhereClause: WhereClause = {
     WHERE <Expr> => WhereClause(<>),
 }
 
-Insert: Insert<'input> = {
-    INSERT INTO <table:IDENT>
-        <columns:("(" Comma<IDENT> ")")?>
+Insert: Insert = {
+    INSERT INTO <table:Ident>
+        <columns:("(" Comma<Ident> ")")?>
         <values:InsertValues?>
     => Insert {
         table,
@@ -142,13 +142,13 @@ JoinType: JoinType = {
     INNER? JOIN => JoinType::Inner,
 }
 
-VarDef: (&'input str, Vec<&'input str>) = {
-    <name:IDENT> "(" <variants:Comma<IDENT>> ")" => (name, variants),
+VarDef: (String, Vec<String>) = {
+    <name:Ident> "(" <variants:Comma<Ident>> ")" => (name, variants),
 }
 
-CreateType: CreateType<'input> = {
+CreateType: CreateType = {
     CREATE TYPE
-        <name:IDENT>
+        <name:Ident>
         AS VARIANT
         "{" <variants:Comma<VarDef>> "}"
         => CreateType::Variant(name, variants),
@@ -160,16 +160,16 @@ Value: Value = {
     Bool => Value::Bool(<>),
     Str => unimplemented!("Strings aren't supported"),
     // TODO: This grammar will probably conflict with function calls...
-    <variant:IDENT> "(" <values:Comma<Value>> ")" => Value::Sum(variant.to_string(), values),
+    <variant:Ident> "(" <values:Comma<Value>> ")" => Value::Sum(variant.to_string(), values),
 }
 
-Expr3: Expr<'input> = {
-    IDENT => Expr::Ident(<>),
+Expr3: Expr = {
+    Ident => Expr::Ident(<>),
     Value => Expr::Value(<>),
     "(" <Expr> ")",
 }
 
-Expr2: Expr<'input> = {
+Expr2: Expr = {
     <e1:Expr2> "="  <e2:Expr3> => Expr::Equals(box e1, box e2),
     <e1:Expr2> "!=" <e2:Expr3> => Expr::NotEquals(box e1, box e2),
     <e1:Expr2> "<=" <e2:Expr3> => Expr::LessEquals(box e1, box e2),
@@ -179,38 +179,42 @@ Expr2: Expr<'input> = {
     Expr3,
 }
 
-Expr1: Expr<'input> = {
+Expr1: Expr = {
     <e1:Expr1> AND <e2:Expr2> => Expr::And(box e1, box e2),
     Expr2
 }
 
-Expr: Expr<'input> = {
+Expr: Expr = {
     <e1:Expr> OR <e2:Expr1> => Expr::Or(box e1, box e2),
     Expr1,
 }
 
-Ass: Ass<'input> = {
-    <col:IDENT> "=" <expr:Expr> => Ass {
+Ass: Ass = {
+    <col:Ident> "=" <expr:Expr> => Ass {
         col,
         expr,
     }
 }
 
-InsertValues: Vec<Expr<'input>> = {
+InsertValues: Vec<Expr> = {
     VALUES "(" <Comma<Expr>> ")",
 }
 
-pub Pattern: Pattern<'input> = {
+pub Pattern: Pattern = {
     "_" => Pattern::Ignore,
     Integer => Pattern::Int(<>),
     Bool => Pattern::Bool(<>),
     Double => Pattern::Double(<>),
-    IDENT => Pattern::Binding(<>),
-    <id:IDENT> "(" <ps:Comma<Pattern>> ")" => Pattern::Variant(id, ps),
+    Ident => Pattern::Binding(<>),
+    <id:Ident> "(" <ps:Comma<Pattern>> ")" => Pattern::Variant(id, ps),
 }
 
-Str: &'input str = {
-    STR => <>.strip_prefix('"').unwrap().strip_suffix('"').unwrap(),
+Ident: String = {
+    IDENT => String::from(<>),
+}
+
+Str: String = {
+    STR => String::from(<>.strip_prefix('"').unwrap().strip_suffix('"').unwrap()),
 }
 
 Integer: i32 = {

@@ -1,8 +1,9 @@
 use crate::types::{EnumTag, Type, TypeId, TypeMap, Value};
+use crate::pattern::CompiledPattern;
 use bincode::deserialize;
 use std::cmp::{Ord, Ordering, PartialOrd};
 
-pub type Schema = Vec<TypeId>;
+pub type Schema = Vec<(String, TypeId)>;
 
 pub struct Table {
     schema: Schema,
@@ -15,7 +16,7 @@ pub struct Row<'a> {
     data: &'a [u8],
 }
 
-pub struct Cell<'tb, 'ts> {
+pub struct Cell<'ts, 'tb> {
     type_id: TypeId,
     types: &'ts TypeMap,
     data: &'tb [u8],
@@ -26,13 +27,27 @@ pub struct RowIter<'a> {
     row: usize,
 }
 
+pub struct CellPatternIter<'p, 'ts, 'tb> {
+    pattern: &'p CompiledPattern,
+    types: &'ts TypeMap,
+    data: &'tb [u8],
+    cursor: usize,
+}
+
+pub struct RowPatternIter<'p, 'ts, 'tb> {
+    pattern: &'p CompiledPattern,
+    types: &'ts TypeMap,
+    table: &'tb Table,
+    row: usize,
+}
+
 impl Table {
     pub fn new(schema: Schema, types: &TypeMap) -> Self {
         Self {
             data: vec![],
             row_size: schema
                 .iter()
-                .map(|t_id| types.get(t_id).unwrap())
+                .map(|(_, t_id)| types.get(t_id).unwrap())
                 .map(|t| t.size_of(types))
                 .sum(),
             schema,
@@ -46,6 +61,15 @@ impl Table {
         }
     }
 
+    pub fn pattern_iter<'p, 'ts, 'tb>(&'tb self, pattern: &'p CompiledPattern, types: &'ts TypeMap) -> RowPatternIter<'p, 'ts, 'tb> {
+        RowPatternIter {
+            pattern,
+            table: self,
+            row: 0,
+            types,
+        }
+    }
+
     pub fn get_row<'a>(&'a self, row: usize) -> Row<'a> {
         let start = self.row_start(row);
         let end = start + self.row_size;
@@ -56,11 +80,10 @@ impl Table {
         }
     }
 
-    // i found it ayy lmao fuck you you little bitch ill have you know i graduated at the top of
     pub fn get_row_value(&self, row: usize, types: &TypeMap) -> Vec<Value> {
         let mut output = vec![];
         let mut data = &self.data[self.row_start(row)..];
-        for t_id in self.schema.iter() {
+        for (_, t_id) in self.schema.iter() {
             let t = types.get(t_id).unwrap();
             let t_size = t.size_of(types);
             output.push(t.from_bytes(&data[..t_size], types).unwrap());
@@ -83,7 +106,7 @@ impl Table {
     pub fn push_row(&mut self, cells: &[Value], types: &TypeMap) {
         assert_eq!(self.data.len() % self.row_size, 0);
 
-        for (t, c) in self.schema.iter().zip(cells.iter()) {
+        for (t, c) in self.schema.iter().map(|(_, t)| t).zip(cells.iter()) {
             c.to_bytes(&mut self.data, types, types.get(t).unwrap())
         }
 
@@ -105,19 +128,69 @@ impl<'a> Iterator for RowIter<'a> {
     }
 }
 
+impl<'p, 'ts, 'tb> Iterator for RowPatternIter<'p, 'ts, 'tb> {
+    type Item = CellPatternIter<'p, 'ts, 'tb>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        'outer: loop {
+            if self.row >= self.table.row_count() {
+                return None;
+            }
+
+            let row = self.table.get_row(self.row);
+            self.row += 1;
+            for (i, value) in &self.pattern.matches {
+                for j in 0..value.len() {
+                    if row.data[i+j] != value[j] {
+                        continue 'outer;
+                    }
+                }
+            }
+
+            return Some(CellPatternIter {
+                cursor: 0,
+                pattern: self.pattern,
+                types: self.types,
+                data: row.data,
+            });
+        }
+    }
+}
+
+impl<'p, 'ts, 'tb> Iterator for CellPatternIter<'p, 'ts, 'tb> {
+    type Item = (&'p str, Cell<'ts, 'tb>);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.pattern.bindings.get(self.cursor)
+            .map(|(index, type_id, ident)| {
+                self.cursor += 1;
+
+                let t = &self.types[type_id];
+                let type_size = t.size_of(self.types);
+
+                let cell = Cell {
+                    type_id: *type_id,
+                    types: self.types,
+                    data: &self.data[*index..type_size],
+                };
+                (ident.as_str(), cell)
+            })
+    }
+}
+
 impl<'tb, 'ts> Row<'tb> {
-    pub fn get_cell(&'tb self, types: &'ts TypeMap, col: usize) -> Cell<'tb, 'ts> {
+    pub fn get_cell(&'tb self, types: &'ts TypeMap, col: usize) -> Cell<'ts, 'tb> {
         let mut start = 0;
-        for t_id in &self.schema[..col] {
+        for (_, t_id) in &self.schema[..col] {
             let t = &types[t_id];
             let t_size = t.size_of(types);
             start += t_size;
         }
 
-        let end = start + types[&self.schema[col]].size_of(types);
+        let end = start + types[&self.schema[col].1].size_of(types);
 
         Cell {
-            type_id: self.schema[col],
+            type_id: self.schema[col].1,
             data: &self.data[start..end],
             types,
         }
@@ -129,38 +202,38 @@ impl<'tb, 'ts> Row<'tb> {
 }
 
 impl PartialEq for Cell<'_, '_> {
-    fn eq(&self, other: &Self) -> bool {
-        debug_assert_eq!(self.type_id, other.type_id);
-        self.data == other.data
-    }
+fn eq(&self, other: &Self) -> bool {
+    debug_assert_eq!(self.type_id, other.type_id);
+    self.data == other.data
+}
 }
 
 impl PartialOrd for Cell<'_, '_> {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        debug_assert_eq!(self.type_id, other.type_id);
+fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+    debug_assert_eq!(self.type_id, other.type_id);
 
-        match &self.types[&self.type_id] {
-            Type::Integer => deserialize::<i32>(self.data)
-                .unwrap()
-                .partial_cmp(&deserialize(other.data).unwrap()),
-            Type::Bool => deserialize::<bool>(self.data)
-                .unwrap()
-                .partial_cmp(&deserialize(other.data).unwrap()),
-            Type::Double => deserialize::<f64>(self.data)
-                .unwrap()
-                .partial_cmp(&deserialize(other.data).unwrap()),
-            Type::Sum(variants) => {
-                let mut data1 = self.data;
-                let mut data2 = other.data;
+    match &self.types[&self.type_id] {
+        Type::Integer => deserialize::<i32>(self.data)
+            .unwrap()
+            .partial_cmp(&deserialize(other.data).unwrap()),
+        Type::Bool => deserialize::<bool>(self.data)
+            .unwrap()
+            .partial_cmp(&deserialize(other.data).unwrap()),
+        Type::Double => deserialize::<f64>(self.data)
+            .unwrap()
+            .partial_cmp(&deserialize(other.data).unwrap()),
+        Type::Sum(variants) => {
+            let mut data1 = self.data;
+            let mut data2 = other.data;
 
-                let tag_size = std::mem::size_of::<EnumTag>();
-                let tag1: EnumTag = deserialize(&data1[..tag_size]).unwrap();
-                let tag2: EnumTag = deserialize(&data2[..tag_size]).unwrap();
+            let tag_size = std::mem::size_of::<EnumTag>();
+            let tag1: EnumTag = deserialize(&data1[..tag_size]).unwrap();
+            let tag2: EnumTag = deserialize(&data2[..tag_size]).unwrap();
 
-                data1 = &data1[tag_size..];
-                data2 = &data2[tag_size..];
+            data1 = &data1[tag_size..];
+            data2 = &data2[tag_size..];
 
-                match tag1.cmp(&tag2) {
+            match tag1.cmp(&tag2) {
                     Ordering::Equal => {
                         let (_name, members) = &variants[tag1];
                         for &type_id in members {
@@ -226,7 +299,11 @@ mod tests {
     #[test]
     fn test_table() {
         let types = create_type_map();
-        let schema = vec![0, 1, 5];
+        let schema = vec![
+            ("i".into(), 0),
+            ("b".into(), 1),
+            ("s".into(), 5),
+        ];
         let mut table = Table::new(schema.clone(), &types);
 
         assert_eq!(table.row_count(), 0);
@@ -236,12 +313,12 @@ mod tests {
             .map(|_| {
                 schema
                     .iter()
-                    .map(|t_id| types[t_id].random_value(&types))
+                    .map(|(_, t_id)| types[t_id].random_value(&types))
                     .collect()
             })
             .collect();
         for (i, row) in rows.iter().enumerate() {
-            eprintln!("inserting {}: {:?}", i, row);
+            println!("inserting {}: {:?}", i, row);
             table.push_row(&row[..], &types);
             assert_eq!(table.row_count(), i + 1);
             assert_eq!(&table.get_row_value(i, &types), row);
@@ -256,7 +333,7 @@ mod tests {
         for (i, row) in table.iter().enumerate() {
             for j in 0..row.cell_count() {
                 let cell = row.get_cell(&types, j);
-                let t = &types[&schema[j]];
+                let t = &types[&schema[j].1];
                 let v = t.from_bytes(cell.data, &types).unwrap();
                 assert_eq!(v, rows[i][j]);
             }
@@ -266,7 +343,7 @@ mod tests {
     #[test]
     fn test_ord_ints() {
         let types = create_type_map();
-        let schema = vec![0];
+        let schema = vec![("i".into(), 0)];
         let mut table = Table::new(schema.clone(), &types);
 
         table.push_row(&[Value::Integer(1)], &types);
@@ -290,7 +367,7 @@ mod tests {
     #[test]
     fn test_ord_variants() {
         let types = create_type_map();
-        let schema = vec![5];
+        let schema = vec![("s".into(), 5)];
         let mut table = Table::new(schema.clone(), &types);
 
         table.push_row(
@@ -323,5 +400,69 @@ mod tests {
                 assert!(cell_j > cell_i);
             }
         }
+    }
+
+    #[test]
+    fn test_pattern_iter() {
+        use crate::grammar::StmtParser;
+        use crate::ast::*;
+
+        let types = create_type_map();
+        let schema = vec![("x".into(), 3), ("y".into(), 3)];
+
+        let mut table = Table::new(schema.clone(), &types);
+
+        let int_val1 = Value::Sum("Int".into(), vec![Value::Integer(1)]);
+        let int_val2 = Value::Sum("Int".into(), vec![Value::Integer(2)]);
+        let int_val3 = Value::Sum("Int".into(), vec![Value::Integer(3)]);
+        let int_none = Value::Sum("Nil".into(), vec![]);
+
+        table.push_row(&[int_val1.clone(), int_val2.clone()], &types);
+        table.push_row(&[int_val3.clone(), int_val2.clone()], &types);
+        table.push_row(&[int_none.clone(), int_none.clone()], &types);
+        table.push_row(&[int_none.clone(), int_none.clone()], &types);
+        table.push_row(&[int_val2.clone(), int_val3.clone()], &types);
+        table.push_row(&[int_val2.clone(), int_val3.clone()], &types);
+        table.push_row(&[int_none.clone(), int_none.clone()], &types);
+        table.push_row(&[int_none.clone(), int_none.clone()], &types);
+        table.push_row(&[int_val2.clone(), int_val2.clone()], &types);
+        table.push_row(&[int_none.clone(), int_none.clone()], &types);
+        table.push_row(&[int_none.clone(), int_none.clone()], &types);
+        table.push_row(&[int_val2.clone(), int_val2.clone()], &types);
+        table.push_row(&[int_val1.clone(), int_none.clone()], &types);
+        table.push_row(&[int_none.clone(), int_none.clone()], &types);
+
+        // helper function for extracting a pattern match ast from sql input
+        let parse_pattern = |input: &str| -> CompiledPattern {
+            let stmt = StmtParser::new().parse(input).unwrap();
+            match stmt {
+                Stmt::Select(Select{
+                    items, ..
+                }) => CompiledPattern::compile(&items, &schema, &types),
+                _ => panic!("Not a select statement"),
+            }
+        };
+
+        // function for parsing sql, extracting a pattern match, and trying to run it.
+        let test_pattern = |input: &str, f: Box<dyn FnOnce(RowPatternIter<'_, '_, '_>)>| {
+            let pattern = parse_pattern(input);
+            println!("testing pattern \"{}\": {:#?}", input, pattern);
+            let iter = table.pattern_iter(&pattern, &types);
+            f(iter)
+        };
+
+        // iterate over all matching rows
+        test_pattern("SELECT x: Int(1);", box |i| assert_eq!(i.count(), 2));
+        test_pattern("SELECT x: Int(2);", box |i| assert_eq!(i.count(), 4));
+        test_pattern("SELECT x: Int(3);", box |i| assert_eq!(i.count(), 1));
+        test_pattern("SELECT x: Int(42);", box |i| assert_eq!(i.count(), 0));
+        test_pattern("SELECT x: Nil();", box |i| assert_eq!(i.count(), 7));
+
+        // iterate over all bound cells of all matching rows.
+        // two rows should match, multiplied by three bindings x1, ý2, x3.
+        test_pattern(
+            "SELECT x: Int(2), x: x1, y: y2, x: x3, x, y: Int(2);",
+            box |i| assert_eq!(i.flatten().count(), 6),
+        );
     }
 }

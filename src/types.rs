@@ -10,7 +10,7 @@ pub type TypeId = usize;
 
 pub type TypeMap = HashMap<TypeId, Type>;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Type {
     Integer,
     Double,
@@ -18,7 +18,7 @@ pub enum Type {
     Sum(Vec<(String, Vec<TypeId>)>),
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum Value {
     Integer(i32),
     Double(f64),
