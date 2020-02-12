@@ -1,7 +1,12 @@
 #![feature(str_strip)]
+#![feature(never_type)]
 #![feature(box_syntax)]
 
+#[macro_use]
+extern crate lazy_static;
+
 mod ast;
+mod global;
 mod grammar;
 mod pattern;
 mod pre_typechecker;

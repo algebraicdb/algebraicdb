@@ -13,6 +13,8 @@ rand = "0.7.3"
 lalrpop-util = "0.17.2"
 regex = "0.2.0"
 smallvec = "1.2.0"
+crossbeam = "0.7.3"
+lazy_static = "1.4.0"
 
 [build-dependencies]
 lalrpop = "0.17.2"
