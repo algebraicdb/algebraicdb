@@ -7,6 +7,7 @@ mod ast;
 mod grammar;
 mod pattern;
 mod primitive;
+mod typechecker;
 
 use std::collections::HashMap;
 use crate::types::*;

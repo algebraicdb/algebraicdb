@@ -2,9 +2,18 @@ use crate::types::{EnumTag, Type, TypeId, TypeMap, Value};
 use bincode::deserialize;
 use std::cmp::{Ord, Ordering, PartialOrd};
 
-pub type Schema = Vec<TypeId>;
+pub type Schema = Vec<Column>;
 
-pub struct Table {
+
+#[derive(Debug, Clone)]
+pub struct Column{
+    col_type: TypeId,
+    name: String,
+}
+
+
+// Table defines 
+pub struct Table{
     schema: Schema,
     data: Vec<u8>,
     row_size: usize,
@@ -26,13 +35,13 @@ pub struct RowIter<'a> {
     row: usize,
 }
 
-impl Table {
+impl Table{
     pub fn new(schema: Schema, types: &TypeMap) -> Self {
         Self {
             data: vec![],
             row_size: schema
                 .iter()
-                .map(|t_id| types.get(t_id).unwrap())
+                .map(|col| types.get(&col.col_type).unwrap())
                 .map(|t| t.size_of(types))
                 .sum(),
             schema,
@@ -60,8 +69,8 @@ impl Table {
     pub fn get_row_value(&self, row: usize, types: &TypeMap) -> Vec<Value> {
         let mut output = vec![];
         let mut data = &self.data[self.row_start(row)..];
-        for t_id in self.schema.iter() {
-            let t = types.get(t_id).unwrap();
+        for col in self.schema.iter() {
+            let t = types.get(&col.col_type).unwrap();
             let t_size = t.size_of(types);
             output.push(t.from_bytes(&data[..t_size], types).unwrap());
             data = &data[t_size..];
@@ -83,8 +92,8 @@ impl Table {
     pub fn push_row(&mut self, cells: &[Value], types: &TypeMap) {
         assert_eq!(self.data.len() % self.row_size, 0);
 
-        for (t, c) in self.schema.iter().zip(cells.iter()) {
-            c.to_bytes(&mut self.data, types, types.get(t).unwrap())
+        for (col, c) in self.schema.iter().zip(cells.iter()) {
+            c.to_bytes(&mut self.data, types, types.get(&col.col_type).unwrap())
         }
 
         assert_eq!(self.data.len() % self.row_size, 0);
@@ -108,16 +117,16 @@ impl<'a> Iterator for RowIter<'a> {
 impl<'tb, 'ts> Row<'tb> {
     pub fn get_cell(&'tb self, types: &'ts TypeMap, col: usize) -> Cell<'tb, 'ts> {
         let mut start = 0;
-        for t_id in &self.schema[..col] {
-            let t = &types[t_id];
+        for col in &self.schema[..col] {
+            let t = &types[&col.col_type];
             let t_size = t.size_of(types);
             start += t_size;
         }
 
-        let end = start + types[&self.schema[col]].size_of(types);
+        let end = start + types[&self.schema[col].col_type].size_of(types);
 
         Cell {
-            type_id: self.schema[col],
+            type_id: self.schema[col].col_type,
             data: &self.data[start..end],
             types,
         }
@@ -226,7 +235,7 @@ mod tests {
     #[test]
     fn test_table() {
         let types = create_type_map();
-        let schema = vec![0, 1, 5];
+        let schema: Vec<Column> = vec![Column {col_type: 0, name: String::from("feffe")}, Column {col_type: 1, name: String::from("är en")}, Column {col_type: 5, name: String::from("Pepungo")}];
         let mut table = Table::new(schema.clone(), &types);
 
         assert_eq!(table.row_count(), 0);
@@ -236,7 +245,7 @@ mod tests {
             .map(|_| {
                 schema
                     .iter()
-                    .map(|t_id| types[t_id].random_value(&types))
+                    .map(|col| types[&col.col_type].random_value(&types))
                     .collect()
             })
             .collect();
@@ -256,7 +265,7 @@ mod tests {
         for (i, row) in table.iter().enumerate() {
             for j in 0..row.cell_count() {
                 let cell = row.get_cell(&types, j);
-                let t = &types[&schema[j]];
+                let t = &types[&schema[j].col_type];
                 let v = t.from_bytes(cell.data, &types).unwrap();
                 assert_eq!(v, rows[i][j]);
             }
@@ -266,7 +275,7 @@ mod tests {
     #[test]
     fn test_ord_ints() {
         let types = create_type_map();
-        let schema = vec![0];
+        let schema = vec![Column {col_type: 0, name: String::from("pupunga")}];
         let mut table = Table::new(schema.clone(), &types);
 
         table.push_row(&[Value::Integer(1)], &types);
@@ -290,7 +299,7 @@ mod tests {
     #[test]
     fn test_ord_variants() {
         let types = create_type_map();
-        let schema = vec![5];
+        let schema = vec![Column {col_type: 5, name: String::from("pupunga")}];
         let mut table = Table::new(schema.clone(), &types);
 
         table.push_row(
