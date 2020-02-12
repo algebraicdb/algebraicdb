@@ -1,33 +1,23 @@
 // Wheres ska evalueras till bools
-// 
+//
 //
 use crate::ast::*;
-use crate::types::*;
 use crate::table::*;
-
-
-
+use crate::types::*;
 
 //                                                                        TODO
-pub fn check_stmt(stmt: &Stmt, table: &Table, types: &TypeMap) -> Result<(), &'static str>{
+pub fn check_stmt(stmt: &Stmt, table: &Table, types: &TypeMap) -> Result<(), &'static str> {
     match stmt {
         Stmt::Select(sel) => {
             check_select(sel, table, types);
-
         }
-        Stmt::Delete(del) => {
-            
-        }
-        Stmt::Update(upd) => {
-
-        }
-        Stmt::Insert(ins) =>  {
-
-        }
+        Stmt::Delete(del) => {}
+        Stmt::Update(upd) => {}
+        Stmt::Insert(ins) => {}
+        Stmt::CreateType(cre) => {}
     }
 
-    Ok(())
-
+    unimplemented!()
 }
 
 fn check_select(sel: &Select, table: &Table, types: &TypeMap) -> Result<Vec<Column>, &'static str> {
@@ -38,5 +28,3 @@ fn check_select(sel: &Select, table: &Table, types: &TypeMap) -> Result<Vec<Colu
         None => Err("Select from nothing not allowed."),
     }
 }
-
-
