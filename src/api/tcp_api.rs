@@ -1,15 +1,8 @@
-#![warn(rust_2018_idioms)]
-
-use tokio::net::{TcpListener, TcpStream};
-use tokio::stream::StreamExt;
-use tokio_util::codec::{Framed, LinesCodec};
-use tokio::io::{BufReader, BufWriter, AsyncBufReadExt, AsyncWriteExt};
-use futures::SinkExt;
-use std::sync::{Arc, Mutex};
+use tokio::net::TcpListener;
+use tokio::io::{BufReader, AsyncBufReadExt, AsyncWriteExt};
 use std::error::Error;
 
-
-pub async fn tcpapi(func: fn(String) -> String) -> Result<!, Box<dyn Error>> {
+pub async fn tcp_api(func: fn(&str) -> String) -> Result<!, Box<dyn Error>> {
 
     let adr ="127.0.0.1:8080".to_string();
 
@@ -27,7 +20,7 @@ pub async fn tcpapi(func: fn(String) -> String) -> Result<!, Box<dyn Error>> {
                     loop {
                         let n: usize = reader.read_until(b';', &mut buf).await.unwrap();
 
-                        let input = std::str::from_utf8(&buf[..n]).expect("Not valid utf-8").to_string();
+                        let input = std::str::from_utf8(&buf[..n]).expect("Not valid utf-8");
 
                         let result = func(input);
                         eprintln!("{}", result);
@@ -41,5 +34,4 @@ pub async fn tcpapi(func: fn(String) -> String) -> Result<!, Box<dyn Error>> {
             Err(e) => println!("error accepting socket; error = {:?}", e),
         }
     }
-
 }

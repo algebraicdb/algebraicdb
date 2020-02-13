@@ -1,7 +1,6 @@
 #![feature(str_strip)]
 #![feature(never_type)]
 #![feature(box_syntax)]
-// TODO: remove this once we actually start using our code
 #![allow(dead_code)]
 
 #[macro_use]
@@ -17,26 +16,19 @@ mod typechecker;
 mod types;
 mod api;
 
-use api::tcpapi::*;
+use api::tcp_api::tcp_api;
+use std::error::Error;
 
 #[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    tcpapi(print_ast).await.unwrap();
-
-    Ok(())
-    
+async fn main() -> Result<!, Box<dyn Error>> {
+    tcp_api(echo_ast).await
 }
 
-fn print_ast(input: String) -> String {
+fn echo_ast(input: &str) -> String {
     use crate::grammar::StmtParser;
 
     match StmtParser::new().parse(&input) {
-        Ok(ast) => format!("{:#?}", ast),
-        Err(e) => format!("{:#?}", e),
+        Ok(ast) => format!("{:#?}\n", ast),
+        Err(e) => format!("{:#?}\n", e),
     }
-}
-
-fn backend(stri: String) -> String {
-    println!("{}", stri);
-    String::from("fku")
 }
