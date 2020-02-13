@@ -1,5 +1,6 @@
 use crate::table::Table;
 use crate::types::TypeMap;
+use std::ops::{Deref, DerefMut};
 use std::sync::{Arc, RwLock, RwLockReadGuard, RwLockWriteGuard};
 
 #[derive(Clone, Copy, PartialOrd, Ord, PartialEq, Eq)]
@@ -29,12 +30,12 @@ pub enum Response {
 pub struct Resources {
     dirty: bool,
     types: Arc<RwLock<TypeMap>>,
-    tables: Vec<(RW, Arc<RwLock<Table>>)>,
+    tables: Vec<(RW, String, Arc<RwLock<Table>>)>,
 }
 
 pub struct ResourcesGuard<'a> {
     pub types: Resource<'a, TypeMap>,
-    pub tables: Vec<Resource<'a, Table>>,
+    pub tables: Vec<(&'a str, Resource<'a, Table>)>,
 }
 
 pub enum Resource<'a, T> {
@@ -43,7 +44,10 @@ pub enum Resource<'a, T> {
 }
 
 impl Resources {
-    pub(super) fn new(types: Arc<RwLock<TypeMap>>, tables: Vec<(RW, Arc<RwLock<Table>>)>) -> Self {
+    pub(super) fn new(
+        types: Arc<RwLock<TypeMap>>,
+        tables: Vec<(RW, String, Arc<RwLock<Table>>)>,
+    ) -> Self {
         Self {
             dirty: false,
             types,
@@ -67,11 +71,57 @@ impl Resources {
             tables: self
                 .tables
                 .iter()
-                .map(|(rw, lock)| match rw {
-                    RW::Read => Resource::Read(lock.read().expect("Lock is poisoned")),
-                    RW::Write => Resource::Write(lock.write().expect("Lock is poisoned")),
+                .map(|(rw, name, lock)| {
+                    let resource = match rw {
+                        RW::Read => Resource::Read(lock.read().expect("Lock is poisoned")),
+                        RW::Write => Resource::Write(lock.write().expect("Lock is poisoned")),
+                    };
+
+                    (name.as_str(), resource)
                 })
                 .collect(),
         }
+    }
+}
+
+impl<'a, T> Deref for Resource<'a, T> {
+    type Target = T;
+
+    fn deref(&self) -> &Self::Target {
+        match self {
+            Resource::Read(guard) => guard.deref(),
+            Resource::Write(guard) => guard.deref(),
+        }
+    }
+}
+
+/// Panics if Resource is read-only
+impl<'a, T> DerefMut for Resource<'a, T> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        match self {
+            Resource::Read(_) => panic!("Tried to get write access to read-only table resources"),
+            Resource::Write(guard) => guard.deref_mut(),
+        }
+    }
+}
+
+impl<'a> ResourcesGuard<'a> {
+    // Get a read-only handle to a table.
+    //
+    // Panics if the read-handle wasn't requested.
+    pub fn read_table(&self, name: &str) -> &Table {
+        self.tables
+            .iter()
+            .find(|(entry_name, _)| entry_name == &name)
+            .map(|(_, resource)| resource.deref())
+            .unwrap()
+    }
+
+    pub fn write_table(&mut self, name: &str) -> &mut Table {
+        self.tables
+            .iter_mut()
+            .find(|(entry_name, _)| entry_name == &name)
+            .map(|(_, resource)| resource.deref_mut())
+            .unwrap()
     }
 }

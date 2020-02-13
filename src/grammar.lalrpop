@@ -45,6 +45,7 @@ match {
     "<",
     ">",
     ";",
+    "::",
     ":",
     "true",
     "false",
@@ -143,7 +144,8 @@ JoinType: JoinType = {
 }
 
 VarDef: (String, Vec<String>) = {
-    <name:Ident> "(" <variants:Comma<Ident>> ")" => (name, variants),
+    <name:Ident> "(" <variants:Comma<Ident>> ")"
+        => (name, variants),
 }
 
 CreateType: CreateType = {
@@ -160,7 +162,11 @@ Value: Value = {
     Bool => Value::Bool(<>),
     Str => unimplemented!("Strings aren't supported"),
     // TODO: This grammar will probably conflict with function calls...
-    <variant:Ident> "(" <values:Comma<Value>> ")" => Value::Sum(variant.to_string(), values),
+    <type_name:Ident> "::" <variant:Ident> "(" <values:Comma<Value>> ")" => Value::Sum(
+        type_name.to_string(),
+        variant.to_string(),
+        values,
+    ),
 }
 
 Expr3: Expr = {

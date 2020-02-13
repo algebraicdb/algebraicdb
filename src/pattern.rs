@@ -1,8 +1,8 @@
-use crate::table::Schema;
-use crate::types::{Type, TypeId, EnumTag, TypeMap};
 use crate::ast::SelectItem;
-use smallvec::SmallVec;
+use crate::table::Schema;
+use crate::types::{EnumTag, Type, TypeId, TypeMap};
 use bincode::serialize;
+use smallvec::SmallVec;
 
 #[derive(Debug)]
 pub enum Pattern {
@@ -43,15 +43,25 @@ impl CompiledPattern {
             bindings: &mut Vec<(usize, TypeId, String)>,
         ) {
             match pattern {
-                Pattern::Int(v) => matches.push((byte_index, SmallVec::from_vec(serialize(v).unwrap()))),
-                Pattern::Bool(v) => matches.push((byte_index, SmallVec::from_vec(serialize(v).unwrap()))),
-                Pattern::Double(v) => matches.push((byte_index, SmallVec::from_vec(serialize(v).unwrap()))),
+                Pattern::Int(v) => {
+                    matches.push((byte_index, SmallVec::from_vec(serialize(v).unwrap())))
+                }
+                Pattern::Bool(v) => {
+                    matches.push((byte_index, SmallVec::from_vec(serialize(v).unwrap())))
+                }
+                Pattern::Double(v) => {
+                    matches.push((byte_index, SmallVec::from_vec(serialize(v).unwrap())))
+                }
                 Pattern::Ignore => {}
                 Pattern::Binding(ident) => bindings.push((byte_index, type_id, ident.into())),
                 Pattern::Variant(name, patterns) => {
                     println!("Variant pattern {} ( {:?} )", name, patterns);
                     if let Type::Sum(variants) = &types[&type_id] {
-                        let (i, (_, sub_types)) = variants.iter().enumerate().find(|(_, (variant, _))| variant == name).unwrap();
+                        let (i, (_, sub_types)) = variants
+                            .iter()
+                            .enumerate()
+                            .find(|(_, (variant, _))| variant == name)
+                            .unwrap();
                         matches.push((byte_index, SmallVec::from_vec(serialize(&i).unwrap())));
 
                         byte_index += std::mem::size_of::<EnumTag>();
@@ -75,9 +85,16 @@ impl CompiledPattern {
                 SelectItem::Expr(_) => {} // Ignore expressions for now
                 SelectItem::Pattern(name, pattern) => {
                     let mut byte_index = 0;
-                    for (column, t_id) in schema {
+                    for (column, t_id) in &schema.columns {
                         if column == name {
-                            build_pattern(pattern, byte_index, types, *t_id, &mut matches, &mut bindings);
+                            build_pattern(
+                                pattern,
+                                byte_index,
+                                types,
+                                *t_id,
+                                &mut matches,
+                                &mut bindings,
+                            );
                             break;
                         }
 
@@ -88,13 +105,9 @@ impl CompiledPattern {
             }
         }
 
-        CompiledPattern {
-            bindings,
-            matches,
-        }
+        CompiledPattern { bindings, matches }
     }
 }
-
 
 #[test]
 fn pattern_grammar() {
@@ -109,8 +122,7 @@ fn pattern_grammar() {
         r#"Val1(1, InnerVal2(true, _), y)"#,
     ];
 
-    let invalid_examples = vec![
-    ];
+    let invalid_examples = vec![];
 
     for ex in valid_examples {
         println!("Trying to parse {}", ex);

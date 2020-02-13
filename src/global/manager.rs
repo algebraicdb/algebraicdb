@@ -23,7 +23,7 @@ lazy_static! {
 
 fn resource_manager(requests: Receiver<(Request, Sender<Response>)>) -> Result<!, String> {
     let mut tables: HashMap<String, Arc<RwLock<Table>>> = HashMap::new();
-    let types: Arc<RwLock<TypeMap>> = Arc::new(RwLock::new(Default::default()));
+    let types: Arc<RwLock<TypeMap>> = Arc::new(RwLock::new(TypeMap::new()));
 
     loop {
         let (request, response_ch) = requests.recv().map_err(|e| e.to_string())?;
@@ -36,7 +36,7 @@ fn resource_manager(requests: Receiver<(Request, Sender<Response>)>) -> Result<!
                     .map(|req| {
                         if let Some(lock) = tables.get(&req.table) {
                             // cloning an Arc is relatively cheap
-                            Ok((req.rw, lock.clone()))
+                            Ok((req.rw, req.table, lock.clone()))
                         } else {
                             Err(Response::NoSuchTable(req.table))
                         }
