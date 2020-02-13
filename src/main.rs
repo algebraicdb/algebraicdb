@@ -16,16 +16,24 @@ mod table;
 mod typechecker;
 mod types;
 mod api;
-use crate::types::*;
-use std::collections::HashMap;
+
 use api::tcpapi::*;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    tcpapi(backend).await;
+    tcpapi(print_ast).await.unwrap();
 
     Ok(())
     
+}
+
+fn print_ast(input: String) -> String {
+    use crate::grammar::StmtParser;
+
+    match StmtParser::new().parse(&input) {
+        Ok(ast) => format!("{:#?}", ast),
+        Err(e) => format!("{:#?}", e),
+    }
 }
 
 fn backend(stri: String) -> String {
