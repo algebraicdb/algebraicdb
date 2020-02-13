@@ -1,49 +1,38 @@
 use crate::ast::*;
+use crate::global::{TableRequest, RW};
 
-#[derive(Clone, Copy)]
-pub struct TablePermissions<'a> {
-    name: &'a String,
-    perm: Permission,
-}
-
-#[derive(Clone, Copy, PartialEq, Eq)]
-pub enum Permission {
-    R,
-    RW,
-}
-
-pub fn get_table_permissions(stmt: &Stmt) -> Vec<TablePermissions> {
+pub fn get_table_permissions(stmt: &Stmt) -> Vec<TableRequest> {
     match stmt {
         Stmt::Select(sel) => get_option_select(&sel.from),
-        Stmt::Update(upd) => vec![TablePermissions {
-            name: &upd.table,
-            perm: Permission::RW,
+        Stmt::Update(upd) => vec![TableRequest {
+            table: upd.table.clone(),
+            rw: RW::Write,
         }],
-        Stmt::Insert(ins) => vec![TablePermissions {
-            name: &ins.table,
-            perm: Permission::RW,
+        Stmt::Insert(ins) => vec![TableRequest {
+            table: ins.table.clone(),
+            rw: RW::Write,
         }],
-        Stmt::Delete(del) => vec![TablePermissions {
-            name: &del.table,
-            perm: Permission::RW,
+        Stmt::Delete(del) => vec![TableRequest {
+            table: del.table.clone(),
+            rw: RW::Write,
         }],
         Stmt::CreateType(_) => vec![],
     }
 }
 
-fn get_option_select<'a>(sel: &'a Option<SelectFrom>) -> Vec<TablePermissions<'a>> {
+fn get_option_select<'a>(sel: &'a Option<SelectFrom>) -> Vec<TableRequest> {
     match sel {
         Some(from) => get_select(&from),
         None => vec![],
     }
 }
 
-fn get_select<'a>(sel: &'a SelectFrom) -> Vec<TablePermissions<'a>> {
+fn get_select<'a>(sel: &'a SelectFrom) -> Vec<TableRequest> {
     match &sel {
         SelectFrom::Select(nsel) => get_option_select(&nsel.from),
-        SelectFrom::Table(tab) => vec![TablePermissions {
-            name: &tab,
-            perm: Permission::R,
+        SelectFrom::Table(tab) => vec![TableRequest {
+            table: tab.clone(),
+            rw: RW::Read,
         }],
         SelectFrom::Join(jon) => {
             let mut vec = get_select(&jon.table_a);
@@ -74,11 +63,11 @@ mod tests {
         let ex1r = get_table_permissions(&ex1);
         let ex2r = get_table_permissions(&ex2);
 
-        println!("{}", ex2r[2].name);
+        println!("{}", ex2r[2].table);
 
-        assert!(ex1r[0].name == "feffe" && ex1r[0].perm == Permission::R && ex1r.len() == 1);
-        assert!(ex2r[0].name == "faffe" && ex2r[0].perm == Permission::R);
-        assert!(ex2r[2].name == "foffe" && ex2r[2].perm == Permission::R);
-        assert!(ex2r[1].name == "feffe" && ex2r[1].perm == Permission::R && ex2r.len() == 3)
+        assert!(ex1r[0].table == "feffe" && ex1r[0].rw == RW::Read && ex1r.len() == 1);
+        assert!(ex2r[0].table == "faffe" && ex2r[0].rw == RW::Read);
+        assert!(ex2r[2].table == "foffe" && ex2r[2].rw == RW::Read);
+        assert!(ex2r[1].table == "feffe" && ex2r[1].rw == RW::Read && ex2r.len() == 3)
     }
 }
