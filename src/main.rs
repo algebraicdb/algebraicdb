@@ -15,7 +15,20 @@ mod pre_typechecker;
 mod table;
 mod typechecker;
 mod types;
+mod api;
+use crate::types::*;
+use std::collections::HashMap;
+use api::tcpapi::*;
 
-fn main() {
-    unimplemented!("main")
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    tcpapi(backend).await;
+
+    Ok(())
+    
+}
+
+fn backend(stri: String) -> String {
+    println!("{}", stri);
+    String::from("fku")
 }
