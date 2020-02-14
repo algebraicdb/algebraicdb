@@ -2,11 +2,9 @@ use tokio::net::TcpListener;
 use tokio::io::{BufReader, AsyncBufReadExt, AsyncWriteExt};
 use std::error::Error;
 
-pub async fn tcp_api(func: fn(&str) -> String) -> Result<!, Box<dyn Error>> {
+pub async fn tcp_api(func: fn(&str) -> String, address: String) -> Result<!, Box<dyn Error>> {
 
-    let adr ="127.0.0.1:8080".to_string();
-
-    let mut listener = TcpListener::bind(adr).await?;
+    let mut listener = TcpListener::bind(address).await?;
 
 
     loop {

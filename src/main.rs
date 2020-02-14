@@ -21,7 +21,7 @@ use std::error::Error;
 
 #[tokio::main]
 async fn main() -> Result<!, Box<dyn Error>> {
-    tcp_api(echo_ast).await
+    tcp_api(echo_ast, "127.0.0.1:5432".to_string()).await
 }
 
 fn echo_ast(input: &str) -> String {
