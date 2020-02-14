@@ -430,19 +430,19 @@ pub mod tests {
 
         table.push_row(
             &[Value::Sum(
-                "".into(),
+                "BiggerType".into(),
                 "OtherThing".into(),
                 vec![Value::Sum(
-                    "".into(),
+                    "BigType".into(),
                     "MaybeInt".into(),
-                    vec![Value::Sum("".into(), "Nil".into(), vec![])],
+                    vec![Value::Sum("IntOrNil".into(), "Nil".into(), vec![])],
                 )],
             )],
             &types,
         );
         table.push_row(
             &[Value::Sum(
-                "".into(),
+                "BiggerType".into(),
                 "Boolean".into(),
                 vec![Value::Bool(false)],
             )],
@@ -450,7 +450,7 @@ pub mod tests {
         );
         table.push_row(
             &[Value::Sum(
-                "".into(),
+                "BiggerType".into(),
                 "Boolean".into(),
                 vec![Value::Bool(true)],
             )],
