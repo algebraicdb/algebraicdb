@@ -12,7 +12,6 @@ mod global;
 mod grammar;
 mod pattern;
 mod pre_typechecker;
-mod primitive;
 mod table;
 mod typechecker;
 mod types;
