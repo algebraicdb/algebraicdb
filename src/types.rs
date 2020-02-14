@@ -12,6 +12,7 @@ pub type TypeId = usize;
 pub struct TypeMap {
     types: HashMap<TypeId, Type>,
     identifiers: HashMap<String, TypeId>,
+    constructors: HashMap<String, Vec<TypeId>>,
     next_id: TypeId,
 }
 
@@ -28,6 +29,7 @@ impl TypeMap {
         TypeMap {
             types: HashMap::new(),
             identifiers: HashMap::new(),
+            constructors: HashMap::new(),
             next_id: 1,
         }
     }
@@ -57,6 +59,10 @@ impl TypeMap {
     pub fn types(&self) -> &HashMap<TypeId, Type> {
         &self.types
     }
+
+    pub fn constructors_of(&self, name: &str) -> Option<&Vec<TypeId>> {
+        self.constructors.get(name)
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -72,7 +78,7 @@ pub enum Value {
     Integer(i32),
     Double(f64),
     Bool(bool),
-    Sum(String, String, Vec<Value>),
+    Sum(Option<String>, String, Vec<Value>),
 }
 
 impl Display for Value {
@@ -81,8 +87,11 @@ impl Display for Value {
             Value::Integer(v) => write!(f, "{}", v),
             Value::Double(v) => write!(f, "{}", v),
             Value::Bool(v) => write!(f, "{}", v),
-            Value::Sum(type_name, variant, values) => {
-                write!(f, "{}::{}(", type_name, variant)?;
+            Value::Sum(namespace, variant, values) => {
+                if let Some(namespace) = namespace {
+                    write!(f, "{}::", namespace)?;
+                }
+                write!(f, "{}(", variant)?;
                 if values.len() > 0 {
                     for value in values.iter().take(values.len() - 1) {
                         write!(f, "{}, ", value)?;
@@ -130,16 +139,6 @@ impl Value {
                     panic!("Not a sum-type");
                 }
             }
-        }
-    }
-
-    pub fn type_of(&self, types: &TypeMap) -> Option<TypeId> {
-        match self {
-            // TODO: maybe we should have a list of "keywords" somewhere we can use
-            Value::Integer(_) => types.get_id("Integer"),
-            Value::Double(_) => types.get_id("Double"),
-            Value::Bool(_) => types.get_id("Bool"),
-            Value::Sum(type_name, _, _) => types.get_id(type_name),
         }
     }
 }
@@ -190,7 +189,7 @@ impl Type {
                 //eprintln!(")");
 
                 // TODO: Type name
-                Ok(Value::Sum("TODO".into(), name.clone(), values))
+                Ok(Value::Sum(None, name.clone(), values))
             }
         }
     }
@@ -209,7 +208,7 @@ impl Type {
                     .map(|t_id| types[t_id].random_value(types))
                     .collect();
                 // TODO: Type name
-                Value::Sum("TODO".into(), variant.clone(), values)
+                Value::Sum(None, variant.clone(), values)
             }
         }
     }

@@ -430,19 +430,19 @@ pub mod tests {
 
         table.push_row(
             &[Value::Sum(
-                "BiggerType".into(),
+                Some("BiggerType".into()),
                 "OtherThing".into(),
                 vec![Value::Sum(
-                    "BigType".into(),
+                    Some("BigType".into()),
                     "MaybeInt".into(),
-                    vec![Value::Sum("IntOrNil".into(), "Nil".into(), vec![])],
+                    vec![Value::Sum(Some("IntOrNil".into()), "Nil".into(), vec![])],
                 )],
             )],
             &types,
         );
         table.push_row(
             &[Value::Sum(
-                "BiggerType".into(),
+                Some("BiggerType".into()),
                 "Boolean".into(),
                 vec![Value::Bool(false)],
             )],
@@ -450,7 +450,7 @@ pub mod tests {
         );
         table.push_row(
             &[Value::Sum(
-                "BiggerType".into(),
+                Some("BiggerType".into()),
                 "Boolean".into(),
                 vec![Value::Bool(true)],
             )],
@@ -475,7 +475,7 @@ pub mod tests {
         use crate::ast::*;
         use crate::grammar::StmtParser;
 
-        let tname = String::from("MaybeInt");
+        let tname = Some(String::from("MaybeInt"));
         let (ids, types) = create_type_map();
 
         let schema = Schema::new(vec![

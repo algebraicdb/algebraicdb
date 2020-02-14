@@ -156,14 +156,21 @@ CreateType: CreateType = {
         => CreateType::Variant(name, variants),
 }
 
+Namespace: String = {
+    <Ident> "::" => <>.to_string(),
+}
+
 Value: Value = {
     Integer => Value::Integer(<>),
     Double => Value::Double(<>),
     Bool => Value::Bool(<>),
     Str => unimplemented!("Strings aren't supported"),
     // TODO: This grammar will probably conflict with function calls...
-    <type_name:Ident> "::" <variant:Ident> "(" <values:Comma<Value>> ")" => Value::Sum(
-        type_name.to_string(),
+    <namespace:Namespace?>
+        <variant:Ident> "("
+        <values:Comma<Value>> ")"
+    => Value::Sum(
+        namespace,
         variant.to_string(),
         values,
     ),
