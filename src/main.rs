@@ -1,7 +1,6 @@
 #![feature(str_strip)]
 #![feature(never_type)]
 #![feature(box_syntax)]
-// TODO: remove this once we actually start using our code
 #![allow(dead_code)]
 
 #[macro_use]
@@ -15,7 +14,21 @@ mod pre_typechecker;
 mod table;
 mod typechecker;
 mod types;
+mod api;
 
-fn main() {
-    unimplemented!("main")
+use api::tcp_api::tcp_api;
+use std::error::Error;
+
+#[tokio::main]
+async fn main() -> Result<!, Box<dyn Error>> {
+    tcp_api(echo_ast, "127.0.0.1:5432".to_string()).await
+}
+
+fn echo_ast(input: &str) -> String {
+    use crate::grammar::StmtParser;
+
+    match StmtParser::new().parse(&input) {
+        Ok(ast) => format!("{:#?}\n", ast),
+        Err(e) => format!("{:#?}\n", e),
+    }
 }
