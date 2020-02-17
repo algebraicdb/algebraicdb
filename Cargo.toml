@@ -1,7 +1,10 @@
 [package]
 name = "algebraicdb"
 version = "0.1.0"
-authors = ["feffe <feffe@feffe.dev>"]
+authors = [
+    "feffe <feffe@feffe.dev>",
+    "Joakim Hulthe <joakim@hulthe.net>",
+]
 edition = "2018"
 build = "build.rs" # LALRPOP preprocessing
 

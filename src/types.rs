@@ -4,11 +4,66 @@ use std::collections::HashMap;
 use std::fmt::{self, Display, Formatter};
 use std::io::Write;
 use std::mem::size_of;
+use std::ops::Index;
 
 pub type EnumTag = usize;
 pub type TypeId = usize;
 
-pub type TypeMap = HashMap<TypeId, Type>;
+pub struct TypeMap {
+    types: HashMap<TypeId, Type>,
+    identifiers: HashMap<String, TypeId>,
+    constructors: HashMap<String, Vec<TypeId>>,
+    next_id: TypeId,
+}
+
+impl Index<&TypeId> for TypeMap {
+    type Output = Type;
+
+    fn index(&self, index: &TypeId) -> &Self::Output {
+        &self.types[index]
+    }
+}
+
+impl TypeMap {
+    pub fn new() -> Self {
+        TypeMap {
+            types: HashMap::new(),
+            identifiers: HashMap::new(),
+            constructors: HashMap::new(),
+            next_id: 1,
+        }
+    }
+
+    pub fn len(&self) -> usize {
+        self.types.len()
+    }
+
+    pub fn insert<I: Into<String>>(&mut self, name: I, t: Type) -> TypeId {
+        let id = self.next_id;
+        self.next_id += 1;
+
+        self.types.insert(id, t);
+        self.identifiers.insert(name.into(), id);
+
+        id
+    }
+
+    pub fn get_id(&self, name: &str) -> Option<TypeId> {
+        self.identifiers.get(name).map(|id| *id)
+    }
+
+    pub fn get(&self, name: &str) -> Option<&Type> {
+        self.get_id(name).and_then(|id| self.types.get(&id))
+    }
+
+    pub fn types(&self) -> &HashMap<TypeId, Type> {
+        &self.types
+    }
+
+    pub fn constructors_of(&self, name: &str) -> Option<&Vec<TypeId>> {
+        self.constructors.get(name)
+    }
+}
 
 #[derive(Debug, Clone)]
 pub enum Type {
@@ -23,7 +78,7 @@ pub enum Value {
     Integer(i32),
     Double(f64),
     Bool(bool),
-    Sum(String, Vec<Value>),
+    Sum(Option<String>, String, Vec<Value>),
 }
 
 impl Display for Value {
@@ -32,10 +87,18 @@ impl Display for Value {
             Value::Integer(v) => write!(f, "{}", v),
             Value::Double(v) => write!(f, "{}", v),
             Value::Bool(v) => write!(f, "{}", v),
-            Value::Sum(variant, values) => {
-                write!(f, "({}", variant)?;
-                for value in values {
-                    write!(f, " {}", value)?;
+            Value::Sum(namespace, variant, values) => {
+                if let Some(namespace) = namespace {
+                    write!(f, "{}::", namespace)?;
+                }
+                write!(f, "{}(", variant)?;
+                if values.len() > 0 {
+                    for value in values.iter().take(values.len() - 1) {
+                        write!(f, "{}, ", value)?;
+                    }
+                    for value in values.last() {
+                        write!(f, "{}", value)?;
+                    }
                 }
                 write!(f, ")")
             }
@@ -50,7 +113,7 @@ impl Value {
             Value::Integer(val) => serialize_into(writer, val).unwrap(),
             Value::Double(val) => serialize_into(writer, val).unwrap(),
             Value::Bool(val) => serialize_into(writer, val).unwrap(),
-            Value::Sum(variant, values) => {
+            Value::Sum(_type_name, variant, values) => {
                 if let Type::Sum(variants) = t {
                     let (tag, variant_types) = variants
                         .iter()
@@ -84,8 +147,8 @@ impl Type {
     pub fn size_of(&self, types: &TypeMap) -> usize {
         match self {
             Type::Integer => size_of::<i32>(),
-            Type::Bool => size_of::<bool>(),
             Type::Double => size_of::<f64>(),
+            Type::Bool => size_of::<bool>(),
             Type::Sum(variants) => {
                 size_of::<EnumTag>()
                     + variants
@@ -125,7 +188,8 @@ impl Type {
 
                 //eprintln!(")");
 
-                Ok(Value::Sum(name.clone(), values))
+                // TODO: Type name
+                Ok(Value::Sum(None, name.clone(), values))
             }
         }
     }
@@ -138,11 +202,13 @@ impl Type {
             Type::Sum(variants) => {
                 let i = rand::random::<usize>() % variants.len();
                 let (variant, members) = &variants[i];
+                eprintln!("{:?}", members);
                 let values = members
                     .iter()
                     .map(|t_id| types[t_id].random_value(types))
                     .collect();
-                Value::Sum(variant.clone(), values)
+                // TODO: Type name
+                Value::Sum(None, variant.clone(), values)
             }
         }
     }
@@ -151,35 +217,16 @@ impl Type {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::table::tests::create_type_map;
 
     #[test]
     fn test_to_bytes_and_back_again() {
-        let mut types: TypeMap = HashMap::new();
-        types.insert(0, Type::Integer);
-        types.insert(1, Type::Bool);
-        types.insert(2, Type::Double);
-        types.insert(
-            3,
-            Type::Sum(vec![("Nil".into(), vec![]), ("Int".into(), vec![0])]),
-        );
-        types.insert(
-            4,
-            Type::Sum(vec![
-                ("MaybeInt".into(), vec![3]),
-                ("DoubleInt".into(), vec![0, 0]),
-            ]),
-        );
-        types.insert(
-            5,
-            Type::Sum(vec![
-                ("OtherThing".into(), vec![4]),
-                ("Boolean".into(), vec![1]),
-            ]),
-        );
+        let (_ids, types) = create_type_map();
 
         let example_values: Vec<_> = (0..5000)
             .map(|i| {
-                let t_id = i % types.len();
+                let map = types.types();
+                let t_id: TypeId = *map.keys().nth(i % map.len()).unwrap();
                 (t_id, types[&t_id].random_value(&types))
             })
             .collect();
@@ -199,7 +246,5 @@ mod tests {
             println!("  Value After:  {}", value_again);
             println!();
         }
-
-        //assert!(false); // for printing stdout
     }
 }

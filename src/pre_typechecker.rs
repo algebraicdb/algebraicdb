@@ -45,7 +45,6 @@ fn get_select<'a>(sel: &'a SelectFrom) -> Vec<TableRequest> {
 #[cfg(test)]
 mod tests {
 
-    use crate::ast::*;
     use crate::grammar::*;
     use crate::pre_typechecker::*;
 

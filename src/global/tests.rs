@@ -1,5 +1,6 @@
 use super::*;
-use crate::table::Table;
+use crate::table::{Schema, Table};
+use crate::types::TypeMap;
 use crossbeam::thread;
 use rand::Rng;
 //use colorful::Color;
@@ -13,7 +14,7 @@ fn global_resources_contention() {
     for &id in table_ids.iter() {
         let resp = send_request(Request::CreateTable(
             format!("table_{}", id),
-            Table::new(vec![], &Default::default()),
+            Table::new(Schema::empty(), &TypeMap::new()),
         ));
         if let Response::TableCreated = resp {
         } else {

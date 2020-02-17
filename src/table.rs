@@ -3,7 +3,10 @@ use crate::types::{EnumTag, Type, TypeId, TypeMap, Value};
 use bincode::deserialize;
 use std::cmp::{Ord, Ordering, PartialOrd};
 
-pub type Schema = Vec<(String, TypeId)>;
+#[derive(Clone)]
+pub struct Schema {
+    pub columns: Vec<(String, TypeId)>,
+}
 
 #[derive(Debug, Clone)]
 pub struct Column {
@@ -48,17 +51,43 @@ pub struct RowPatternIter<'p, 'ts, 'tb> {
     row: usize,
 }
 
+impl Schema {
+    pub fn new(columns: Vec<(String, TypeId)>) -> Self {
+        Schema { columns }
+    }
+
+    pub fn empty() -> Self {
+        Self::new(vec![])
+    }
+
+    pub fn column(&self, name: &str) -> Option<TypeId> {
+        self.columns
+            .iter()
+            .find(|(entry_name, _)| entry_name == name)
+            .map(|(_, type_id)| *type_id)
+    }
+
+    pub fn len(&self) -> usize {
+        self.columns.len()
+    }
+}
+
 impl Table {
     pub fn new(schema: Schema, types: &TypeMap) -> Self {
         Self {
             data: vec![],
             row_size: schema
+                .columns
                 .iter()
-                .map(|(_, t_id)| types.get(t_id).unwrap())
+                .map(|(_, t_id)| &types[t_id])
                 .map(|t| t.size_of(types))
                 .sum(),
             schema,
         }
+    }
+
+    pub fn get_schema(&self) -> &Schema {
+        &self.schema
     }
 
     pub fn iter<'a>(&'a self) -> RowIter<'a> {
@@ -94,8 +123,8 @@ impl Table {
     pub fn get_row_value(&self, row: usize, types: &TypeMap) -> Vec<Value> {
         let mut output = vec![];
         let mut data = &self.data[self.row_start(row)..];
-        for (_, t_id) in self.schema.iter() {
-            let t = types.get(t_id).unwrap();
+        for (_, t_id) in self.schema.columns.iter() {
+            let t = &types[t_id];
             let t_size = t.size_of(types);
             output.push(t.from_bytes(&data[..t_size], types).unwrap());
             data = &data[t_size..];
@@ -117,8 +146,8 @@ impl Table {
     pub fn push_row(&mut self, cells: &[Value], types: &TypeMap) {
         assert_eq!(self.data.len() % self.row_size, 0);
 
-        for (t, c) in self.schema.iter().map(|(_, t)| t).zip(cells.iter()) {
-            c.to_bytes(&mut self.data, types, types.get(t).unwrap())
+        for (t_id, value) in self.schema.columns.iter().map(|(_, t)| t).zip(cells.iter()) {
+            value.to_bytes(&mut self.data, types, &types[t_id])
         }
 
         assert_eq!(self.data.len() % self.row_size, 0);
@@ -194,16 +223,16 @@ impl<'p, 'ts, 'tb> Iterator for CellPatternIter<'p, 'ts, 'tb> {
 impl<'tb, 'ts> Row<'tb> {
     pub fn get_cell(&'tb self, types: &'ts TypeMap, col: usize) -> Cell<'ts, 'tb> {
         let mut start = 0;
-        for (_, t_id) in &self.schema[..col] {
+        for (_, t_id) in &self.schema.columns[..col] {
             let t = &types[t_id];
             let t_size = t.size_of(types);
             start += t_size;
         }
 
-        let end = start + types[&self.schema[col].1].size_of(types);
+        let end = start + types[&self.schema.columns[col].1].size_of(types);
 
         Cell {
-            type_id: self.schema[col].1,
+            type_id: self.schema.columns[col].1,
             data: &self.data[start..end],
             types,
         }
@@ -278,42 +307,62 @@ impl PartialOrd for Cell<'_, '_> {
 }
 
 #[cfg(test)]
-mod tests {
+pub mod tests {
     use super::*;
     use crate::types::{Type, TypeMap, Value};
-    use std::collections::HashMap;
 
-    fn create_type_map() -> TypeMap {
-        let mut types: TypeMap = HashMap::new();
-        types.insert(0, Type::Integer);
-        types.insert(1, Type::Bool);
-        types.insert(2, Type::Double);
-        types.insert(
-            3,
-            Type::Sum(vec![("Nil".into(), vec![]), ("Int".into(), vec![0])]),
+    pub struct TestTypeIds {
+        int_id: TypeId,
+        bool_id: TypeId,
+        double_id: TypeId,
+        int_or_nil_id: TypeId,
+        big_type_id: TypeId,
+        bigger_type_id: TypeId,
+    }
+
+    pub fn create_type_map() -> (TestTypeIds, TypeMap) {
+        let mut types = TypeMap::new();
+        let int_id = types.insert("Integer", Type::Integer);
+        let bool_id = types.insert("Bool", Type::Bool);
+        let double_id = types.insert("Double", Type::Double);
+        let int_or_nil_id = types.insert(
+            "IntOrNil",
+            Type::Sum(vec![("Nil".into(), vec![]), ("Int".into(), vec![int_id])]),
         );
-        types.insert(
-            4,
+        let big_type_id = types.insert(
+            "BigType",
             Type::Sum(vec![
-                ("MaybeInt".into(), vec![3]),
-                ("DoubleInt".into(), vec![0, 0]),
+                ("MaybeInt".into(), vec![int_or_nil_id]),
+                ("DoubleInt".into(), vec![int_id, int_id]),
             ]),
         );
-        types.insert(
-            5,
+        let bigger_type_id = types.insert(
+            "BiggerType",
             Type::Sum(vec![
-                ("OtherThing".into(), vec![4]),
-                ("Boolean".into(), vec![1]),
+                ("OtherThing".into(), vec![big_type_id]),
+                ("Boolean".into(), vec![bool_id]),
             ]),
         );
-        types
+        let ids = TestTypeIds {
+            int_id,
+            bool_id,
+            double_id,
+            int_or_nil_id,
+            big_type_id,
+            bigger_type_id,
+        };
+        (ids, types)
     }
 
     #[test]
     fn test_table() {
-        let types = create_type_map();
-        let schema = vec![("i".into(), 0), ("b".into(), 1), ("s".into(), 5)];
-        let mut table = Table::new(schema.clone(), &types);
+        let (ids, types) = create_type_map();
+        let schema = vec![
+            ("i".into(), ids.int_id),
+            ("b".into(), ids.bool_id),
+            ("s".into(), ids.bigger_type_id),
+        ];
+        let mut table = Table::new(Schema::new(schema.clone()), &types);
 
         assert_eq!(table.row_count(), 0);
 
@@ -351,9 +400,9 @@ mod tests {
 
     #[test]
     fn test_ord_ints() {
-        let types = create_type_map();
-        let schema = vec![("i".into(), 0)];
-        let mut table = Table::new(schema.clone(), &types);
+        let (ids, types) = create_type_map();
+        let schema = Schema::new(vec![("i".into(), ids.int_id)]);
+        let mut table = Table::new(schema, &types);
 
         table.push_row(&[Value::Integer(1)], &types);
         table.push_row(&[Value::Integer(2)], &types);
@@ -375,26 +424,36 @@ mod tests {
 
     #[test]
     fn test_ord_variants() {
-        let types = create_type_map();
-        let schema = vec![("s".into(), 5)];
-        let mut table = Table::new(schema.clone(), &types);
+        let (ids, types) = create_type_map();
+        let schema = Schema::new(vec![("s".into(), ids.bigger_type_id)]);
+        let mut table = Table::new(schema, &types);
 
         table.push_row(
             &[Value::Sum(
+                Some("BiggerType".into()),
                 "OtherThing".into(),
                 vec![Value::Sum(
+                    Some("BigType".into()),
                     "MaybeInt".into(),
-                    vec![Value::Sum("Nil".into(), vec![])],
+                    vec![Value::Sum(Some("IntOrNil".into()), "Nil".into(), vec![])],
                 )],
             )],
             &types,
         );
         table.push_row(
-            &[Value::Sum("Boolean".into(), vec![Value::Bool(false)])],
+            &[Value::Sum(
+                Some("BiggerType".into()),
+                "Boolean".into(),
+                vec![Value::Bool(false)],
+            )],
             &types,
         );
         table.push_row(
-            &[Value::Sum("Boolean".into(), vec![Value::Bool(true)])],
+            &[Value::Sum(
+                Some("BiggerType".into()),
+                "Boolean".into(),
+                vec![Value::Bool(true)],
+            )],
             &types,
         );
 
@@ -416,15 +475,20 @@ mod tests {
         use crate::ast::*;
         use crate::grammar::StmtParser;
 
-        let types = create_type_map();
-        let schema = vec![("x".into(), 3), ("y".into(), 3)];
+        let tname = Some(String::from("MaybeInt"));
+        let (ids, types) = create_type_map();
+
+        let schema = Schema::new(vec![
+            ("x".into(), ids.int_or_nil_id),
+            ("y".into(), ids.int_or_nil_id),
+        ]);
 
         let mut table = Table::new(schema.clone(), &types);
 
-        let int_val1 = Value::Sum("Int".into(), vec![Value::Integer(1)]);
-        let int_val2 = Value::Sum("Int".into(), vec![Value::Integer(2)]);
-        let int_val3 = Value::Sum("Int".into(), vec![Value::Integer(3)]);
-        let int_none = Value::Sum("Nil".into(), vec![]);
+        let int_val1 = Value::Sum(tname.clone(), "Int".into(), vec![Value::Integer(1)]);
+        let int_val2 = Value::Sum(tname.clone(), "Int".into(), vec![Value::Integer(2)]);
+        let int_val3 = Value::Sum(tname.clone(), "Int".into(), vec![Value::Integer(3)]);
+        let int_none = Value::Sum(tname.clone(), "Nil".into(), vec![]);
 
         table.push_row(&[int_val1.clone(), int_val2.clone()], &types);
         table.push_row(&[int_val3.clone(), int_val2.clone()], &types);

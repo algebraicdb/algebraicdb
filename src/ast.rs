@@ -123,7 +123,8 @@ fn ast_grammar() {
         r#"SELECT c FROM t WHERE a AND b OR c AND d;"#,
         r#"SELECT x: 1, y FROM t;"#,
         r#"SELECT x: Val1(1, InnerVal2(true, _), y) FROM t;"#,
-        r#"INSERT INTO table VALUES (Val1(1, 2, Val2()), true);"#,
+        r#"INSERT INTO table VALUES (Val1(1, 2, T::Val2()), true);"#,
+        r#"INSERT INTO table VALUES (T::Val1(1, 2, Val2()), true);"#,
         r#"SELECT x: Val1(1, InnerVal2(true, _), y) FROM t WHERE true;"#,
         r#"CREATE TYPE newCoolType AS VARIANT {};"#,
         r#"CREATE TYPE newCoolType AS VARIANT {
