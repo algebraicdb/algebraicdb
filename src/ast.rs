@@ -135,7 +135,7 @@ fn ast_grammar() {
         r#"SELECT x: Val1(1, InnerVal2(true, _), y) FROM t WHERE true;"#,
         r#"CREATE TYPE newCoolType AS VARIANT {};"#,
         r#"CREATE TABLE bananas ();"#,
-        r#"CREATE TABLE bananas (INT, TEXT);"#,
+        r#"CREATE TABLE bananas (col_a Integer, col_b Double);"#,
         r#"CREATE TYPE newCoolType AS VARIANT {
             Var1(),
             Var1(Bool),
@@ -154,6 +154,7 @@ fn ast_grammar() {
         r#"DELETE FROM just WHERE ;"#,
         r#"DELETE FROM just some more tables ;"#,
         r#"CREATE TABLE bananas;"#,
+        r#"CREATE TABLE bananas (without_type);"#,
         r#"DELETE FROM now, with, commas ;"#,
         r#"UPDATE SET xxsxsxsxsxsxsxs=2 ;"#,
     ];
