@@ -30,7 +30,7 @@ fn global_resources_contention() {
                 let mut rng = rand::thread_rng();
 
                 for _ in 0..10000 {
-                    let request: Vec<_> = table_ids
+                    let table_reqs: Vec<_> = table_ids
                         .iter()
                         .filter_map(|table_id| {
                             let i: usize = rng.gen();
@@ -51,13 +51,16 @@ fn global_resources_contention() {
                         .collect();
                     //eprintln!("{} {} {} {:?}", "==".color(Color::Red), thread, "requesting".color(Color::Red), request);
 
-                    let request_len = request.len();
+                    let table_count = table_reqs.len();
 
-                    let response = send_request(Request::AcquireResources(request));
+                    let response = send_request(Request::AcquireResources {
+                        table_reqs,
+                        type_map_perms: RW::Read,
+                    });
                     match response {
                         Response::AcquiredResources(mut resources) => {
                             let guard = resources.take();
-                            assert_eq!(guard.tables.len(), request_len);
+                            assert_eq!(guard.tables.len(), table_count);
                             drop(guard)
                             // TODO: verity correct tables
                         }

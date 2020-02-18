@@ -386,12 +386,12 @@ mod tests {
 
     #[test]
     fn type_check_exprs() {
-        let (_ids, types) = create_type_map();
-        let types = Arc::new(RwLock::new(types));
+        let (_ids, type_map) = create_type_map();
+        let type_map = Arc::new(RwLock::new(type_map));
 
         let dummy_ctx = Context {
             globals: &ResourcesGuard {
-                types: Resource::Read(types.read().unwrap()),
+                type_map: Resource::Read(type_map.read().unwrap()),
                 tables: vec![],
             },
             locals: vec![],
