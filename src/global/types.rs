@@ -117,11 +117,12 @@ impl<'a> ResourcesGuard<'a> {
             .unwrap()
     }
 
-    pub fn write_table(&mut self, name: &str) -> &mut Table {
-        self.tables
+    pub fn write_table(&mut self, name: &str) -> (&mut Table, &Resource<'a, TypeMap>) {
+        let table = self.tables
             .iter_mut()
             .find(|(entry_name, _)| entry_name == &name)
             .map(|(_, resource)| resource.deref_mut())
-            .unwrap()
+            .unwrap();
+        (table, &self.types)
     }
 }
