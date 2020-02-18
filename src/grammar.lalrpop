@@ -130,7 +130,7 @@ WhereClause: WhereClause = {
 CreateTable: CreateTable = {
     CREATE TABLE <table:Ident>
         <columns:("(" Comma<Ident> ")")?>
-    => CreateType {
+    => CreateTable {
         table,
         columns: columns.map(|(_, cols, _)| cols).unwrap_or(vec![]),
     }
