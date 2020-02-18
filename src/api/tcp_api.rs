@@ -73,3 +73,31 @@ fn conga(func: fn(&str) -> String, stmt: String) -> (Option<String>, String) {
 
     (ret, rest)
 }
+
+#[cfg(test)]
+pub mod tests {
+
+    use super::conga;
+
+    #[test]
+    pub fn test_conga() {
+        let s1 = "SELECT dsdasd FROM dadasd".to_string();
+        let s2 = "SELECT dasdas FROM dasdasd; INSERT dadasd into sdadad;".to_string();
+
+        let (r1, rest1) = conga(always_success, s1.clone());
+
+        assert_eq!(r1, None);
+        assert_eq!(rest1, s1);
+
+        let (r2, rest2) = conga(always_success, s2.clone());
+
+        r2.unwrap();
+
+        assert_eq!(rest2, "");
+
+    }
+
+    fn always_success(_: &str) -> String{
+        "Success".to_string()
+    }
+}
