@@ -74,11 +74,18 @@ pub struct Insert {
 }
 
 #[derive(Debug)]
+pub struct CreateTable {
+    pub table: String,
+    pub columns: Vec<String>,
+}
+
+#[derive(Debug)]
 pub enum Stmt {
     Select(Select),
     Insert(Insert),
     Delete(Delete),
     Update(Update),
+    CreateTable(CreateTable),
     CreateType(CreateType),
 }
 

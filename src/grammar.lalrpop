@@ -28,6 +28,7 @@ match {
     "AND" => AND,
     "OR" => OR,
     "CREATE" => CREATE,
+    "TABLE" => TABLE,
     "TYPE" => TYPE,
     "AS" => AS,
     "VARIANT" => VARIANT,
@@ -61,6 +62,7 @@ pub Stmt: Stmt = {
     <Select> ";" => Stmt::Select(<>),
     <Insert> ";" => Stmt::Insert(<>),
     <Delete> ";" => Stmt::Delete(<>),
+    <CreateTable> ";" => Stmt::CreateTable(<>),
     <Update> ";" => Stmt::Update(<>),
     <CreateType> ";" => Stmt::CreateType(<>),
 }
@@ -123,6 +125,15 @@ SelectFrom2: SelectFrom = {
 
 WhereClause: WhereClause = {
     WHERE <Expr> => WhereClause(<>),
+}
+
+CreateTable: CreateTable = {
+    CREATE TABLE <table:Ident>
+        <columns:("(" Comma<Ident> ")")?>
+    => CreateType {
+        table,
+        columns: columns.map(|(_, cols, _)| cols).unwrap_or(vec![]),
+    }
 }
 
 Insert: Insert = {
