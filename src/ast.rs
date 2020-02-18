@@ -74,11 +74,18 @@ pub struct Insert {
 }
 
 #[derive(Debug)]
+pub struct CreateTable {
+    pub table: String,
+    pub columns: Vec<String>,
+}
+
+#[derive(Debug)]
 pub enum Stmt {
     Select(Select),
     Insert(Insert),
     Delete(Delete),
     Update(Update),
+    CreateTable(CreateTable),
     CreateType(CreateType),
 }
 
@@ -127,6 +134,8 @@ fn ast_grammar() {
         r#"INSERT INTO table VALUES (T::Val1(1, 2, Val2()), true);"#,
         r#"SELECT x: Val1(1, InnerVal2(true, _), y) FROM t WHERE true;"#,
         r#"CREATE TYPE newCoolType AS VARIANT {};"#,
+        r#"CREATE TABLE bananas ();"#,
+        r#"CREATE TABLE bananas (INT, TEXT);"#,
         r#"CREATE TYPE newCoolType AS VARIANT {
             Var1(),
             Var1(Bool),
@@ -144,6 +153,7 @@ fn ast_grammar() {
         r#"DELETE just;"#,
         r#"DELETE FROM just WHERE ;"#,
         r#"DELETE FROM just some more tables ;"#,
+        r#"CREATE TABLE bananas;"#,
         r#"DELETE FROM now, with, commas ;"#,
         r#"UPDATE SET xxsxsxsxsxsxsxs=2 ;"#,
     ];

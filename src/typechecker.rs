@@ -77,7 +77,8 @@ pub fn check_stmt(stmt: &Stmt, globals: &ResourcesGuard<'_>) -> Result<(), TypeE
         Stmt::Update(update) => check_update(update, &mut ctx),
         Stmt::Delete(delete) => check_delete(delete, &mut ctx),
         Stmt::Insert(_insert) => unimplemented!("Stmt::Insert"),
-        Stmt::CreateType(create) => check_create_type(create, &mut ctx),
+        Stmt::CreateTable(create_table) => check_create_table(create_table, &mut ctx),
+        Stmt::CreateType(create_type) => check_create_type(create_type, &mut ctx),
     }
 }
 
@@ -183,6 +184,16 @@ fn check_update(update: &Update, ctx: &mut Context) -> Result<(), TypeError> {
                     });
                 }
             }
+        }
+    }
+
+    Ok(())
+}
+
+fn check_create_table(create_table: &CreateTable, ctx: &mut Context) -> Result<(), TypeError> {
+    for column in &create_table.columns {
+        if ctx.globals.types.get(column).is_none() {
+            return Err(TypeError::Undefined(column.clone()));
         }
     }
 
