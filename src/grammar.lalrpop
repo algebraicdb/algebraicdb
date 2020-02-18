@@ -129,20 +129,20 @@ WhereClause: WhereClause = {
 
 CreateTable: CreateTable = {
     CREATE TABLE <table:Ident>
-        <columns:("(" Comma<Ident> ")")?>
+        <columns:("(" <Comma<Ident>> ")")>
     => CreateTable {
         table,
-        columns: columns.map(|(_, cols, _)| cols).unwrap_or(vec![]),
+        columns,
     }
 }
 
 Insert: Insert = {
     INSERT INTO <table:Ident>
-        <columns:("(" Comma<Ident> ")")?>
+        <columns:("(" <Comma<Ident>> ")")?>
         <values:InsertValues?>
     => Insert {
         table,
-        columns: columns.map(|(_, cols, _)| cols).unwrap_or(vec![]),
+        columns: columns.unwrap_or(vec![]),
         values: values.unwrap_or(vec![]),
     }
 }
