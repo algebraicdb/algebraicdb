@@ -6,8 +6,6 @@ pub async fn tcp_api(func: fn(&str) -> String, address: String) -> Result<!, Box
 
     let mut listener = TcpListener::bind(address).await?;
 
-
-
     loop {
         match listener.accept().await {
             Ok((mut socket, _)) => {
@@ -22,16 +20,14 @@ pub async fn tcp_api(func: fn(&str) -> String, address: String) -> Result<!, Box
                         
                         let input = std::str::from_utf8(&buf[..n]).expect("Not valid utf-8");
                         
-                        
                         rest.push_str(input);
                         let (result, rest2) = conga(func, rest);
                         rest = rest2;
 
-
                         // TODO: fix for unicode
                         buf.drain(..n);
                         match result {
-                            Some(ret) => {                       
+                            Some(ret) => {
                                 writer.write_all(ret.as_bytes()).await.unwrap();
                                 writer.flush().await.unwrap();
                             },
@@ -52,7 +48,6 @@ fn conga(func: fn(&str) -> String, stmt: String) -> (Option<String>, String){
     let mut result = vec![];
     let mut lasti = 0;
     let chars = stmt.chars().enumerate();
-    
 
     for (i,ch) in chars {
         // TODO: Handle escape characters
@@ -61,7 +56,6 @@ fn conga(func: fn(&str) -> String, stmt: String) -> (Option<String>, String){
         }
 
         if ch == ';' && !in_string {
-            println!("Semicolon found");
             let q = &stmt[lasti..=i];
             result.push(func(q));
             lasti = i + 1;
