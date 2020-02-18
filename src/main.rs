@@ -6,6 +6,7 @@
 #[macro_use]
 extern crate lazy_static;
 
+mod api;
 mod ast;
 mod global;
 mod grammar;
@@ -14,7 +15,6 @@ mod pre_typechecker;
 mod table;
 mod typechecker;
 mod types;
-mod api;
 mod executor;
 
 use api::tcp_api::tcp_api;
