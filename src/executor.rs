@@ -1,8 +1,7 @@
 use crate::ast::*;
-use crate::global::{send_request, ResourcesGuard, Request, Response};
-use crate::table::{Table, Schema};
+use crate::global::{send_request, Request, ResourcesGuard, Response};
+use crate::table::{Schema, Table};
 use crate::types::{Type, TypeId, Value};
-
 
 struct Context {
     // TODO
@@ -24,10 +23,14 @@ pub fn execute_query(ast: Stmt, resources: ResourcesGuard) -> String {
 }
 
 fn execute_create_table(create_table: CreateTable, resources: ResourcesGuard) -> String {
-    let columns: Vec<_> = create_table.columns
+    let columns: Vec<_> = create_table
+        .columns
         .into_iter()
         .map(|(column_name, column_type)| {
-            let t_id = resources.type_map.get_id(&column_type).expect("Type does not exists");
+            let t_id = resources
+                .type_map
+                .get_id(&column_type)
+                .expect("Type does not exists");
             (column_name, t_id)
         })
         .collect();
@@ -41,7 +44,8 @@ fn execute_create_table(create_table: CreateTable, resources: ResourcesGuard) ->
         Response::TableCreated => "Table created\n",
         Response::TableAlreadyExists => "Table already exists\n",
         _ => unreachable!(),
-    }.to_string()
+    }
+    .to_string()
 }
 
 fn execute_create_type(create_type: CreateType, mut resources: ResourcesGuard) -> String {
@@ -51,9 +55,11 @@ fn execute_create_type(create_type: CreateType, mut resources: ResourcesGuard) -
 
     match create_type {
         CreateType::Variant(name, variants) => {
-            let variant_types: Vec<_> = variants.into_iter()
+            let variant_types: Vec<_> = variants
+                .into_iter()
                 .map(|(constructor, subtypes)| {
-                    let subtype_ids: Vec<TypeId> = subtypes.iter()
+                    let subtype_ids: Vec<TypeId> = subtypes
+                        .iter()
                         .map(|type_name| types.get_id(type_name).unwrap())
                         .collect();
 
@@ -76,12 +82,12 @@ fn execute_create_type(create_type: CreateType, mut resources: ResourcesGuard) -
 }
 
 fn execute_insert(insert: Insert, mut resources: ResourcesGuard) -> String {
-
     let (table, types) = resources.write_table(&insert.table);
 
     let ctx = Context::empty();
 
-    let values: Vec<_> = insert.values
+    let values: Vec<_> = insert
+        .values
         .into_iter()
         .map(|expr| execute_expr(expr, &ctx))
         .collect();

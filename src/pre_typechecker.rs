@@ -1,5 +1,5 @@
 use crate::ast::*;
-use crate::global::{TableRequest, RW, Request};
+use crate::global::{Request, TableRequest, RW};
 
 pub fn get_resource_request(stmt: &Stmt) -> Request {
     let mut type_map_perms = RW::Read;
@@ -21,8 +21,8 @@ pub fn get_resource_request(stmt: &Stmt) -> Request {
         Stmt::CreateType(_) => {
             type_map_perms = RW::Write;
             vec![]
-        },
-        Stmt::CreateTable(_)=> vec![],
+        }
+        Stmt::CreateTable(_) => vec![],
     };
 
     Request::AcquireResources {

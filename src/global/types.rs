@@ -76,9 +76,9 @@ impl Resources {
 
         ResourcesGuard {
             type_map: match self.type_map_perms {
-                    RW::Read => Resource::Read(self.type_map.read().expect(pmsg)),
-                    RW::Write => Resource::Write(self.type_map.write().expect(pmsg)),
-                },
+                RW::Read => Resource::Read(self.type_map.read().expect(pmsg)),
+                RW::Write => Resource::Write(self.type_map.write().expect(pmsg)),
+            },
             tables: self
                 .tables
                 .iter()
@@ -129,7 +129,8 @@ impl<'a> ResourcesGuard<'a> {
     }
 
     pub fn write_table(&mut self, name: &str) -> (&mut Table, &Resource<'a, TypeMap>) {
-        let table = self.tables
+        let table = self
+            .tables
             .iter_mut()
             .find(|(entry_name, _)| entry_name == &name)
             .map(|(_, resource)| resource.deref_mut())

@@ -8,6 +8,7 @@ extern crate lazy_static;
 
 mod api;
 mod ast;
+mod executor;
 mod global;
 mod grammar;
 mod pattern;
@@ -15,11 +16,10 @@ mod pre_typechecker;
 mod table;
 mod typechecker;
 mod types;
-mod executor;
 
+use crate::ast::Stmt;
 use api::tcp_api::tcp_api;
 use std::error::Error;
-use crate::ast::Stmt;
 
 #[tokio::main]
 async fn main() -> Result<!, Box<dyn Error>> {
@@ -28,8 +28,8 @@ async fn main() -> Result<!, Box<dyn Error>> {
 
 fn execute_query(input: &str) -> String {
     // 1. parse
-    use crate::grammar::StmtParser;
     use crate::global::*;
+    use crate::grammar::StmtParser;
 
     let result: Result<Stmt, _> = StmtParser::new().parse(&input);
     let ast = match result {
@@ -51,7 +51,7 @@ fn execute_query(input: &str) -> String {
 
     // 4. typecheck
     match typechecker::check_stmt(&ast, &resources) {
-        Ok(()) => {},
+        Ok(()) => {}
         Err(e) => return format!("{:#?}\n", e),
     }
 

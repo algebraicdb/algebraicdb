@@ -29,7 +29,10 @@ fn resource_manager(requests: Receiver<(Request, Sender<Response>)>) -> Result<!
         let (request, response_ch) = requests.recv().map_err(|e| e.to_string())?;
 
         match request {
-            Request::AcquireResources{ table_reqs, type_map_perms } => {
+            Request::AcquireResources {
+                table_reqs,
+                type_map_perms,
+            } => {
                 let type_map = type_map.clone();
                 let resources: Result<Vec<_>, _> = table_reqs
                     .into_iter()
@@ -44,9 +47,11 @@ fn resource_manager(requests: Receiver<(Request, Sender<Response>)>) -> Result<!
                     .collect();
 
                 match resources {
-                    Ok(tables) => {
-                        response_ch.send(Response::AcquiredResources(Resources::new(type_map, type_map_perms, tables)))
-                    }
+                    Ok(tables) => response_ch.send(Response::AcquiredResources(Resources::new(
+                        type_map,
+                        type_map_perms,
+                        tables,
+                    ))),
                     Err(response) => response_ch.send(response),
                 }
                 .map_err(|e| e.to_string())?;
