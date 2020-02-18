@@ -15,6 +15,7 @@ mod table;
 mod typechecker;
 mod types;
 mod api;
+mod executor;
 
 use api::tcp_api::tcp_api;
 use std::error::Error;
@@ -47,10 +48,10 @@ fn execute_query(input: &str) -> String {
         Response::NoSuchTable(name) => return format!("No such table: {}\n", name),
         _ => unreachable!("Invalid reponse from global::send_request"),
     };
-    let guard = resources.take();
+    let resources = resources.take();
 
     // 4. typecheck
-    match typechecker::check_stmt(&ast, &guard) {
+    match typechecker::check_stmt(&ast, &resources) {
         Ok(()) => {},
         Err(e) => return format!("{:#?}\n", e),
     }
@@ -58,8 +59,7 @@ fn execute_query(input: &str) -> String {
     // 5. TODO: Maybe convert ast to some internal representation of a query (See EXPLAIN in postgres/mysql)
 
     // 6. TODO: Execute query
-
-    return String::from("Not implemented");
+    executor::execute_query(ast, resources)
 }
 
 fn echo_ast(input: &str) -> String {
