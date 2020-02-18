@@ -76,7 +76,7 @@ pub struct Insert {
 #[derive(Debug)]
 pub struct CreateTable {
     pub table: String,
-    pub columns: Vec<String>,
+    pub columns: Vec<(String, String)>,
 }
 
 #[derive(Debug)]

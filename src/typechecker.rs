@@ -191,9 +191,18 @@ fn check_update(update: &Update, ctx: &mut Context) -> Result<(), TypeError> {
 }
 
 fn check_create_table(create_table: &CreateTable, ctx: &mut Context) -> Result<(), TypeError> {
-    for column in &create_table.columns {
-        if ctx.globals.types.get(column).is_none() {
-            return Err(TypeError::Undefined(column.clone()));
+    let columns = &create_table.columns;
+    for (_, column_type) in columns {
+        if ctx.globals.types.get(column_type).is_none() {
+            return Err(TypeError::Undefined(column_type.clone()));
+        }
+    }
+
+    for i in 0..columns.len() {
+        for j in 0..i {
+            if columns[i] == columns[j] {
+                return Err(TypeError::AlreadyDefined);
+            }
         }
     }
 
