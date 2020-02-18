@@ -190,6 +190,16 @@ fn check_update(update: &Update, ctx: &mut Context) -> Result<(), TypeError> {
     Ok(())
 }
 
+fn check_create_table(create_table: &CreateTable, ctx: &mut Context) -> Result<(), TypeError> {
+    for column in &create_table.columns {
+        if ctx.globals.types.get(column).is_none() {
+            return Err(TypeError::Undefined(column.clone()));
+        }
+    }
+
+    Ok(())
+}
+
 fn check_create_type(create: &CreateType, ctx: &mut Context) -> Result<(), TypeError> {
     // For a type:
     // MyVariant = Var1 TypeA | Var2 TypeB TypeC
