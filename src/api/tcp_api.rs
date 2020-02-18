@@ -7,26 +7,31 @@ pub async fn tcp_api(func: fn(&str) -> String, address: String) -> Result<!, Box
     let mut listener = TcpListener::bind(address).await?;
 
 
+
     loop {
         match listener.accept().await {
             Ok((mut socket, _)) => {
                 tokio::spawn(async move {
                     let (reader, mut writer) = socket.split();
-                    let mut buf= String::new();
+                    let mut buf= vec![];
                     let mut rest= String::new();
                     let mut reader: BufReader<_> = BufReader::new(reader);
 
                     loop {
-                        let n: usize = reader.read_line(&mut buf).await.unwrap();
-
-                        rest.push_str(&buf.trim_end());
+                        let n: usize = reader.read_until(b';', &mut buf).await.unwrap();
+                        
+                        let input = std::str::from_utf8(&buf[..n]).expect("Not valid utf-8");
+                        
+                        
+                        rest.push_str(input);
                         let (result, rest2) = conga(func, rest);
                         rest = rest2;
 
+
                         // TODO: fix for unicode
-                        buf.drain(..buf.len());
+                        buf.drain(..n);
                         match result {
-                            Some(ret) => {
+                            Some(ret) => {                       
                                 writer.write_all(ret.as_bytes()).await.unwrap();
                                 writer.flush().await.unwrap();
                             },
@@ -47,6 +52,7 @@ fn conga(func: fn(&str) -> String, stmt: String) -> (Option<String>, String){
     let mut result = vec![];
     let mut lasti = 0;
     let chars = stmt.chars().enumerate();
+    
 
     for (i,ch) in chars {
         // TODO: Handle escape characters
@@ -55,6 +61,7 @@ fn conga(func: fn(&str) -> String, stmt: String) -> (Option<String>, String){
         }
 
         if ch == ';' && !in_string {
+            println!("Semicolon found");
             let q = &stmt[lasti..=i];
             result.push(func(q));
             lasti = i + 1;
