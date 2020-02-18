@@ -1,9 +1,8 @@
-use tokio::net::TcpListener;
-use tokio::io::{BufReader, AsyncBufReadExt, AsyncWriteExt};
 use std::error::Error;
+use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
+use tokio::net::TcpListener;
 
 pub async fn tcp_api(func: fn(&str) -> String, address: String) -> Result<!, Box<dyn Error>> {
-
     let mut listener = TcpListener::bind(address).await?;
 
     loop {
@@ -11,15 +10,15 @@ pub async fn tcp_api(func: fn(&str) -> String, address: String) -> Result<!, Box
             Ok((mut socket, _)) => {
                 tokio::spawn(async move {
                     let (reader, mut writer) = socket.split();
-                    let mut buf= vec![];
-                    let mut rest= String::new();
+                    let mut buf = vec![];
+                    let mut rest = String::new();
                     let mut reader: BufReader<_> = BufReader::new(reader);
 
                     loop {
                         let n: usize = reader.read_until(b';', &mut buf).await.unwrap();
-                        
+
                         let input = std::str::from_utf8(&buf[..n]).expect("Not valid utf-8");
-                        
+
                         rest.push_str(input);
                         let (result, rest2) = conga(func, rest);
                         rest = rest2;
@@ -30,10 +29,9 @@ pub async fn tcp_api(func: fn(&str) -> String, address: String) -> Result<!, Box
                             Some(ret) => {
                                 writer.write_all(ret.as_bytes()).await.unwrap();
                                 writer.flush().await.unwrap();
-                            },
+                            }
                             None => (),
                         }
-                        
                     }
                 });
             }
@@ -43,13 +41,13 @@ pub async fn tcp_api(func: fn(&str) -> String, address: String) -> Result<!, Box
 }
 
 // CONGA FIX EVERYTHING
-fn conga(func: fn(&str) -> String, stmt: String) -> (Option<String>, String){
+fn conga(func: fn(&str) -> String, stmt: String) -> (Option<String>, String) {
     let mut in_string = false;
     let mut result = vec![];
     let mut lasti = 0;
     let chars = stmt.chars().enumerate();
 
-    for (i,ch) in chars {
+    for (i, ch) in chars {
         // TODO: Handle escape characters
         if ch == '"' {
             in_string = !in_string;
@@ -65,7 +63,6 @@ fn conga(func: fn(&str) -> String, stmt: String) -> (Option<String>, String){
     let mut rest = String::new();
     let mut ret = None;
 
-
     if lasti != (stmt.len() - 1) {
         rest = String::from(&stmt[lasti..stmt.len()]);
     }
@@ -76,6 +73,3 @@ fn conga(func: fn(&str) -> String, stmt: String) -> (Option<String>, String){
 
     (ret, rest)
 }
-
-
-
