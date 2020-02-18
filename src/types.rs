@@ -66,6 +66,10 @@ impl TypeMap {
         &self.types
     }
 
+    pub fn identifiers(&self) -> &HashMap<String, TypeId> {
+        &self.identifiers
+    }
+
     pub fn constructors_of(&self, name: &str) -> Option<&Vec<TypeId>> {
         self.constructors.get(name)
     }

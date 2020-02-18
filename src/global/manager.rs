@@ -23,14 +23,14 @@ lazy_static! {
 
 fn resource_manager(requests: Receiver<(Request, Sender<Response>)>) -> Result<!, String> {
     let mut tables: HashMap<String, Arc<RwLock<Table>>> = HashMap::new();
-    let types: Arc<RwLock<TypeMap>> = Arc::new(RwLock::new(TypeMap::new()));
+    let type_map: Arc<RwLock<TypeMap>> = Arc::new(RwLock::new(TypeMap::new()));
 
     loop {
         let (request, response_ch) = requests.recv().map_err(|e| e.to_string())?;
 
         match request {
-            Request::AcquireResources(table_reqs) => {
-                let types = types.clone();
+            Request::AcquireResources{ table_reqs, type_map_perms } => {
+                let type_map = type_map.clone();
                 let resources: Result<Vec<_>, _> = table_reqs
                     .into_iter()
                     .map(|req| {
@@ -45,7 +45,7 @@ fn resource_manager(requests: Receiver<(Request, Sender<Response>)>) -> Result<!
 
                 match resources {
                     Ok(tables) => {
-                        response_ch.send(Response::AcquiredResources(Resources::new(types, tables)))
+                        response_ch.send(Response::AcquiredResources(Resources::new(type_map, type_map_perms, tables)))
                     }
                     Err(response) => response_ch.send(response),
                 }

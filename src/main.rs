@@ -38,10 +38,9 @@ fn execute_query(input: &str) -> String {
     };
 
     // 2. determine resources
-    let resource_request = pre_typechecker::get_table_permissions(&ast);
+    let request = pre_typechecker::get_resource_request(&ast);
 
     // 3. acquire resources
-    let request = Request::AcquireResources(resource_request);
     let response = send_request(request);
     let mut resources = match response {
         Response::AcquiredResources(resources) => resources,
@@ -56,9 +55,11 @@ fn execute_query(input: &str) -> String {
         Err(e) => return format!("{:#?}\n", e),
     }
 
-    // 5. TODO: Maybe convert ast to some internal representation of a query (See EXPLAIN in postgres/mysql)
+    // TODO:
+    // 5. Maybe convert ast to some internal representation of a query
+    // (See EXPLAIN in postgres/mysql)
 
-    // 6. TODO: Execute query
+    // 6. Execute query
     executor::execute_query(ast, resources)
 }
 

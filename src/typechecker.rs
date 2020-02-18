@@ -89,7 +89,7 @@ pub fn check_stmt(stmt: &Stmt, globals: &ResourcesGuard<'_>) -> Result<(), TypeE
 fn find_bool (ctx: &Context) -> Result<TypeId, TypeError> {
     // FIXME: Stringly types!
     return ctx.globals
-        .types
+        .type_map
         .get_id("Bool")
         .ok_or_else(|| TypeError::Undefined("Bool".into()))
 }
@@ -239,9 +239,13 @@ fn check_insert(insert: &Insert, ctx: &mut Context) -> Result<(), TypeError>{
 }
 
 fn check_create_table(create_table: &CreateTable, ctx: &mut Context) -> Result<(), TypeError> {
+    if create_table.columns.len() == 0 {
+        return Err(TypeError::NotSupported("Creating empty tables"));
+    }
+
     let columns = &create_table.columns;
     for (_, column_type) in columns {
-        if ctx.globals.types.get(column_type).is_none() {
+        if ctx.globals.type_map.get(column_type).is_none() {
             return Err(TypeError::Undefined(column_type.clone()));
         }
     }
@@ -265,13 +269,13 @@ fn check_create_type(create: &CreateType, ctx: &mut Context) -> Result<(), TypeE
     // TODO: recursive types
     match create {
         CreateType::Variant(name, variants) => {
-            if ctx.globals.types.get_id(name).is_some() {
+            if ctx.globals.type_map.get_id(name).is_some() {
                 return Err(TypeError::AlreadyDefined);
             }
 
             for (_variant, types) in variants {
                 for t_name in types {
-                    if ctx.globals.types.get_id(t_name).is_none() {
+                    if ctx.globals.type_map.get_id(t_name).is_none() {
                         return Err(TypeError::Undefined(t_name.clone()));
                     }
                 }
@@ -285,7 +289,7 @@ fn check_expr(expr: &Expr, ctx: &Context) -> Result<TypeId, TypeError> {
     match expr {
         Expr::Ident(ident) => ctx.search_locals(ident),
 
-        Expr::Value(value) => type_of_value(&value, &ctx.globals.types),
+        Expr::Value(value) => type_of_value(&value, &ctx.globals.type_map),
 
         // All types are currently Eq and Ord
         Expr::Equals(e1, e2)

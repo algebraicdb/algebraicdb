@@ -1,8 +1,10 @@
 use crate::ast::*;
-use crate::global::{TableRequest, RW};
+use crate::global::{TableRequest, RW, Request};
 
-pub fn get_table_permissions(stmt: &Stmt) -> Vec<TableRequest> {
-    match stmt {
+pub fn get_resource_request(stmt: &Stmt) -> Request {
+    let mut type_map_perms = RW::Read;
+
+    let table_reqs = match stmt {
         Stmt::Select(sel) => get_option_select(&sel.from),
         Stmt::Update(upd) => vec![TableRequest {
             table: upd.table.clone(),
@@ -16,8 +18,16 @@ pub fn get_table_permissions(stmt: &Stmt) -> Vec<TableRequest> {
             table: del.table.clone(),
             rw: RW::Write,
         }],
-        Stmt::CreateType(_) => vec![],
+        Stmt::CreateType(_) => {
+            type_map_perms = RW::Write;
+            vec![]
+        },
         Stmt::CreateTable(_)=> vec![],
+    };
+
+    Request::AcquireResources {
+        table_reqs,
+        type_map_perms,
     }
 }
 
