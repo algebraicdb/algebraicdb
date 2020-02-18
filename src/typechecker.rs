@@ -77,7 +77,7 @@ pub fn check_stmt(stmt: &Stmt, globals: &ResourcesGuard<'_>) -> Result<(), TypeE
         Stmt::Update(update) => check_update(update, &mut ctx),
         Stmt::Delete(delete) => check_delete(delete, &mut ctx),
         Stmt::Insert(_insert) => unimplemented!("Stmt::Insert"),
-        Stmt::CreateTable(_create_table) => unimplemented!("Stmt::CreateTable"),
+        Stmt::CreateTable(create_table) => check_create_table(create_table, &mut ctx),
         Stmt::CreateType(create_type) => check_create_type(create_type, &mut ctx),
     }
 }
