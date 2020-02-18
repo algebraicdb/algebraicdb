@@ -2,6 +2,7 @@ use crate::ast::*;
 use crate::global::ResourcesGuard;
 use crate::types::*;
 use std::collections::HashMap;
+use std::collections::HashSet;
 
 pub struct Context<'a> {
     pub globals: &'a ResourcesGuard<'a>,
@@ -62,8 +63,10 @@ pub enum TypeError {
     Undefined(String),
     AmbiguousReference(String),
     AlreadyDefined,
+    MissingColumn(String),
     MismatchingTypes { type_1: TypeId, type_2: TypeId },
     InvalidType { expected: TypeId, actual: TypeId },
+    InvalidCount { expected: usize, actual: usize },
 }
 
 pub fn check_stmt(stmt: &Stmt, globals: &ResourcesGuard<'_>) -> Result<(), TypeError> {
@@ -76,7 +79,7 @@ pub fn check_stmt(stmt: &Stmt, globals: &ResourcesGuard<'_>) -> Result<(), TypeE
         Stmt::Select(select) => check_select(select, &mut ctx),
         Stmt::Update(update) => check_update(update, &mut ctx),
         Stmt::Delete(delete) => check_delete(delete, &mut ctx),
-        Stmt::Insert(_insert) => unimplemented!("Stmt::Insert"),
+        Stmt::Insert(insert) => check_insert(insert, &mut ctx),
         Stmt::CreateTable(create_table) => check_create_table(create_table, &mut ctx),
         Stmt::CreateType(create_type) => check_create_type(create_type, &mut ctx),
     }
@@ -91,19 +94,12 @@ fn find_bool (ctx: &Context) -> Result<TypeId, TypeError> {
         .ok_or_else(|| TypeError::Undefined("Bool".into()))
 }
 
-fn check_delete(delete: &Delete, ctx: &mut Context) -> Result<(), TypeError>{
-    let bool_id = find_bool(ctx)?;
-    match &delete.where_clause {
-        Some(WhereClause(cond)) => {
-            import_table_columns(&delete.table, ctx);
+fn import_table_columns<'a>(name: &str, ctx: &'a mut Context) {
+    let table = ctx.globals.read_table(name);
+    let schema = table.get_schema();
 
-            let cond_type = check_expr(cond, &ctx)?;
-            assert_type_as(cond_type, bool_id)?;
-
-            Ok(())
-        }
-
-        None => Ok(()),
+    for (name, type_id) in &schema.columns {
+        ctx.push_local(name.clone(), *type_id);
     }
 }
 
@@ -156,15 +152,6 @@ fn check_select_item(item: &SelectItem, ctx: &Context) -> Result<(), TypeError> 
     Ok(())
 }
 
-fn import_table_columns<'a>(name: &str, ctx: &'a mut Context) {
-    let table = ctx.globals.read_table(name);
-    let schema = table.get_schema();
-
-    for (name, type_id) in &schema.columns {
-        ctx.push_local(name.clone(), *type_id);
-    }
-}
-
 fn check_update(update: &Update, ctx: &mut Context) -> Result<(), TypeError> {
     import_table_columns(&update.table, ctx);
     let table = ctx.globals.read_table(&update.table);
@@ -184,6 +171,67 @@ fn check_update(update: &Update, ctx: &mut Context) -> Result<(), TypeError> {
                     });
                 }
             }
+        }
+    }
+
+    Ok(())
+}
+
+fn check_delete(delete: &Delete, ctx: &mut Context) -> Result<(), TypeError>{
+    let bool_id = find_bool(ctx)?;
+    match &delete.where_clause {
+        Some(WhereClause(cond)) => {
+            import_table_columns(&delete.table, ctx);
+
+            let cond_type = check_expr(cond, &ctx)?;
+            assert_type_as(cond_type, bool_id)?;
+
+            Ok(())
+        }
+
+        None => Ok(()),
+    }
+}
+
+fn check_insert(insert: &Insert, ctx: &mut Context) -> Result<(), TypeError>{
+    let table = ctx.globals.read_table(&insert.table);
+    let schema = table.get_schema();
+
+    let mut populated_columns = HashSet::new();
+
+    // Make sure there is a value for every column
+    if insert.columns.len() != insert.values.len() {
+        return Err(TypeError::InvalidCount {
+            expected: insert.columns.len(),
+            actual: insert.values.len(),
+        });
+    }
+
+    for (column, expr) in insert.columns.iter().zip(insert.values.iter()) {
+        // Make sure the types of the values match the types of the columns
+        let expected_type = schema.column(column)
+            .ok_or_else(|| TypeError::Undefined(column.clone()))?;
+
+        let actual_type = check_expr(expr, ctx)?;
+
+        if expected_type != actual_type {
+            return Err(TypeError::InvalidType {
+                actual: actual_type,
+                expected: expected_type,
+            });
+        }
+
+        // Make sure the user doesn't assign to the same column twice
+        if !populated_columns.insert(column) {
+            return Err(TypeError::AlreadyDefined);
+        }
+    }
+
+    // Make sure all columns have a value
+    for (column, _) in &table.get_schema().columns {
+        if populated_columns.get(column).is_none() {
+            // TODO: default values
+            return Err(TypeError::MissingColumn(column.clone()));
         }
     }
 
