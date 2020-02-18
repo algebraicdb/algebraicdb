@@ -17,6 +17,7 @@ pub fn get_table_permissions(stmt: &Stmt) -> Vec<TableRequest> {
             rw: RW::Write,
         }],
         Stmt::CreateType(_) => vec![],
+        Stmt::CreateTable(_)=> vec![],
     }
 }
 
