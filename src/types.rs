@@ -26,12 +26,18 @@ impl Index<&TypeId> for TypeMap {
 
 impl TypeMap {
     pub fn new() -> Self {
-        TypeMap {
+        let mut map = TypeMap {
             types: HashMap::new(),
             identifiers: HashMap::new(),
             constructors: HashMap::new(),
             next_id: 1,
-        }
+        };
+
+        // TODO: better handling of primitives
+        map.insert("Integer", Type::Integer);
+        map.insert("Double", Type::Double);
+        map.insert("Bool", Type::Bool);
+        map
     }
 
     pub fn len(&self) -> usize {
@@ -58,6 +64,10 @@ impl TypeMap {
 
     pub fn types(&self) -> &HashMap<TypeId, Type> {
         &self.types
+    }
+
+    pub fn identifiers(&self) -> &HashMap<String, TypeId> {
+        &self.identifiers
     }
 
     pub fn constructors_of(&self, name: &str) -> Option<&Vec<TypeId>> {

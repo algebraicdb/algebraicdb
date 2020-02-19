@@ -16,7 +16,10 @@ pub struct TableRequest {
 }
 
 pub enum Request {
-    AcquireResources(Vec<TableRequest>),
+    AcquireResources {
+        table_reqs: Vec<TableRequest>,
+        type_map_perms: RW,
+    },
     CreateTable(String, Table),
 }
 
@@ -29,12 +32,13 @@ pub enum Response {
 
 pub struct Resources {
     dirty: bool,
-    types: Arc<RwLock<TypeMap>>,
+    type_map_perms: RW,
+    type_map: Arc<RwLock<TypeMap>>,
     tables: Vec<(RW, String, Arc<RwLock<Table>>)>,
 }
 
 pub struct ResourcesGuard<'a> {
-    pub types: Resource<'a, TypeMap>,
+    pub type_map: Resource<'a, TypeMap>,
     pub tables: Vec<(&'a str, Resource<'a, Table>)>,
 }
 
@@ -45,12 +49,14 @@ pub enum Resource<'a, T> {
 
 impl Resources {
     pub(super) fn new(
-        types: Arc<RwLock<TypeMap>>,
+        type_map: Arc<RwLock<TypeMap>>,
+        type_map_perms: RW,
         tables: Vec<(RW, String, Arc<RwLock<Table>>)>,
     ) -> Self {
         Self {
             dirty: false,
-            types,
+            type_map,
+            type_map_perms,
             tables,
         }
     }
@@ -66,15 +72,20 @@ impl Resources {
         assert_eq!(self.dirty, false);
         self.dirty = true;
 
+        let pmsg = "Lock is poisoned";
+
         ResourcesGuard {
-            types: Resource::Read(self.types.read().expect("Lock is poisoned")),
+            type_map: match self.type_map_perms {
+                RW::Read => Resource::Read(self.type_map.read().expect(pmsg)),
+                RW::Write => Resource::Write(self.type_map.write().expect(pmsg)),
+            },
             tables: self
                 .tables
                 .iter()
                 .map(|(rw, name, lock)| {
                     let resource = match rw {
-                        RW::Read => Resource::Read(lock.read().expect("Lock is poisoned")),
-                        RW::Write => Resource::Write(lock.write().expect("Lock is poisoned")),
+                        RW::Read => Resource::Read(lock.read().expect(pmsg)),
+                        RW::Write => Resource::Write(lock.write().expect(pmsg)),
                     };
 
                     (name.as_str(), resource)
@@ -99,7 +110,7 @@ impl<'a, T> Deref for Resource<'a, T> {
 impl<'a, T> DerefMut for Resource<'a, T> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         match self {
-            Resource::Read(_) => panic!("Tried to get write access to read-only table resources"),
+            Resource::Read(_) => panic!("Tried to get write access to a read-only resource"),
             Resource::Write(guard) => guard.deref_mut(),
         }
     }
@@ -117,11 +128,13 @@ impl<'a> ResourcesGuard<'a> {
             .unwrap()
     }
 
-    pub fn write_table(&mut self, name: &str) -> &mut Table {
-        self.tables
+    pub fn write_table(&mut self, name: &str) -> (&mut Table, &Resource<'a, TypeMap>) {
+        let table = self
+            .tables
             .iter_mut()
             .find(|(entry_name, _)| entry_name == &name)
             .map(|(_, resource)| resource.deref_mut())
-            .unwrap()
+            .unwrap();
+        (table, &self.type_map)
     }
 }

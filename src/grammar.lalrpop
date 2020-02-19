@@ -129,7 +129,7 @@ WhereClause: WhereClause = {
 
 CreateTable: CreateTable = {
     CREATE TABLE <table:Ident>
-        <columns:("(" <Comma<Ident>> ")")>
+        <columns:("(" <Comma<(Ident Ident)>> ")")>
     => CreateTable {
         table,
         columns,

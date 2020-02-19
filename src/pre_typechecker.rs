@@ -1,7 +1,21 @@
 use crate::ast::*;
-use crate::global::{TableRequest, RW};
+use crate::global::{Request, TableRequest, RW};
 
-pub fn get_table_permissions(stmt: &Stmt) -> Vec<TableRequest> {
+pub fn get_resource_request(stmt: &Stmt) -> Request {
+    Request::AcquireResources {
+        table_reqs: get_table_resource_requests(stmt),
+        type_map_perms: get_type_map_resource_perm(stmt),
+    }
+}
+
+fn get_type_map_resource_perm(stmt: &Stmt) -> RW {
+    match stmt {
+        Stmt::CreateType(_) => RW::Write,
+        _ => RW::Read,
+    }
+}
+
+fn get_table_resource_requests(stmt: &Stmt) -> Vec<TableRequest> {
     match stmt {
         Stmt::Select(sel) => get_option_select(&sel.from),
         Stmt::Update(upd) => vec![TableRequest {
@@ -17,7 +31,7 @@ pub fn get_table_permissions(stmt: &Stmt) -> Vec<TableRequest> {
             rw: RW::Write,
         }],
         Stmt::CreateType(_) => vec![],
-        Stmt::CreateTable(_)=> vec![],
+        Stmt::CreateTable(_) => vec![],
     }
 }
 
@@ -46,8 +60,8 @@ fn get_select<'a>(sel: &'a SelectFrom) -> Vec<TableRequest> {
 #[cfg(test)]
 mod tests {
 
-    use crate::grammar::*;
-    use crate::pre_typechecker::*;
+    use super::*;
+    use crate::grammar::StmtParser;
 
     #[test]
     fn test_get_permissions() {
@@ -60,8 +74,8 @@ mod tests {
             .parse(r#"SELECT col FROM faffe LEFT JOIN feffe LEFT JOIN foffe ON 3=5;"#)
             .unwrap();
 
-        let ex1r = get_table_permissions(&ex1);
-        let ex2r = get_table_permissions(&ex2);
+        let ex1r = get_table_resource_requests(&ex1);
+        let ex2r = get_table_resource_requests(&ex2);
 
         println!("{}", ex2r[2].table);
 

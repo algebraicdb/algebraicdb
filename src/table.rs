@@ -3,7 +3,7 @@ use crate::types::{EnumTag, Type, TypeId, TypeMap, Value};
 use bincode::deserialize;
 use std::cmp::{Ord, Ordering, PartialOrd};
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Schema {
     pub columns: Vec<(String, TypeId)>,
 }
@@ -15,6 +15,7 @@ pub struct Column {
 }
 
 // Table defines
+#[derive(Debug)]
 pub struct Table {
     schema: Schema,
     data: Vec<u8>,

@@ -24,10 +24,12 @@ impl<'a> Context<'a> {
             .iter()
             .filter_map(|scope| scope.get(ident))
             .next()
-            .map(|res| if res.len() == 1 {
-                Ok(res[0])
-            } else {
-                Err(TypeError::AmbiguousReference(ident.to_string()))
+            .map(|res| {
+                if res.len() == 1 {
+                    Ok(res[0])
+                } else {
+                    Err(TypeError::AmbiguousReference(ident.to_string()))
+                }
             })
             .unwrap_or_else(|| Err(TypeError::Undefined(ident.to_string())))
     }
@@ -41,7 +43,10 @@ impl<'a> Context<'a> {
     }
 
     pub fn merge_scope(&mut self, other: Scope) {
-        let scope = self.locals.last_mut().unwrap_or_else(|| panic!("Noo scoope :|"));
+        let scope = self
+            .locals
+            .last_mut()
+            .unwrap_or_else(|| panic!("Noo scoope :|"));
         for (name, mut types) in other {
             let existing = scope.entry(name).or_default();
             existing.append(&mut types);
@@ -49,7 +54,8 @@ impl<'a> Context<'a> {
     }
 
     pub fn push_local(&mut self, name: String, type_id: TypeId) {
-        self.locals.last_mut()
+        self.locals
+            .last_mut()
             .unwrap_or_else(|| panic!("No scope :c"))
             .entry(name)
             .or_default()
@@ -85,13 +91,13 @@ pub fn check_stmt(stmt: &Stmt, globals: &ResourcesGuard<'_>) -> Result<(), TypeE
     }
 }
 
-
-fn find_bool (ctx: &Context) -> Result<TypeId, TypeError> {
+fn find_bool(ctx: &Context) -> Result<TypeId, TypeError> {
     // FIXME: Stringly types!
-    return ctx.globals
-        .types
+    return ctx
+        .globals
+        .type_map
         .get_id("Bool")
-        .ok_or_else(|| TypeError::Undefined("Bool".into()))
+        .ok_or_else(|| TypeError::Undefined("Bool".into()));
 }
 
 fn import_table_columns<'a>(name: &str, ctx: &'a mut Context) {
@@ -137,7 +143,7 @@ fn check_select_from(from: &SelectFrom, ctx: &mut Context) -> Result<(), TypeErr
                 let clause_type = check_expr(on_clause, ctx)?;
                 assert_type_as(clause_type, find_bool(ctx)?)?;
             }
-        },
+        }
     }
     Ok(())
 }
@@ -177,7 +183,7 @@ fn check_update(update: &Update, ctx: &mut Context) -> Result<(), TypeError> {
     Ok(())
 }
 
-fn check_delete(delete: &Delete, ctx: &mut Context) -> Result<(), TypeError>{
+fn check_delete(delete: &Delete, ctx: &mut Context) -> Result<(), TypeError> {
     let bool_id = find_bool(ctx)?;
     match &delete.where_clause {
         Some(WhereClause(cond)) => {
@@ -193,7 +199,7 @@ fn check_delete(delete: &Delete, ctx: &mut Context) -> Result<(), TypeError>{
     }
 }
 
-fn check_insert(insert: &Insert, ctx: &mut Context) -> Result<(), TypeError>{
+fn check_insert(insert: &Insert, ctx: &mut Context) -> Result<(), TypeError> {
     let table = ctx.globals.read_table(&insert.table);
     let schema = table.get_schema();
 
@@ -209,7 +215,8 @@ fn check_insert(insert: &Insert, ctx: &mut Context) -> Result<(), TypeError>{
 
     for (column, expr) in insert.columns.iter().zip(insert.values.iter()) {
         // Make sure the types of the values match the types of the columns
-        let expected_type = schema.column(column)
+        let expected_type = schema
+            .column(column)
             .ok_or_else(|| TypeError::Undefined(column.clone()))?;
 
         let actual_type = check_expr(expr, ctx)?;
@@ -239,9 +246,22 @@ fn check_insert(insert: &Insert, ctx: &mut Context) -> Result<(), TypeError>{
 }
 
 fn check_create_table(create_table: &CreateTable, ctx: &mut Context) -> Result<(), TypeError> {
-    for column in &create_table.columns {
-        if ctx.globals.types.get(column).is_none() {
-            return Err(TypeError::Undefined(column.clone()));
+    if create_table.columns.len() == 0 {
+        return Err(TypeError::NotSupported("Creating empty tables"));
+    }
+
+    let columns = &create_table.columns;
+    for (_, column_type) in columns {
+        if ctx.globals.type_map.get(column_type).is_none() {
+            return Err(TypeError::Undefined(column_type.clone()));
+        }
+    }
+
+    for i in 0..columns.len() {
+        for j in 0..i {
+            if columns[i] == columns[j] {
+                return Err(TypeError::AlreadyDefined);
+            }
         }
     }
 
@@ -256,13 +276,13 @@ fn check_create_type(create: &CreateType, ctx: &mut Context) -> Result<(), TypeE
     // TODO: recursive types
     match create {
         CreateType::Variant(name, variants) => {
-            if ctx.globals.types.get_id(name).is_some() {
+            if ctx.globals.type_map.get_id(name).is_some() {
                 return Err(TypeError::AlreadyDefined);
             }
 
             for (_variant, types) in variants {
                 for t_name in types {
-                    if ctx.globals.types.get_id(t_name).is_none() {
+                    if ctx.globals.type_map.get_id(t_name).is_none() {
                         return Err(TypeError::Undefined(t_name.clone()));
                     }
                 }
@@ -276,7 +296,7 @@ fn check_expr(expr: &Expr, ctx: &Context) -> Result<TypeId, TypeError> {
     match expr {
         Expr::Ident(ident) => ctx.search_locals(ident),
 
-        Expr::Value(value) => type_of_value(&value, &ctx.globals.types),
+        Expr::Value(value) => type_of_value(&value, &ctx.globals.type_map),
 
         // All types are currently Eq and Ord
         Expr::Equals(e1, e2)
@@ -366,12 +386,12 @@ mod tests {
 
     #[test]
     fn type_check_exprs() {
-        let (_ids, types) = create_type_map();
-        let types = Arc::new(RwLock::new(types));
+        let (_ids, type_map) = create_type_map();
+        let type_map = Arc::new(RwLock::new(type_map));
 
         let dummy_ctx = Context {
             globals: &ResourcesGuard {
-                types: Resource::Read(types.read().unwrap()),
+                type_map: Resource::Read(type_map.read().unwrap()),
                 tables: vec![],
             },
             locals: vec![],

@@ -8,6 +8,7 @@ extern crate lazy_static;
 
 mod api;
 mod ast;
+mod executor;
 mod global;
 mod grammar;
 mod pattern;
@@ -16,12 +17,50 @@ mod table;
 mod typechecker;
 mod types;
 
+use crate::ast::Stmt;
 use api::tcp_api::tcp_api;
 use std::error::Error;
 
 #[tokio::main]
 async fn main() -> Result<!, Box<dyn Error>> {
-    tcp_api(echo_ast, "127.0.0.1:5432".to_string()).await
+    tcp_api(execute_query, "127.0.0.1:5432".to_string()).await
+}
+
+fn execute_query(input: &str) -> String {
+    // 1. parse
+    use crate::global::*;
+    use crate::grammar::StmtParser;
+
+    let result: Result<Stmt, _> = StmtParser::new().parse(&input);
+    let ast = match result {
+        Ok(ast) => ast,
+        Err(e) => return format!("{:#?}\n", e),
+    };
+
+    // 2. determine resources
+    let request = pre_typechecker::get_resource_request(&ast);
+
+    // 3. acquire resources
+    let response = send_request(request);
+    let mut resources = match response {
+        Response::AcquiredResources(resources) => resources,
+        Response::NoSuchTable(name) => return format!("No such table: {}\n", name),
+        _ => unreachable!("Invalid reponse from global::send_request"),
+    };
+    let resources = resources.take();
+
+    // 4. typecheck
+    match typechecker::check_stmt(&ast, &resources) {
+        Ok(()) => {}
+        Err(e) => return format!("{:#?}\n", e),
+    }
+
+    // TODO:
+    // 5. Maybe convert ast to some internal representation of a query
+    // (See EXPLAIN in postgres/mysql)
+
+    // 6. Execute query
+    executor::execute_query(ast, resources)
 }
 
 fn echo_ast(input: &str) -> String {
