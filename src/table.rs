@@ -535,7 +535,7 @@ pub mod tests {
         // iterate over all bound cells of all matching rows.
         // two rows should match, multiplied by three bindings x1, ý2, x3.
         test_pattern(
-            "SELECT x: Int(2), x: x1, y: y2, x: x3, x, y: Int(2);",
+            "SELECT x: Int(2), x: x1, y: y2, x: x3, y: Int(2);",
             box |i| assert_eq!(i.flatten().count(), 6),
         );
     }
