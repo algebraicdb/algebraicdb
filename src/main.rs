@@ -17,6 +17,7 @@ mod pre_typechecker;
 mod table;
 mod typechecker;
 mod types;
+mod psqlwrapper;
 
 use crate::ast::Stmt;
 use api::tcp_api::tcp_api;
