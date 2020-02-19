@@ -110,7 +110,7 @@ impl<'a, T> Deref for Resource<'a, T> {
 impl<'a, T> DerefMut for Resource<'a, T> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         match self {
-            Resource::Read(_) => panic!("Tried to get write access to read-only table resources"),
+            Resource::Read(_) => panic!("Tried to get write access to a read-only resource"),
             Resource::Write(guard) => guard.deref_mut(),
         }
     }

@@ -4,14 +4,14 @@ use crate::global::{Request, TableRequest, RW};
 pub fn get_resource_request(stmt: &Stmt) -> Request {
     Request::AcquireResources {
         table_reqs: get_table_resource_requests(stmt),
-        type_map_perms: RW::Read,
+        type_map_perms: get_type_map_resource_perm(stmt),
     }
 }
 
 fn get_type_map_resource_perm(stmt: &Stmt) -> RW {
     match stmt {
         Stmt::CreateType(_) => RW::Write,
-        _ => RW::Write,
+        _ => RW::Read,
     }
 }
 
