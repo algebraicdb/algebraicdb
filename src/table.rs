@@ -30,7 +30,7 @@ pub struct Row<'a> {
 pub struct Cell<'ts, 'tb> {
     type_id: TypeId,
     types: &'ts TypeMap,
-    data: &'tb [u8],
+    pub data: &'tb [u8],
 }
 
 pub struct RowIter<'a> {
@@ -214,7 +214,7 @@ impl<'p, 'ts, 'tb> Iterator for CellPatternIter<'p, 'ts, 'tb> {
                 let cell = Cell {
                     type_id: *type_id,
                     types: self.types,
-                    data: &self.data[*index..type_size],
+                    data: &self.data[*index..*index + type_size],
                 };
                 (ident.as_str(), cell)
             })
