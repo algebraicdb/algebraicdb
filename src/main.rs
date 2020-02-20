@@ -20,13 +20,14 @@ mod types;
 use crate::ast::Stmt;
 use api::tcp_api::tcp_api;
 use std::error::Error;
+use std::io::Write;
 
 #[tokio::main]
 async fn main() -> Result<!, Box<dyn Error>> {
-    tcp_api(execute_query, "127.0.0.1:5432".to_string()).await
+    tcp_api("127.0.0.1:5432".to_string()).await
 }
 
-fn execute_query(input: &str) -> String {
+fn execute_query(input: &str, w: &mut dyn Write) -> Result<(), Box<dyn Error>> {
     // 1. parse
     use crate::global::*;
     use crate::grammar::StmtParser;
@@ -34,7 +35,7 @@ fn execute_query(input: &str) -> String {
     let result: Result<Stmt, _> = StmtParser::new().parse(&input);
     let ast = match result {
         Ok(ast) => ast,
-        Err(e) => return format!("{:#?}\n", e),
+        Err(e) => return Ok(write!(w, "{:#?}\n", e)?),
     };
 
     // 2. determine resources
@@ -44,7 +45,7 @@ fn execute_query(input: &str) -> String {
     let response = send_request(request);
     let mut resources = match response {
         Response::AcquiredResources(resources) => resources,
-        Response::NoSuchTable(name) => return format!("No such table: {}\n", name),
+        Response::NoSuchTable(name) => return Ok(write!(w, "No such table: {}\n", name)?),
         _ => unreachable!("Invalid reponse from global::send_request"),
     };
     let resources = resources.take();
@@ -52,7 +53,7 @@ fn execute_query(input: &str) -> String {
     // 4. typecheck
     match typechecker::check_stmt(&ast, &resources) {
         Ok(()) => {}
-        Err(e) => return format!("{:#?}\n", e),
+        Err(e) => return Ok(write!(w, "{:#?}\n", e)?),
     }
 
     // TODO:
@@ -60,14 +61,15 @@ fn execute_query(input: &str) -> String {
     // (See EXPLAIN in postgres/mysql)
 
     // 6. Execute query
-    executor::execute_query(ast, resources)
+    executor::execute_query(ast, resources, w)
 }
 
-fn echo_ast(input: &str) -> String {
+fn echo_ast(input: &str, w: &mut dyn Write) -> Result<(), Box<dyn Error>> {
     use crate::grammar::StmtParser;
 
     match StmtParser::new().parse(&input) {
-        Ok(ast) => format!("{:#?}\n", ast),
-        Err(e) => format!("{:#?}\n", e),
+        Ok(ast) => write!(w, "{:#?}\n", ast)?,
+        Err(e) => write!(w, "{:#?}\n", e)?,
     }
+    Ok(())
 }

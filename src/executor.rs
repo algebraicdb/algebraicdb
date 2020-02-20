@@ -3,6 +3,8 @@ use crate::global::{send_request, Request, ResourcesGuard, Response};
 use crate::pattern::CompiledPattern;
 use crate::table::{Schema, Table};
 use crate::types::{Type, TypeId, Value};
+use std::io::Write;
+use std::error::Error;
 
 struct Context {
     // TODO
@@ -14,19 +16,17 @@ impl Context {
     }
 }
 
-pub(crate) fn execute_query(ast: Stmt, resources: ResourcesGuard) -> String {
+pub(crate) fn execute_query(ast: Stmt, resources: ResourcesGuard, w: &mut dyn Write) -> Result<(), Box<dyn Error>> {
     match ast {
-        Stmt::CreateTable(create_table) => execute_create_table(create_table, resources),
-        Stmt::CreateType(create_type) => execute_create_type(create_type, resources),
-        Stmt::Insert(insert) => execute_insert(insert, resources),
-        Stmt::Select(select) => execute_select(select, resources),
+        Stmt::CreateTable(create_table) => execute_create_table(create_table, resources, w),
+        Stmt::CreateType(create_type) => execute_create_type(create_type, resources, w),
+        Stmt::Insert(insert) => execute_insert(insert, resources, w),
+        Stmt::Select(select) => execute_select(select, resources, w),
         _ => unimplemented!("Not implemented: {:?}", ast),
     }
 }
 
-// SELECT a FROM table
-// SELECT a: a FROM table
-fn execute_select(select: Select, resources: ResourcesGuard) -> String {
+fn execute_select(select: Select, resources: ResourcesGuard, w: &mut dyn Write) -> Result<(), Box<dyn Error>> {
     match select.from {
         Some(SelectFrom::Table(table_name)) => {
             let table = resources.read_table(&table_name);
@@ -34,22 +34,21 @@ fn execute_select(select: Select, resources: ResourcesGuard) -> String {
             let p =
                 CompiledPattern::compile(&select.items, table.get_schema(), &resources.type_map);
 
-            let mut output = String::new();
-
             for row in table.pattern_iter(&p, &resources.type_map) {
+                write!(w, "row: [")?;
                 for (name, cell) in row {
-                    output.push_str(&format!("{}: {:?} ", name, cell.data))
+                    write!(w, "{}: {:?} ", name, cell.data)?;
                 }
-                output.push_str("\n");
+                write!(w, "]\n")?;
             }
-
-            output
         }
         select_from => unimplemented!("Not implemented: {:?}", select_from),
     }
+
+    Ok(())
 }
 
-fn execute_create_table(create_table: CreateTable, resources: ResourcesGuard) -> String {
+fn execute_create_table(create_table: CreateTable, resources: ResourcesGuard, w: &mut dyn Write) -> Result<(), Box<dyn Error>> {
     let columns: Vec<_> = create_table
         .columns
         .into_iter()
@@ -57,7 +56,7 @@ fn execute_create_table(create_table: CreateTable, resources: ResourcesGuard) ->
             let t_id = resources
                 .type_map
                 .get_id(&column_type)
-                .expect("Type does not exists");
+                .expect("Type does not exist");
             (column_name, t_id)
         })
         .collect();
@@ -68,17 +67,15 @@ fn execute_create_table(create_table: CreateTable, resources: ResourcesGuard) ->
     let request = Request::CreateTable(create_table.table, table);
 
     match send_request(request) {
-        Response::TableCreated => "Table created\n",
-        Response::TableAlreadyExists => "Table already exists\n",
+        Response::TableCreated => write!(w, "Table created\n")?,
+        Response::TableAlreadyExists => write!(w, "Table already exists\n")?,
         _ => unreachable!(),
-    }
-    .to_string()
+    };
+    Ok(())
 }
 
-fn execute_create_type(create_type: CreateType, mut resources: ResourcesGuard) -> String {
+fn execute_create_type(create_type: CreateType, mut resources: ResourcesGuard, w: &mut dyn Write) -> Result<(), Box<dyn Error>> {
     let types = &mut resources.type_map;
-
-    let mut output;
 
     match create_type {
         CreateType::Variant(name, variants) => {
@@ -94,21 +91,19 @@ fn execute_create_type(create_type: CreateType, mut resources: ResourcesGuard) -
                 })
                 .collect();
 
-            output = format!("Type {} created.\n", name);
+            write!(w, "Type {} created.\n", name)?;
             types.insert(name, Type::Sum(variant_types));
         }
     }
 
-    output.push_str("Current types:\n");
+    write!(w, "Current types:\n")?;
     for name in types.identifiers().keys() {
-        output.push_str("  ");
-        output.push_str(name);
-        output.push_str("\n");
+        write!(w, "  {}\n", name)?;
     }
-    output
+    Ok(())
 }
 
-fn execute_insert(insert: Insert, mut resources: ResourcesGuard) -> String {
+fn execute_insert(insert: Insert, mut resources: ResourcesGuard, w: &mut dyn Write) -> Result<(), Box<dyn Error>> {
     let (table, types) = resources.write_table(&insert.table);
 
     let ctx = Context::empty();
@@ -121,8 +116,9 @@ fn execute_insert(insert: Insert, mut resources: ResourcesGuard) -> String {
 
     table.push_row(&values, &types);
 
-    //"Row inserted".to_string()
-    format!("{:#?}", table)
+    write!(w, "Row inserted\n")?;
+    write!(w, "{:#?}\n", table)?;
+    Ok(())
 }
 
 fn execute_expr(expr: Expr, _ctx: &Context) -> Value {
