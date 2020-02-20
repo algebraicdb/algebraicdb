@@ -24,7 +24,7 @@ use std::io::Write;
 
 #[tokio::main]
 async fn main() -> Result<!, Box<dyn Error>> {
-    tcp_api("127.0.0.1:5432".to_string()).await
+    tcp_api(execute_query, "127.0.0.1:5432".to_string()).await
 }
 
 fn execute_query(input: &str, w: &mut dyn Write) -> Result<(), Box<dyn Error>> {

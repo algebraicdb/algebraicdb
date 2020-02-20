@@ -1,25 +1,20 @@
+use futures::executor::block_on;
 use std::error::Error;
+use std::io::{self, BufWriter, Write};
 use tokio::io::{AsyncBufReadExt, AsyncWrite, AsyncWriteExt, BufReader};
 use tokio::net::TcpListener;
-use crate::execute_query;
-use std::io::{self, Write, BufWriter};
-use futures::executor::block_on;
 
-type W = dyn Send + AsyncWrite;
-
-struct BlockWriter<W: AsyncWrite + Unpin> {
+struct BlockingWriter<W: AsyncWrite + Unpin> {
     writer: W,
 }
 
-impl<W: AsyncWrite + Unpin> BlockWriter<W> {
+impl<W: AsyncWrite + Unpin> BlockingWriter<W> {
     pub fn new(writer: W) -> Self {
-        BlockWriter {
-            writer,
-        }
+        BlockingWriter { writer }
     }
 }
 
-impl<W: AsyncWrite + Unpin> Write for BlockWriter<W> {
+impl<W: AsyncWrite + Unpin> Write for BlockingWriter<W> {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
         block_on(self.writer.write(buf))
     }
@@ -29,8 +24,10 @@ impl<W: AsyncWrite + Unpin> Write for BlockWriter<W> {
     }
 }
 
-pub async fn tcp_api(address: String) -> Result<!, Box<dyn Error>>
-{
+pub async fn tcp_api(
+    func: fn(&str, &mut dyn Write) -> Result<(), Box<dyn Error>>,
+    address: String,
+) -> Result<!, Box<dyn Error>> {
     let mut listener = TcpListener::bind(address).await?;
 
     loop {
@@ -38,7 +35,7 @@ pub async fn tcp_api(address: String) -> Result<!, Box<dyn Error>>
             Ok((mut socket, _)) => {
                 tokio::spawn(async move {
                     let (reader, writer) = socket.split();
-                    let mut writer = BufWriter::new(BlockWriter::new(writer));
+                    let mut writer = BufWriter::new(BlockingWriter::new(writer));
                     let mut buf = vec![];
                     let mut rest = String::new();
                     let mut reader: BufReader<_> = BufReader::new(reader);
@@ -49,7 +46,7 @@ pub async fn tcp_api(address: String) -> Result<!, Box<dyn Error>>
                         let input = std::str::from_utf8(&buf[..n]).expect("Not valid utf-8");
 
                         rest.push_str(input);
-                        rest = conga(execute_query, input, &mut writer);
+                        rest = conga(func, input, &mut writer);
                         writer.flush().expect("Flushing writer failed");
 
                         // TODO: fix for unicode
@@ -63,8 +60,11 @@ pub async fn tcp_api(address: String) -> Result<!, Box<dyn Error>>
 }
 
 // CONGA FIX EVERYTHING
-fn conga(func: fn(&str, &mut dyn Write) -> Result<(), Box<dyn Error>>, stmt: &str, w: &mut dyn Write) -> String
-{
+fn conga(
+    func: fn(&str, &mut dyn Write) -> Result<(), Box<dyn Error>>,
+    stmt: &str,
+    w: &mut dyn Write,
+) -> String {
     let mut in_string = false;
     let mut lasti = 0;
     let chars = stmt.chars().enumerate();
@@ -94,8 +94,8 @@ fn conga(func: fn(&str, &mut dyn Write) -> Result<(), Box<dyn Error>>, stmt: &st
 pub mod tests {
 
     use super::conga;
-    use std::io::Write;
     use std::error::Error;
+    use std::io::Write;
 
     #[test]
     pub fn test_conga() {

@@ -3,8 +3,8 @@ use crate::global::{send_request, Request, ResourcesGuard, Response};
 use crate::pattern::CompiledPattern;
 use crate::table::{Schema, Table};
 use crate::types::{Type, TypeId, Value};
-use std::io::Write;
 use std::error::Error;
+use std::io::Write;
 
 struct Context {
     // TODO
@@ -16,7 +16,11 @@ impl Context {
     }
 }
 
-pub(crate) fn execute_query(ast: Stmt, resources: ResourcesGuard, w: &mut dyn Write) -> Result<(), Box<dyn Error>> {
+pub(crate) fn execute_query(
+    ast: Stmt,
+    resources: ResourcesGuard,
+    w: &mut dyn Write,
+) -> Result<(), Box<dyn Error>> {
     match ast {
         Stmt::CreateTable(create_table) => execute_create_table(create_table, resources, w),
         Stmt::CreateType(create_type) => execute_create_type(create_type, resources, w),
@@ -26,7 +30,11 @@ pub(crate) fn execute_query(ast: Stmt, resources: ResourcesGuard, w: &mut dyn Wr
     }
 }
 
-fn execute_select(select: Select, resources: ResourcesGuard, w: &mut dyn Write) -> Result<(), Box<dyn Error>> {
+fn execute_select(
+    select: Select,
+    resources: ResourcesGuard,
+    w: &mut dyn Write,
+) -> Result<(), Box<dyn Error>> {
     match select.from {
         Some(SelectFrom::Table(table_name)) => {
             let table = resources.read_table(&table_name);
@@ -48,7 +56,11 @@ fn execute_select(select: Select, resources: ResourcesGuard, w: &mut dyn Write) 
     Ok(())
 }
 
-fn execute_create_table(create_table: CreateTable, resources: ResourcesGuard, w: &mut dyn Write) -> Result<(), Box<dyn Error>> {
+fn execute_create_table(
+    create_table: CreateTable,
+    resources: ResourcesGuard,
+    w: &mut dyn Write,
+) -> Result<(), Box<dyn Error>> {
     let columns: Vec<_> = create_table
         .columns
         .into_iter()
@@ -74,7 +86,11 @@ fn execute_create_table(create_table: CreateTable, resources: ResourcesGuard, w:
     Ok(())
 }
 
-fn execute_create_type(create_type: CreateType, mut resources: ResourcesGuard, w: &mut dyn Write) -> Result<(), Box<dyn Error>> {
+fn execute_create_type(
+    create_type: CreateType,
+    mut resources: ResourcesGuard,
+    w: &mut dyn Write,
+) -> Result<(), Box<dyn Error>> {
     let types = &mut resources.type_map;
 
     match create_type {
@@ -103,7 +119,11 @@ fn execute_create_type(create_type: CreateType, mut resources: ResourcesGuard, w
     Ok(())
 }
 
-fn execute_insert(insert: Insert, mut resources: ResourcesGuard, w: &mut dyn Write) -> Result<(), Box<dyn Error>> {
+fn execute_insert(
+    insert: Insert,
+    mut resources: ResourcesGuard,
+    w: &mut dyn Write,
+) -> Result<(), Box<dyn Error>> {
     let (table, types) = resources.write_table(&insert.table);
 
     let ctx = Context::empty();
