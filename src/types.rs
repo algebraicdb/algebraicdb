@@ -23,7 +23,7 @@ pub enum BaseType {
     Bool,
     Integer,
     Double,
-}_
+}
 
 impl Index<&TypeId> for TypeMap {
     type Output = Type;
