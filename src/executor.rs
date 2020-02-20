@@ -43,9 +43,14 @@ fn execute_select(
                 CompiledPattern::compile(&select.items, table.get_schema(), &resources.type_map);
 
             for row in table.pattern_iter(&p, &resources.type_map) {
-                write!(w, "row: [")?;
-                for (name, cell) in row {
-                    write!(w, "{}: {:?} ", name, cell.data)?;
+                write!(w, "[")?;
+                let mut first = true;
+                for (_name, cell) in row {
+                    if !first {
+                        write!(w, ", ")?;
+                    }
+                    first = false;
+                    write!(w, "{}", cell)?;
                 }
                 write!(w, "]\n")?;
             }

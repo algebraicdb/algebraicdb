@@ -1,6 +1,7 @@
 use crate::types::{EnumTag, Type, TypeId, TypeMap};
 use bincode::deserialize;
 use std::cmp::{Ord, Ordering, PartialOrd};
+use std::fmt::{self, Display, Formatter};
 
 pub struct Cell<'ts, 'tb> {
     type_id: TypeId,
@@ -14,6 +15,46 @@ impl<'ts, 'tb> Cell<'ts, 'tb> {
             type_id,
             types,
             data,
+        }
+    }
+}
+
+impl<'ts, 'tb> Display for Cell<'ts, 'tb> {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        let t = &self.types[&self.type_id];
+        let t_size = t.size_of(self.types);
+        match t {
+            Type::Integer |
+            Type::Double |
+            Type::Bool => t.from_bytes(&self.data[..t_size], self.types).unwrap().fmt(f),
+            Type::Sum(variants) => {
+                // Converting this to a Value would do heap-allocations.
+                // So we need to manually traverse the "tree"
+                
+                let tag_size = std::mem::size_of::<EnumTag>();
+                let tag: EnumTag = deserialize(&self.data[..tag_size]).unwrap();
+
+                let (name, sub_types) = dbg!(&variants[dbg!(tag)]);
+
+                write!(f, "{}(", name)?;
+
+                let mut first = true;
+                let mut cursor: usize = tag_size;
+                for t_id in sub_types {
+                    if !first {
+                        write!(f, ", ")?;
+                    }
+                    first = false;
+                    let t = &self.types[t_id];
+                    let t_size = t.size_of(self.types);
+                    let end = cursor + t_size;
+                    let cell = Cell::new(*t_id, &self.data[cursor..end], self.types);
+                    write!(f, "{}", cell)?;
+                    cursor += t_size;
+                }
+
+                write!(f, ")")
+            }
         }
     }
 }
