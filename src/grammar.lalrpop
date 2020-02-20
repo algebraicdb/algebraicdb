@@ -251,7 +251,7 @@ Double: f64 = {
 
 Bool: bool = {
     "true" => true,
-    "false" => true,
+    "false" => false,
 };
 
 // Generic helper-rule for comma-separated lists

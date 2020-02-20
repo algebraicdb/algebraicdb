@@ -1,5 +1,6 @@
 use crate::ast::*;
 use crate::global::ResourcesGuard;
+use crate::pattern::Pattern;
 use crate::types::*;
 use std::collections::HashMap;
 use std::collections::HashSet;
@@ -61,6 +62,10 @@ impl<'a> Context<'a> {
             .or_default()
             .push(type_id)
     }
+
+    pub fn locals(&self) -> &[Scope] {
+        &self.locals[..]
+    }
 }
 
 #[derive(Debug)]
@@ -76,10 +81,7 @@ pub enum TypeError {
 }
 
 pub fn check_stmt(stmt: &Stmt, globals: &ResourcesGuard<'_>) -> Result<(), TypeError> {
-    let mut ctx = Context {
-        globals,
-        locals: vec![],
-    };
+    let mut ctx = Context::new(globals);
 
     match stmt {
         Stmt::Select(select) => check_select(select, &mut ctx),
@@ -100,6 +102,24 @@ fn find_bool(ctx: &Context) -> Result<TypeId, TypeError> {
         .ok_or_else(|| TypeError::Undefined("Bool".into()));
 }
 
+fn find_double(ctx: &Context) -> Result<TypeId, TypeError> {
+    // TODO fixa för doubles...
+    return ctx
+        .globals
+        .type_map
+        .get_id("Double")
+        .ok_or_else(|| TypeError::Undefined("Double".into()));
+}
+
+fn find_int(ctx: &Context) -> Result<TypeId, TypeError> {
+    // TODO fixa för ints..
+    return ctx
+        .globals
+        .type_map
+        .get_id("Integer")
+        .ok_or_else(|| TypeError::Undefined("Integer".into()));
+}
+
 fn import_table_columns<'a>(name: &str, ctx: &'a mut Context) {
     let table = ctx.globals.read_table(name);
     let schema = table.get_schema();
@@ -110,6 +130,7 @@ fn import_table_columns<'a>(name: &str, ctx: &'a mut Context) {
 }
 
 fn check_select(select: &Select, ctx: &mut Context) -> Result<(), TypeError> {
+    eprintln!("ctx {:?}", ctx.locals());
     if let Some(from) = &select.from {
         check_select_from(from, ctx)?;
     }
@@ -153,8 +174,34 @@ fn check_select_item(item: &SelectItem, ctx: &Context) -> Result<(), TypeError> 
         SelectItem::Expr(expr) => {
             check_expr(expr, ctx)?;
         }
-        SelectItem::Pattern(_ident, _pattern) => unimplemented!("Type check patterns"),
+        SelectItem::Pattern(ident, pattern) => {
+            // TODO: get type of ident
+
+            let type_id = ctx.search_locals(ident)?;
+            check_pattern(pattern, type_id, ctx)?;
+        }
     }
+    Ok(())
+}
+
+fn check_pattern(pattern: &Pattern, type_id: TypeId, ctx: &Context) -> Result<(), TypeError> {
+    match pattern {
+        Pattern::Int(_) => {
+            assert_type_as(find_int(ctx)?, type_id)?;
+        }
+        Pattern::Bool(_) => {
+            assert_type_as(find_bool(ctx)?, type_id)?;
+        }
+        Pattern::Double(_) => {
+            assert_type_as(find_double(ctx)?, type_id)?;
+        }
+        Pattern::Ignore => {}
+        Pattern::Binding(_) => {
+            // TODO: add to ctx
+        }
+        Pattern::Variant(_variant, _sub_patterns) => unimplemented!("typecheck Pattern::Variant"),
+    }
+
     Ok(())
 }
 
