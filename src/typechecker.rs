@@ -104,7 +104,6 @@ fn import_table_columns<'a>(name: &str, ctx: &'a mut Context) {
 }
 
 fn check_select(select: &Select, ctx: &mut Context) -> Result<(), TypeError> {
-    eprintln!("ctx {:?}", ctx.locals());
     if let Some(from) = &select.from {
         check_select_from(from, ctx)?;
     }

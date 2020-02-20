@@ -35,7 +35,7 @@ impl<'ts, 'tb> Display for Cell<'ts, 'tb> {
                 let tag_size = std::mem::size_of::<EnumTag>();
                 let tag: EnumTag = deserialize(&self.data[..tag_size]).unwrap();
 
-                let (name, sub_types) = dbg!(&variants[dbg!(tag)]);
+                let (name, sub_types) = &variants[tag];
 
                 write!(f, "{}(", name)?;
 

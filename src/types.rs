@@ -200,7 +200,6 @@ impl Type {
                 let tag_size = size_of::<EnumTag>();
                 let tag: EnumTag = deserialize(&bytes[..tag_size])?;
                 bytes = &bytes[tag_size..];
-                //eprintln!("sum variant {} (", tag);
 
                 // parse subtypes
                 let (name, members) = &variants[tag];
@@ -214,8 +213,6 @@ impl Type {
                         v
                     })
                     .collect::<Result<_, _>>()?;
-
-                //eprintln!(")");
 
                 // TODO: Type name
                 Ok(Value::Sum(None, name.clone(), values))
@@ -231,7 +228,6 @@ impl Type {
             Type::Sum(variants) => {
                 let i = rand::random::<usize>() % variants.len();
                 let (variant, members) = &variants[i];
-                eprintln!("{:?}", members);
                 let values = members
                     .iter()
                     .map(|t_id| types[t_id].random_value(types))
