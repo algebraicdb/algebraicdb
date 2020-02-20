@@ -149,12 +149,16 @@ CreateTable: CreateTable = {
 Insert: Insert = {
     INSERT INTO <table:Ident>
         <columns:("(" <Comma<Ident>> ")")?>
-        <values:InsertValues?>
+        <rows:InsertRows?>
     => Insert {
         table,
         columns: columns.unwrap_or(vec![]),
-        values: values.unwrap_or(vec![]),
+        rows: rows.unwrap_or(vec![]),
     }
+}
+
+InsertRows: Vec<Vec<Expr>> = {
+    VALUES <Comma<("(" <Comma<Expr>> ")")>>,
 }
 
 JoinType: JoinType = {
@@ -228,10 +232,6 @@ Ass: Ass = {
         col,
         expr,
     }
-}
-
-InsertValues: Vec<Expr> = {
-    VALUES "(" <Comma<Expr>> ")",
 }
 
 pub Pattern: Pattern = {

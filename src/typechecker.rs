@@ -234,41 +234,44 @@ fn check_insert(insert: &Insert, ctx: &mut Context) -> Result<(), TypeError> {
 
     let mut populated_columns = HashSet::new();
 
-    // Make sure there is a value for every column
-    if insert.columns.len() != insert.values.len() {
-        return Err(TypeError::InvalidCount {
-            expected: insert.columns.len(),
-            actual: insert.values.len(),
-        });
-    }
-
-    for (column, expr) in insert.columns.iter().zip(insert.values.iter()) {
-        // Make sure the types of the values match the types of the columns
-        let expected_type = schema
-            .column(column)
-            .ok_or_else(|| TypeError::Undefined(column.clone()))?;
-
-        let actual_type = check_expr(expr, ctx)?;
-
-        if expected_type != actual_type {
-            return Err(TypeError::InvalidType {
-                actual: actual_type,
-                expected: expected_type,
+    for row in insert.rows.iter() {
+        // Make sure there is a value for every column
+        if insert.columns.len() != row.len() {
+            return Err(TypeError::InvalidCount {
+                expected: insert.columns.len(),
+                actual: row.len(),
             });
         }
 
-        // Make sure the user doesn't assign to the same column twice
-        if !populated_columns.insert(column) {
-            return Err(TypeError::AlreadyDefined);
-        }
-    }
+        for (column, expr) in insert.columns.iter().zip(row.iter()) {
+            // Make sure the types of the values match the types of the columns
+            let expected_type = schema
+                .column(column)
+                .ok_or_else(|| TypeError::Undefined(column.clone()))?;
 
-    // Make sure all columns have a value
-    for (column, _) in &table.get_schema().columns {
-        if populated_columns.get(column).is_none() {
-            // TODO: default values
-            return Err(TypeError::MissingColumn(column.clone()));
+            let actual_type = check_expr(expr, ctx)?;
+
+            if expected_type != actual_type {
+                return Err(TypeError::InvalidType {
+                    actual: actual_type,
+                    expected: expected_type,
+                });
+            }
+
+            // Make sure the user doesn't assign to the same column twice
+            if !populated_columns.insert(column) {
+                return Err(TypeError::AlreadyDefined);
+            }
         }
+
+        // Make sure all columns have a value
+        for (column, _) in &table.get_schema().columns {
+            if populated_columns.get(column).is_none() {
+                // TODO: default values
+                return Err(TypeError::MissingColumn(column.clone()));
+            }
+        }
+        populated_columns.clear();
     }
 
     Ok(())
