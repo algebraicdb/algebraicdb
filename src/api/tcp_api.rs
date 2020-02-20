@@ -1,15 +1,41 @@
+use futures::executor::block_on;
 use std::error::Error;
-use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
+use std::io::{self, BufWriter, Write};
+use tokio::io::{AsyncBufReadExt, AsyncWrite, AsyncWriteExt, BufReader};
 use tokio::net::TcpListener;
 
-pub async fn tcp_api(func: fn(&str) -> String, address: String) -> Result<!, Box<dyn Error>> {
+struct BlockingWriter<W: AsyncWrite + Unpin> {
+    writer: W,
+}
+
+impl<W: AsyncWrite + Unpin> BlockingWriter<W> {
+    pub fn new(writer: W) -> Self {
+        BlockingWriter { writer }
+    }
+}
+
+impl<W: AsyncWrite + Unpin> Write for BlockingWriter<W> {
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        block_on(self.writer.write(buf))
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        block_on(self.writer.flush())
+    }
+}
+
+pub async fn tcp_api(
+    func: fn(&str, &mut dyn Write) -> Result<(), Box<dyn Error>>,
+    address: String,
+) -> Result<!, Box<dyn Error>> {
     let mut listener = TcpListener::bind(address).await?;
 
     loop {
         match listener.accept().await {
             Ok((mut socket, _)) => {
                 tokio::spawn(async move {
-                    let (reader, mut writer) = socket.split();
+                    let (reader, writer) = socket.split();
+                    let mut writer = BufWriter::new(BlockingWriter::new(writer));
                     let mut buf = vec![];
                     let mut rest = String::new();
                     let mut reader: BufReader<_> = BufReader::new(reader);
@@ -20,18 +46,11 @@ pub async fn tcp_api(func: fn(&str) -> String, address: String) -> Result<!, Box
                         let input = std::str::from_utf8(&buf[..n]).expect("Not valid utf-8");
 
                         rest.push_str(input);
-                        let (result, rest2) = conga(func, rest);
-                        rest = rest2;
+                        rest = conga(func, input, &mut writer);
+                        writer.flush().expect("Flushing writer failed");
 
                         // TODO: fix for unicode
                         buf.drain(..n);
-                        match result {
-                            Some(ret) => {
-                                writer.write_all(ret.as_bytes()).await.unwrap();
-                                writer.flush().await.unwrap();
-                            }
-                            None => (),
-                        }
                     }
                 });
             }
@@ -41,9 +60,12 @@ pub async fn tcp_api(func: fn(&str) -> String, address: String) -> Result<!, Box
 }
 
 // CONGA FIX EVERYTHING
-fn conga(func: fn(&str) -> String, stmt: String) -> (Option<String>, String) {
+fn conga(
+    func: fn(&str, &mut dyn Write) -> Result<(), Box<dyn Error>>,
+    stmt: &str,
+    w: &mut dyn Write,
+) -> String {
     let mut in_string = false;
-    let mut result = vec![];
     let mut lasti = 0;
     let chars = stmt.chars().enumerate();
 
@@ -55,49 +77,46 @@ fn conga(func: fn(&str) -> String, stmt: String) -> (Option<String>, String) {
 
         if ch == ';' && !in_string {
             let q = &stmt[lasti..=i];
-            result.push(func(q));
+
+            func(q, w).expect("Query errored");
             lasti = i + 1;
         }
     }
 
-    let mut rest = String::new();
-    let mut ret = None;
-
     if lasti != (stmt.len() - 1) {
-        rest = String::from(&stmt[lasti..stmt.len()]);
+        String::from(&stmt[lasti..stmt.len()])
+    } else {
+        String::new()
     }
-
-    if !result.is_empty() {
-        ret = Some(result.join("\n"));
-    }
-
-    (ret, rest)
 }
 
 #[cfg(test)]
 pub mod tests {
 
     use super::conga;
+    use std::error::Error;
+    use std::io::Write;
 
     #[test]
     pub fn test_conga() {
         let s1 = "SELECT dsdasd FROM dadasd".to_string();
         let s2 = "SELECT dasdas FROM dasdasd; INSERT dadasd into sdadad;".to_string();
 
-        let (r1, rest1) = conga(always_success, s1.clone());
+        let mut r1: Vec<u8> = vec![];
+        let rest1 = conga(always_success, &s1, &mut r1);
 
-        assert_eq!(r1, None);
+        assert!(r1.is_empty());
         assert_eq!(rest1, s1);
 
-        let (r2, rest2) = conga(always_success, s2.clone());
+        let mut r2: Vec<u8> = vec![];
+        let rest2 = conga(always_success, &s2, &mut r2);
 
-        r2.unwrap();
-
+        assert!(!r2.is_empty());
         assert_eq!(rest2, "");
-
     }
 
-    fn always_success(_: &str) -> String{
-        "Success".to_string()
+    fn always_success(_: &str, w: &mut dyn Write) -> Result<(), Box<dyn Error>> {
+        w.write_all("Success".as_bytes())?;
+        Ok(())
     }
 }
