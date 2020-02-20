@@ -343,15 +343,9 @@ fn assert_type_as(actual: TypeId, expected: TypeId) -> Result<TypeId, TypeError>
 pub fn type_of_value(value: &Value, types: &TypeMap) -> Result<TypeId, TypeError> {
     match value {
         // TODO: maybe we should have a list of "keywords" somewhere we can use
-        Value::Integer(_) => types
-            .get_id("Integer")
-            .ok_or_else(|| panic!("Integer is undefined")),
-        Value::Double(_) => types
-            .get_id("Double")
-            .ok_or_else(|| panic!("Double is undefined")),
-        Value::Bool(_) => types
-            .get_id("Bool")
-            .ok_or_else(|| panic!("Bool is undefined")),
+        Value::Integer(_) => Ok(types.get_base_id(BaseType::Integer)),
+        Value::Double(_) => Ok(types.get_base_id(BaseType::Double)),
+        Value::Bool(_) => Ok(types.get_base_id(BaseType::Bool)),
         Value::Sum(namespace, variant, _) => {
             if let Some(namespace) = namespace {
                 types
