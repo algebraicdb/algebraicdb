@@ -86,7 +86,7 @@ impl CompiledPattern {
                     let mut byte_index = 0;
                     for (column, type_id) in &schema.columns {
                         if column == name {
-                            bindings.push(dbg!((byte_index, *type_id, name.into())));
+                            bindings.push((byte_index, *type_id, name.into()));
                             break;
                         }
 

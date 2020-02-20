@@ -1,12 +1,17 @@
-use crate::pattern::CompiledPattern;
-use crate::types::{EnumTag, Type, TypeId, TypeMap, Value};
-use bincode::deserialize;
-use std::cmp::{Ord, Ordering, PartialOrd};
+mod cell;
+mod iter;
+mod pattern_iter;
+mod row;
+mod schema;
 
-#[derive(Clone, Debug)]
-pub struct Schema {
-    pub columns: Vec<(String, TypeId)>,
-}
+pub use self::cell::Cell;
+pub use self::iter::RowIter;
+pub use self::pattern_iter::{CellPatternIter, RowPatternIter};
+pub use self::row::Row;
+pub use self::schema::Schema;
+
+use crate::pattern::CompiledPattern;
+use crate::types::{TypeId, TypeMap, Value};
 
 #[derive(Debug, Clone)]
 pub struct Column {
@@ -14,63 +19,11 @@ pub struct Column {
     name: String,
 }
 
-// Table defines
 #[derive(Debug)]
 pub struct Table {
     schema: Schema,
     data: Vec<u8>,
     row_size: usize,
-}
-
-pub struct Row<'a> {
-    schema: &'a Schema,
-    data: &'a [u8],
-}
-
-pub struct Cell<'ts, 'tb> {
-    type_id: TypeId,
-    types: &'ts TypeMap,
-    pub data: &'tb [u8],
-}
-
-pub struct RowIter<'a> {
-    table: &'a Table,
-    row: usize,
-}
-
-pub struct CellPatternIter<'p, 'ts, 'tb> {
-    pattern: &'p CompiledPattern,
-    types: &'ts TypeMap,
-    data: &'tb [u8],
-    cursor: usize,
-}
-
-pub struct RowPatternIter<'p, 'ts, 'tb> {
-    pattern: &'p CompiledPattern,
-    types: &'ts TypeMap,
-    table: &'tb Table,
-    row: usize,
-}
-
-impl Schema {
-    pub fn new(columns: Vec<(String, TypeId)>) -> Self {
-        Schema { columns }
-    }
-
-    pub fn empty() -> Self {
-        Self::new(vec![])
-    }
-
-    pub fn column(&self, name: &str) -> Option<TypeId> {
-        self.columns
-            .iter()
-            .find(|(entry_name, _)| entry_name == name)
-            .map(|(_, type_id)| *type_id)
-    }
-
-    pub fn len(&self) -> usize {
-        self.columns.len()
-    }
 }
 
 impl Table {
@@ -92,10 +45,7 @@ impl Table {
     }
 
     pub fn iter<'a>(&'a self) -> RowIter<'a> {
-        RowIter {
-            table: self,
-            row: 0,
-        }
+        RowIter::new(self)
     }
 
     pub fn pattern_iter<'p, 'ts, 'tb>(
@@ -103,22 +53,14 @@ impl Table {
         pattern: &'p CompiledPattern,
         types: &'ts TypeMap,
     ) -> RowPatternIter<'p, 'ts, 'tb> {
-        RowPatternIter {
-            pattern,
-            table: self,
-            row: 0,
-            types,
-        }
+        RowPatternIter::new(pattern, self, types)
     }
 
     pub fn get_row<'a>(&'a self, row: usize) -> Row<'a> {
         let start = self.row_start(row);
         let end = start + self.row_size;
 
-        Row {
-            schema: &self.schema,
-            data: &self.data[start..end],
-        }
+        Row::new(&self.schema, &self.data[start..end])
     }
 
     pub fn get_row_value(&self, row: usize, types: &TypeMap) -> Vec<Value> {
@@ -152,158 +94,6 @@ impl Table {
         }
 
         assert_eq!(self.data.len() % self.row_size, 0);
-    }
-}
-
-impl<'a> Iterator for RowIter<'a> {
-    type Item = Row<'a>;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        if self.row >= self.table.row_count() {
-            return None;
-        }
-
-        let row = self.table.get_row(self.row);
-        self.row += 1;
-        Some(row)
-    }
-}
-
-impl<'p, 'ts, 'tb> Iterator for RowPatternIter<'p, 'ts, 'tb> {
-    type Item = CellPatternIter<'p, 'ts, 'tb>;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        'outer: loop {
-            if self.row >= self.table.row_count() {
-                return None;
-            }
-
-            let row = self.table.get_row(self.row);
-            self.row += 1;
-            for (i, value) in &self.pattern.matches {
-                for j in 0..value.len() {
-                    if row.data[i + j] != value[j] {
-                        continue 'outer;
-                    }
-                }
-            }
-
-            return Some(CellPatternIter {
-                cursor: 0,
-                pattern: self.pattern,
-                types: self.types,
-                data: row.data,
-            });
-        }
-    }
-}
-
-impl<'p, 'ts, 'tb> Iterator for CellPatternIter<'p, 'ts, 'tb> {
-    type Item = (&'p str, Cell<'ts, 'tb>);
-
-    fn next(&mut self) -> Option<Self::Item> {
-        self.pattern
-            .bindings
-            .get(self.cursor)
-            .map(|(index, type_id, ident)| {
-                self.cursor += 1;
-
-                let t = &self.types[type_id];
-                let type_size = t.size_of(self.types);
-
-                let cell = Cell {
-                    type_id: *type_id,
-                    types: self.types,
-                    data: &self.data[*index..*index + type_size],
-                };
-                (ident.as_str(), cell)
-            })
-    }
-}
-
-impl<'tb, 'ts> Row<'tb> {
-    pub fn get_cell(&'tb self, types: &'ts TypeMap, col: usize) -> Cell<'ts, 'tb> {
-        let mut start = 0;
-        for (_, t_id) in &self.schema.columns[..col] {
-            let t = &types[t_id];
-            let t_size = t.size_of(types);
-            start += t_size;
-        }
-
-        let end = start + types[&self.schema.columns[col].1].size_of(types);
-
-        Cell {
-            type_id: self.schema.columns[col].1,
-            data: &self.data[start..end],
-            types,
-        }
-    }
-
-    pub fn cell_count(&self) -> usize {
-        self.schema.len()
-    }
-}
-
-impl PartialEq for Cell<'_, '_> {
-    fn eq(&self, other: &Self) -> bool {
-        debug_assert_eq!(self.type_id, other.type_id);
-        self.data == other.data
-    }
-}
-
-impl PartialOrd for Cell<'_, '_> {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        debug_assert_eq!(self.type_id, other.type_id);
-
-        match &self.types[&self.type_id] {
-            Type::Integer => deserialize::<i32>(self.data)
-                .unwrap()
-                .partial_cmp(&deserialize(other.data).unwrap()),
-            Type::Bool => deserialize::<bool>(self.data)
-                .unwrap()
-                .partial_cmp(&deserialize(other.data).unwrap()),
-            Type::Double => deserialize::<f64>(self.data)
-                .unwrap()
-                .partial_cmp(&deserialize(other.data).unwrap()),
-            Type::Sum(variants) => {
-                let mut data1 = self.data;
-                let mut data2 = other.data;
-
-                let tag_size = std::mem::size_of::<EnumTag>();
-                let tag1: EnumTag = deserialize(&data1[..tag_size]).unwrap();
-                let tag2: EnumTag = deserialize(&data2[..tag_size]).unwrap();
-
-                data1 = &data1[tag_size..];
-                data2 = &data2[tag_size..];
-
-                match tag1.cmp(&tag2) {
-                    Ordering::Equal => {
-                        let (_name, members) = &variants[tag1];
-                        for &type_id in members {
-                            let t = &self.types[&type_id];
-                            let t_size = t.size_of(self.types);
-                            let member_cell1 = Cell {
-                                types: self.types,
-                                type_id,
-                                data: &data1[..t_size],
-                            };
-                            let member_cell2 = Cell {
-                                types: self.types,
-                                type_id,
-                                data: &data2[..t_size],
-                            };
-
-                            match member_cell1.partial_cmp(&member_cell2) {
-                                Some(Ordering::Equal) => continue,
-                                not_equal => return not_equal,
-                            }
-                        }
-                        Some(Ordering::Equal)
-                    }
-                    not_equal => Some(not_equal),
-                }
-            }
-        }
     }
 }
 

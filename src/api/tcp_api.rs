@@ -77,13 +77,14 @@ fn conga(
 
         if ch == ';' && !in_string {
             let q = &stmt[lasti..=i];
-
             func(q, w).expect("Query errored");
             lasti = i + 1;
         }
     }
 
-    if lasti != (stmt.len() - 1) {
+    if stmt.len() == 0 {
+        String::new()
+    } else if lasti != (stmt.len() - 1) {
         String::from(&stmt[lasti..stmt.len()])
     } else {
         String::new()
