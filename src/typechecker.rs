@@ -91,15 +91,6 @@ pub fn check_stmt(stmt: &Stmt, globals: &ResourcesGuard<'_>) -> Result<(), TypeE
     }
 }
 
-fn find_bool(ctx: &Context) -> Result<TypeId, TypeError> {
-    // FIXME: Stringly types!
-    return ctx
-        .globals
-        .type_map
-        .get_id("Bool")
-        .ok_or_else(|| TypeError::Undefined("Bool".into()));
-}
-
 fn import_table_columns<'a>(name: &str, ctx: &'a mut Context) {
     let table = ctx.globals.read_table(name);
     let schema = table.get_schema();
@@ -141,7 +132,10 @@ fn check_select_from(from: &SelectFrom, ctx: &mut Context) -> Result<(), TypeErr
 
             if let Some(on_clause) = &join.on_clause {
                 let clause_type = check_expr(on_clause, ctx)?;
-                assert_type_as(clause_type, find_bool(ctx)?)?;
+                assert_type_as(
+                    clause_type,
+                    ctx.globals.type_map.get_base_id(BaseType::Bool),
+                )?;
             }
         }
     }
@@ -184,7 +178,7 @@ fn check_update(update: &Update, ctx: &mut Context) -> Result<(), TypeError> {
 }
 
 fn check_delete(delete: &Delete, ctx: &mut Context) -> Result<(), TypeError> {
-    let bool_id = find_bool(ctx)?;
+    let bool_id = ctx.globals.type_map.get_base_id(BaseType::Bool);
     match &delete.where_clause {
         Some(WhereClause(cond)) => {
             import_table_columns(&delete.table, ctx);
@@ -309,14 +303,14 @@ fn check_expr(expr: &Expr, ctx: &Context) -> Result<TypeId, TypeError> {
             let type_2 = check_expr(e2, ctx)?;
             assert_type_eq(type_1, type_2)?;
 
-            Ok(find_bool(ctx)?)
+            Ok(ctx.globals.type_map.get_base_id(BaseType::Bool))
         }
 
         Expr::And(e1, e2) | Expr::Or(e1, e2) => {
             let type_1 = check_expr(e1, ctx)?;
             let type_2 = check_expr(e2, ctx)?;
 
-            let bool_id = find_bool(ctx)?;
+            let bool_id = ctx.globals.type_map.get_base_id(BaseType::Bool);
 
             assert_type_as(bool_id, type_1)?;
             assert_type_as(bool_id, type_2)
