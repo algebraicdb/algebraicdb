@@ -87,11 +87,13 @@ pub fn check_stmt(stmt: &Stmt, globals: &ResourcesGuard<'_>) -> Result<(), TypeE
         Stmt::Select(select) => check_select(select, &mut ctx),
         Stmt::Update(update) => check_update(update, &mut ctx),
         Stmt::Delete(delete) => check_delete(delete, &mut ctx),
+        Stmt::Drop(drop) => check_drop(drop, &mut ctx),
         Stmt::Insert(insert) => check_insert(insert, &mut ctx),
         Stmt::CreateTable(create_table) => check_create_table(create_table, &mut ctx),
         Stmt::CreateType(create_type) => check_create_type(create_type, &mut ctx),
     }
 }
+
 
 fn find_bool(ctx: &Context) -> Result<TypeId, TypeError> {
     // FIXME: Stringly types!
@@ -244,6 +246,11 @@ fn check_delete(delete: &Delete, ctx: &mut Context) -> Result<(), TypeError> {
 
         None => Ok(()),
     }
+}
+
+fn check_drop(drop: &Drop, ctx: &mut Context) -> Result<(), TypeError>{
+    // no need to add stuff hihi
+    Ok(())
 }
 
 fn check_insert(insert: &Insert, ctx: &mut Context) -> Result<(), TypeError> {
