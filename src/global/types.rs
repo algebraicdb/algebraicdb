@@ -28,6 +28,7 @@ pub enum Response {
     NoSuchTable(String),
     TableCreated,
     TableAlreadyExists,
+    // TODO add future table deleted???????
 }
 
 pub struct Resources {

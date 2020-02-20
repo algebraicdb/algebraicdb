@@ -1,5 +1,6 @@
 use crate::ast::*;
 use crate::global::ResourcesGuard;
+use crate::pattern::Pattern;
 use crate::types::*;
 use std::collections::HashMap;
 use std::collections::HashSet;
@@ -61,6 +62,10 @@ impl<'a> Context<'a> {
             .or_default()
             .push(type_id)
     }
+
+    pub fn locals(&self) -> &[Scope] {
+        &self.locals[..]
+    }
 }
 
 #[derive(Debug)]
@@ -76,15 +81,13 @@ pub enum TypeError {
 }
 
 pub fn check_stmt(stmt: &Stmt, globals: &ResourcesGuard<'_>) -> Result<(), TypeError> {
-    let mut ctx = Context {
-        globals,
-        locals: vec![],
-    };
+    let mut ctx = Context::new(globals);
 
     match stmt {
         Stmt::Select(select) => check_select(select, &mut ctx),
         Stmt::Update(update) => check_update(update, &mut ctx),
         Stmt::Delete(delete) => check_delete(delete, &mut ctx),
+        Stmt::Drop(drop) => check_drop(drop, &mut ctx),
         Stmt::Insert(insert) => check_insert(insert, &mut ctx),
         Stmt::CreateTable(create_table) => check_create_table(create_table, &mut ctx),
         Stmt::CreateType(create_type) => check_create_type(create_type, &mut ctx),
@@ -101,6 +104,7 @@ fn import_table_columns<'a>(name: &str, ctx: &'a mut Context) {
 }
 
 fn check_select(select: &Select, ctx: &mut Context) -> Result<(), TypeError> {
+    eprintln!("ctx {:?}", ctx.locals());
     if let Some(from) = &select.from {
         check_select_from(from, ctx)?;
     }
@@ -147,8 +151,34 @@ fn check_select_item(item: &SelectItem, ctx: &Context) -> Result<(), TypeError> 
         SelectItem::Expr(expr) => {
             check_expr(expr, ctx)?;
         }
-        SelectItem::Pattern(_ident, _pattern) => unimplemented!("Type check patterns"),
+        SelectItem::Pattern(ident, pattern) => {
+            // TODO: get type of ident
+
+            let type_id = ctx.search_locals(ident)?;
+            check_pattern(pattern, type_id, ctx)?;
+        }
     }
+    Ok(())
+}
+
+fn check_pattern(pattern: &Pattern, type_id: TypeId, ctx: &Context) -> Result<(), TypeError> {
+    match pattern {
+        Pattern::Int(_) => {
+            assert_type_as(ctx.globals.type_map.get_base_id(BaseType::Integer), type_id)?;
+        }
+        Pattern::Bool(_) => {
+            assert_type_as(ctx.globals.type_map.get_base_id(BaseType::Bool), type_id)?;
+        }
+        Pattern::Double(_) => {
+            assert_type_as(ctx.globals.type_map.get_base_id(BaseType::Double), type_id)?;
+        }
+        Pattern::Ignore => {}
+        Pattern::Binding(_) => {
+            // TODO: add to ctx
+        }
+        Pattern::Variant(_variant, _sub_patterns) => unimplemented!("typecheck Pattern::Variant"),
+    }
+
     Ok(())
 }
 
@@ -191,6 +221,11 @@ fn check_delete(delete: &Delete, ctx: &mut Context) -> Result<(), TypeError> {
 
         None => Ok(()),
     }
+}
+
+fn check_drop(_drop: &Drop, _ctx: &mut Context) -> Result<(), TypeError> {
+    // no need to add stuff hihi
+    Ok(())
 }
 
 fn check_insert(insert: &Insert, ctx: &mut Context) -> Result<(), TypeError> {

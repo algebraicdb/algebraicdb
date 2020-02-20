@@ -16,6 +16,7 @@ match {
     "INTO" => INTO,
     "VALUES" => VALUES,
     "DELETE" => DELETE,
+    "DROP" => DROP,
     "UPDATE" => UPDATE,
     "JOIN" => JOIN,
     "LEFT" => LEFT,
@@ -65,12 +66,21 @@ pub Stmt: Stmt = {
     <CreateTable> ";" => Stmt::CreateTable(<>),
     <Update> ";" => Stmt::Update(<>),
     <CreateType> ";" => Stmt::CreateType(<>),
+    <Drop> ";" => Stmt::Drop(<>),
 }
 
 Delete: Delete = {
     DELETE FROM <table:Ident> <where_clause:(WhereClause?)> => Delete {
         table,
         where_clause,
+    },
+}
+
+Drop: Drop = {
+    DROP TABLE
+    <table:Ident> => Drop {
+        table,
+        // TODO drop_clause postgres uses cascade / restrict etc, restrict by default
     },
 }
 
@@ -251,7 +261,7 @@ Double: f64 = {
 
 Bool: bool = {
     "true" => true,
-    "false" => true,
+    "false" => false,
 };
 
 // Generic helper-rule for comma-separated lists

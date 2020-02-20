@@ -1,5 +1,6 @@
 use crate::ast::*;
 use crate::global::{send_request, Request, ResourcesGuard, Response};
+use crate::pattern::CompiledPattern;
 use crate::table::{Schema, Table};
 use crate::types::{Type, TypeId, Value};
 
@@ -13,12 +14,38 @@ impl Context {
     }
 }
 
-pub fn execute_query(ast: Stmt, resources: ResourcesGuard) -> String {
+pub(crate) fn execute_query(ast: Stmt, resources: ResourcesGuard) -> String {
     match ast {
         Stmt::CreateTable(create_table) => execute_create_table(create_table, resources),
         Stmt::CreateType(create_type) => execute_create_type(create_type, resources),
         Stmt::Insert(insert) => execute_insert(insert, resources),
+        Stmt::Select(select) => execute_select(select, resources),
         _ => unimplemented!("Not implemented: {:?}", ast),
+    }
+}
+
+// SELECT a FROM table
+// SELECT a: a FROM table
+fn execute_select(select: Select, resources: ResourcesGuard) -> String {
+    match select.from {
+        Some(SelectFrom::Table(table_name)) => {
+            let table = resources.read_table(&table_name);
+
+            let p =
+                CompiledPattern::compile(&select.items, table.get_schema(), &resources.type_map);
+
+            let mut output = String::new();
+
+            for row in table.pattern_iter(&p, &resources.type_map) {
+                for (name, cell) in row {
+                    output.push_str(&format!("{}: {:?} ", name, cell.data))
+                }
+                output.push_str("\n");
+            }
+
+            output
+        }
+        select_from => unimplemented!("Not implemented: {:?}", select_from),
     }
 }
 
