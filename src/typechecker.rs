@@ -248,7 +248,7 @@ fn check_delete(delete: &Delete, ctx: &mut Context) -> Result<(), TypeError> {
     }
 }
 
-fn check_drop(drop: &Drop, ctx: &mut Context) -> Result<(), TypeError>{
+fn check_drop(_drop: &Drop, _ctx: &mut Context) -> Result<(), TypeError>{
     // no need to add stuff hihi
     Ok(())
 }
