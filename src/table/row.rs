@@ -1,5 +1,5 @@
-use crate::types::TypeMap;
 pub use super::{Cell, Schema};
+use crate::types::TypeMap;
 
 pub struct Row<'tb> {
     schema: &'tb Schema,
@@ -8,10 +8,7 @@ pub struct Row<'tb> {
 
 impl<'tb> Row<'tb> {
     pub fn new(schema: &'tb Schema, data: &'tb [u8]) -> Self {
-        Row {
-            schema,
-            data,
-        }
+        Row { schema, data }
     }
 
     pub fn get_cell<'ts>(&'tb self, types: &'ts TypeMap, col: usize) -> Cell<'ts, 'tb> {
@@ -24,11 +21,7 @@ impl<'tb> Row<'tb> {
 
         let end = start + types[&self.schema.columns[col].1].size_of(types);
 
-        Cell::new(
-            self.schema.columns[col].1,
-            &self.data[start..end],
-            types,
-        )
+        Cell::new(self.schema.columns[col].1, &self.data[start..end], types)
     }
 
     pub fn cell_count(&self) -> usize {

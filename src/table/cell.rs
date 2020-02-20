@@ -24,13 +24,14 @@ impl<'ts, 'tb> Display for Cell<'ts, 'tb> {
         let t = &self.types[&self.type_id];
         let t_size = t.size_of(self.types);
         match t {
-            Type::Integer |
-            Type::Double |
-            Type::Bool => t.from_bytes(&self.data[..t_size], self.types).unwrap().fmt(f),
+            Type::Integer | Type::Double | Type::Bool => t
+                .from_bytes(&self.data[..t_size], self.types)
+                .unwrap()
+                .fmt(f),
             Type::Sum(variants) => {
                 // Converting this to a Value would do heap-allocations.
                 // So we need to manually traverse the "tree"
-                
+
                 let tag_size = std::mem::size_of::<EnumTag>();
                 let tag: EnumTag = deserialize(&self.data[..tag_size]).unwrap();
 

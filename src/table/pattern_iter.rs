@@ -1,6 +1,6 @@
+use super::{Cell, Table};
 use crate::pattern::CompiledPattern;
 use crate::types::TypeMap;
-use super::{Table, Cell};
 
 pub struct RowPatternIter<'p, 'ts, 'tb> {
     pattern: &'p CompiledPattern,
@@ -17,11 +17,7 @@ pub struct CellPatternIter<'p, 'ts, 'tb> {
 }
 
 impl<'p, 'ts, 'tb> RowPatternIter<'p, 'ts, 'tb> {
-    pub fn new(
-        pattern: &'p CompiledPattern,
-        table: &'tb Table,
-        types: &'ts TypeMap,
-    ) -> Self {
+    pub fn new(pattern: &'p CompiledPattern, table: &'tb Table, types: &'ts TypeMap) -> Self {
         RowPatternIter {
             pattern,
             table,
@@ -73,11 +69,7 @@ impl<'p, 'ts, 'tb> Iterator for CellPatternIter<'p, 'ts, 'tb> {
                 let t = &self.types[type_id];
                 let type_size = t.size_of(self.types);
 
-                let cell = Cell::new(
-                    *type_id,
-                    &self.data[*index..*index + type_size],
-                    self.types,
-                );
+                let cell = Cell::new(*type_id, &self.data[*index..*index + type_size], self.types);
                 (ident.as_str(), cell)
             })
     }

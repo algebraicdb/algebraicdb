@@ -25,4 +25,3 @@ impl Schema {
         self.columns.len()
     }
 }
-

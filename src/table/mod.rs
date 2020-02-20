@@ -1,13 +1,13 @@
-mod pattern_iter;
-mod row;
 mod cell;
 mod iter;
+mod pattern_iter;
+mod row;
 mod schema;
 
 pub use self::cell::Cell;
-pub use self::row::Row;
-pub use self::pattern_iter::{RowPatternIter, CellPatternIter};
 pub use self::iter::RowIter;
+pub use self::pattern_iter::{CellPatternIter, RowPatternIter};
+pub use self::row::Row;
 pub use self::schema::Schema;
 
 use crate::pattern::CompiledPattern;
@@ -53,21 +53,14 @@ impl Table {
         pattern: &'p CompiledPattern,
         types: &'ts TypeMap,
     ) -> RowPatternIter<'p, 'ts, 'tb> {
-        RowPatternIter::new(
-            pattern,
-            self,
-            types,
-        )
+        RowPatternIter::new(pattern, self, types)
     }
 
     pub fn get_row<'a>(&'a self, row: usize) -> Row<'a> {
         let start = self.row_start(row);
         let end = start + self.row_size;
 
-        Row::new(
-            &self.schema,
-            &self.data[start..end],
-        )
+        Row::new(&self.schema, &self.data[start..end])
     }
 
     pub fn get_row_value(&self, row: usize, types: &TypeMap) -> Vec<Value> {
@@ -103,7 +96,6 @@ impl Table {
         assert_eq!(self.data.len() % self.row_size, 0);
     }
 }
-
 
 #[cfg(test)]
 pub mod tests {

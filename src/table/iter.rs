@@ -1,4 +1,4 @@
-use super::{Table, Row};
+use super::{Row, Table};
 
 pub struct RowIter<'tb> {
     table: &'tb Table,
@@ -7,10 +7,7 @@ pub struct RowIter<'tb> {
 
 impl<'tb> RowIter<'tb> {
     pub fn new(table: &'tb Table) -> Self {
-        RowIter {
-            table,
-            row: 0,
-        }
+        RowIter { table, row: 0 }
     }
 }
 
