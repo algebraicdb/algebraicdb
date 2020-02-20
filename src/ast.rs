@@ -67,6 +67,12 @@ pub struct Delete {
 }
 
 #[derive(Debug)]
+pub struct Drop{
+    pub table: String,
+    //  pub drop_clause: Option<DropClause>, // should be cascade or restrict
+}
+
+#[derive(Debug)]
 pub struct Insert {
     pub table: String,
     pub columns: Vec<String>,
@@ -87,6 +93,7 @@ pub enum Stmt {
     Update(Update),
     CreateTable(CreateTable),
     CreateType(CreateType),
+    Drop(Drop),
 }
 
 #[derive(Debug)]
@@ -141,6 +148,7 @@ fn ast_grammar() {
             Var1(Bool),
             Var1(newCoolType, alsoCoolType),
         };"#,
+        r#"DROP TABLE bananas ;"#,
     ];
 
     let invalid_examples = vec![
@@ -157,6 +165,7 @@ fn ast_grammar() {
         r#"CREATE TABLE bananas (without_type);"#,
         r#"DELETE FROM now, with, commas ;"#,
         r#"UPDATE SET xxsxsxsxsxsxsxs=2 ;"#,
+        r#"DROP ;"#,
     ];
 
     for ex in valid_examples {

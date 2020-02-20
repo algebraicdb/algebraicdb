@@ -32,6 +32,10 @@ fn get_table_resource_requests(stmt: &Stmt) -> Vec<TableRequest> {
         }],
         Stmt::CreateType(_) => vec![],
         Stmt::CreateTable(_) => vec![],
+        Stmt::Drop(drop) => vec![TableRequest{ //
+            table: drop.table.clone(),
+            rw: RW::Write,
+        }]
     }
 }
 
