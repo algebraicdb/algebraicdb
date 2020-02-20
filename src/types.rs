@@ -14,6 +14,15 @@ pub struct TypeMap {
     identifiers: HashMap<String, TypeId>,
     constructors: HashMap<String, Vec<TypeId>>,
     next_id: TypeId,
+    bool_id: TypeId,
+    integer_id: TypeId,
+    double_id: TypeId,
+}
+
+pub enum BaseType {
+    Bool,
+    Integer,
+    Double,
 }
 
 impl Index<&TypeId> for TypeMap {
@@ -31,12 +40,14 @@ impl TypeMap {
             identifiers: HashMap::new(),
             constructors: HashMap::new(),
             next_id: 1,
+            integer_id: 0,
+            double_id: 0,
+            bool_id: 0,
         };
 
-        // TODO: better handling of primitives
-        map.insert("Integer", Type::Integer);
-        map.insert("Double", Type::Double);
-        map.insert("Bool", Type::Bool);
+        map.integer_id = map.insert("Integer", Type::Integer);
+        map.double_id = map.insert("Double", Type::Double);
+        map.bool_id = map.insert("Bool", Type::Bool);
         map
     }
 
@@ -56,6 +67,14 @@ impl TypeMap {
 
     pub fn get_id(&self, name: &str) -> Option<TypeId> {
         self.identifiers.get(name).map(|id| *id)
+    }
+
+    pub fn get_base_id(&self, base_type: BaseType) -> TypeId {
+        match base_type {
+            BaseType::Bool => self.bool_id,
+            BaseType::Integer => self.integer_id,
+            BaseType::Double => self.double_id,
+        }
     }
 
     pub fn get(&self, name: &str) -> Option<&Type> {

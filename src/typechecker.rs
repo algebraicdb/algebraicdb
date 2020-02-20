@@ -94,34 +94,6 @@ pub fn check_stmt(stmt: &Stmt, globals: &ResourcesGuard<'_>) -> Result<(), TypeE
     }
 }
 
-
-fn find_bool(ctx: &Context) -> Result<TypeId, TypeError> {
-    // FIXME: Stringly types!
-    return ctx
-        .globals
-        .type_map
-        .get_id("Bool")
-        .ok_or_else(|| TypeError::Undefined("Bool".into()));
-}
-
-fn find_double(ctx: &Context) -> Result<TypeId, TypeError> {
-    // TODO fixa för doubles...
-    return ctx
-        .globals
-        .type_map
-        .get_id("Double")
-        .ok_or_else(|| TypeError::Undefined("Double".into()));
-}
-
-fn find_int(ctx: &Context) -> Result<TypeId, TypeError> {
-    // TODO fixa för ints..
-    return ctx
-        .globals
-        .type_map
-        .get_id("Integer")
-        .ok_or_else(|| TypeError::Undefined("Integer".into()));
-}
-
 fn import_table_columns<'a>(name: &str, ctx: &'a mut Context) {
     let table = ctx.globals.read_table(name);
     let schema = table.get_schema();
@@ -164,7 +136,10 @@ fn check_select_from(from: &SelectFrom, ctx: &mut Context) -> Result<(), TypeErr
 
             if let Some(on_clause) = &join.on_clause {
                 let clause_type = check_expr(on_clause, ctx)?;
-                assert_type_as(clause_type, find_bool(ctx)?)?;
+                assert_type_as(
+                    clause_type,
+                    ctx.globals.type_map.get_base_id(BaseType::Bool),
+                )?;
             }
         }
     }
@@ -189,13 +164,13 @@ fn check_select_item(item: &SelectItem, ctx: &Context) -> Result<(), TypeError> 
 fn check_pattern(pattern: &Pattern, type_id: TypeId, ctx: &Context) -> Result<(), TypeError> {
     match pattern {
         Pattern::Int(_) => {
-            assert_type_as(find_int(ctx)?, type_id)?;
+            assert_type_as(ctx.globals.type_map.get_base_id(BaseType::Integer), type_id)?;
         }
         Pattern::Bool(_) => {
-            assert_type_as(find_bool(ctx)?, type_id)?;
+            assert_type_as(ctx.globals.type_map.get_base_id(BaseType::Bool), type_id)?;
         }
         Pattern::Double(_) => {
-            assert_type_as(find_double(ctx)?, type_id)?;
+            assert_type_as(ctx.globals.type_map.get_base_id(BaseType::Double), type_id)?;
         }
         Pattern::Ignore => {}
         Pattern::Binding(_) => {
@@ -233,7 +208,7 @@ fn check_update(update: &Update, ctx: &mut Context) -> Result<(), TypeError> {
 }
 
 fn check_delete(delete: &Delete, ctx: &mut Context) -> Result<(), TypeError> {
-    let bool_id = find_bool(ctx)?;
+    let bool_id = ctx.globals.type_map.get_base_id(BaseType::Bool);
     match &delete.where_clause {
         Some(WhereClause(cond)) => {
             import_table_columns(&delete.table, ctx);
@@ -248,7 +223,7 @@ fn check_delete(delete: &Delete, ctx: &mut Context) -> Result<(), TypeError> {
     }
 }
 
-fn check_drop(_drop: &Drop, _ctx: &mut Context) -> Result<(), TypeError>{
+fn check_drop(_drop: &Drop, _ctx: &mut Context) -> Result<(), TypeError> {
     // no need to add stuff hihi
     Ok(())
 }
@@ -363,14 +338,14 @@ fn check_expr(expr: &Expr, ctx: &Context) -> Result<TypeId, TypeError> {
             let type_2 = check_expr(e2, ctx)?;
             assert_type_eq(type_1, type_2)?;
 
-            Ok(find_bool(ctx)?)
+            Ok(ctx.globals.type_map.get_base_id(BaseType::Bool))
         }
 
         Expr::And(e1, e2) | Expr::Or(e1, e2) => {
             let type_1 = check_expr(e1, ctx)?;
             let type_2 = check_expr(e2, ctx)?;
 
-            let bool_id = find_bool(ctx)?;
+            let bool_id = ctx.globals.type_map.get_base_id(BaseType::Bool);
 
             assert_type_as(bool_id, type_1)?;
             assert_type_as(bool_id, type_2)
@@ -397,15 +372,9 @@ fn assert_type_as(actual: TypeId, expected: TypeId) -> Result<TypeId, TypeError>
 pub fn type_of_value(value: &Value, types: &TypeMap) -> Result<TypeId, TypeError> {
     match value {
         // TODO: maybe we should have a list of "keywords" somewhere we can use
-        Value::Integer(_) => types
-            .get_id("Integer")
-            .ok_or_else(|| panic!("Integer is undefined")),
-        Value::Double(_) => types
-            .get_id("Double")
-            .ok_or_else(|| panic!("Double is undefined")),
-        Value::Bool(_) => types
-            .get_id("Bool")
-            .ok_or_else(|| panic!("Bool is undefined")),
+        Value::Integer(_) => Ok(types.get_base_id(BaseType::Integer)),
+        Value::Double(_) => Ok(types.get_base_id(BaseType::Double)),
+        Value::Bool(_) => Ok(types.get_base_id(BaseType::Bool)),
         Value::Sum(namespace, variant, _) => {
             if let Some(namespace) = namespace {
                 types

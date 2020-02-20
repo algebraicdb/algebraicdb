@@ -310,7 +310,7 @@ impl PartialOrd for Cell<'_, '_> {
 #[cfg(test)]
 pub mod tests {
     use super::*;
-    use crate::types::{Type, TypeMap, Value};
+    use crate::types::{BaseType, Type, TypeMap, Value};
 
     pub struct TestTypeIds {
         int_id: TypeId,
@@ -323,9 +323,9 @@ pub mod tests {
 
     pub fn create_type_map() -> (TestTypeIds, TypeMap) {
         let mut types = TypeMap::new();
-        let int_id = types.insert("Integer", Type::Integer);
-        let bool_id = types.insert("Bool", Type::Bool);
-        let double_id = types.insert("Double", Type::Double);
+        let int_id = types.get_base_id(BaseType::Integer);
+        let bool_id = types.get_base_id(BaseType::Bool);
+        let double_id = types.get_base_id(BaseType::Double);
         let int_or_nil_id = types.insert(
             "IntOrNil",
             Type::Sum(vec![("Nil".into(), vec![]), ("Int".into(), vec![int_id])]),
