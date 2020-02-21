@@ -4,22 +4,20 @@
 #![feature(async_closure)]
 #![allow(dead_code)]
 
-#[macro_use]
-extern crate lazy_static;
-
 mod api;
 mod ast;
 mod executor;
-mod global;
 mod grammar;
+mod local;
 mod pattern;
 mod pre_typechecker;
 mod table;
 mod typechecker;
 mod types;
-mod psqlwrapper;
+//mod psqlwrapper;
 
 use crate::ast::Stmt;
+use crate::local::{DbState, DbmsState};
 use api::tcp_api::tcp_api;
 use std::error::Error;
 use std::io::Write;
@@ -27,12 +25,27 @@ use tokio::io::{AsyncWrite, AsyncWriteExt};
 
 #[tokio::main]
 async fn main() -> Result<!, Box<dyn Error>> {
+    #[cfg(features = "wrapper")]
+    unimplemented!();
+
     tcp_api("127.0.0.1:5432").await
 }
 
-async fn execute_query(input: &str, w: &mut (dyn AsyncWrite + Send + Unpin)) -> Result<(), Box<dyn Error>> {
+#[cfg(features = "wrapper")]
+async fn execute_query(
+    input: &str,
+    w: &mut (dyn AsyncWrite + Send + Unpin),
+) -> Result<(), Box<dyn Error>> {
+    Ok(())
+}
+
+#[cfg(not(features = "wrapper"))]
+async fn execute_query(
+    input: &str,
+    s: &DbmsState,
+    w: &mut (dyn AsyncWrite + Send + Unpin),
+) -> Result<(), Box<dyn Error>> {
     // 1. parse
-    use crate::global::*;
     use crate::grammar::StmtParser;
 
     let result: Result<Stmt, _> = StmtParser::new().parse(&input);
@@ -45,11 +58,14 @@ async fn execute_query(input: &str, w: &mut (dyn AsyncWrite + Send + Unpin)) -> 
     let request = pre_typechecker::get_resource_request(&ast);
 
     // 3. acquire resources
-    let response = send_request(request).await;
+    let response = s.acquire_resources(request).await;
     let mut resources = match response {
-        Response::AcquiredResources(resources) => resources,
-        Response::NoSuchTable(name) => return Ok(w.write_all(format!("No such table: {}\n", name).as_bytes()).await?),
-        _ => unreachable!("Invalid reponse from global::send_request"),
+        Ok(resources) => resources,
+        Err(name) => {
+            return Ok(w
+                .write_all(format!("No such table: {}\n", name).as_bytes())
+                .await?)
+        }
     };
     let resources = resources.take().await;
 
@@ -64,7 +80,7 @@ async fn execute_query(input: &str, w: &mut (dyn AsyncWrite + Send + Unpin)) -> 
     // (See EXPLAIN in postgres/mysql)
 
     // 6. Execute query
-    executor::execute_query(ast, resources, w).await
+    executor::execute_query(ast, s, resources, w).await
 }
 
 fn echo_ast(input: &str, w: &mut dyn Write) -> Result<(), Box<dyn Error>> {

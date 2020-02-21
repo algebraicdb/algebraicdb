@@ -67,7 +67,7 @@ pub struct Delete {
 }
 
 #[derive(Debug)]
-pub struct Drop{
+pub struct Drop {
     pub table: String,
     //  pub drop_clause: Option<DropClause>, // should be cascade or restrict
 }

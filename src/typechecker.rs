@@ -1,19 +1,19 @@
 use crate::ast::*;
-use crate::global::ResourcesGuard;
+use crate::local::{ResourcesGuard, TTable};
 use crate::pattern::Pattern;
 use crate::types::*;
 use std::collections::HashMap;
 use std::collections::HashSet;
 
-pub struct Context<'a> {
-    pub globals: &'a ResourcesGuard<'a>,
+pub struct Context<'a, T> {
+    pub globals: &'a ResourcesGuard<'a, T>,
     locals: Vec<Scope>,
 }
 
 type Scope = HashMap<String, Vec<TypeId>>;
 
-impl<'a> Context<'a> {
-    pub fn new(globals: &'a ResourcesGuard<'a>) -> Self {
+impl<'a, T: TTable> Context<'a, T> {
+    pub fn new(globals: &'a ResourcesGuard<'a, T>) -> Self {
         Context {
             globals,
             locals: vec![HashMap::new()],
@@ -80,7 +80,10 @@ pub enum TypeError {
     InvalidCount { expected: usize, actual: usize },
 }
 
-pub fn check_stmt(stmt: &Stmt, globals: &ResourcesGuard<'_>) -> Result<(), TypeError> {
+pub fn check_stmt<T: TTable>(
+    stmt: &Stmt,
+    globals: &ResourcesGuard<'_, T>,
+) -> Result<(), TypeError> {
     let mut ctx = Context::new(globals);
 
     match stmt {
@@ -94,7 +97,7 @@ pub fn check_stmt(stmt: &Stmt, globals: &ResourcesGuard<'_>) -> Result<(), TypeE
     }
 }
 
-fn import_table_columns<'a>(name: &str, ctx: &'a mut Context) {
+fn import_table_columns<'a, T: TTable>(name: &str, ctx: &'a mut Context<'_, T>) {
     let table = ctx.globals.read_table(name);
     let schema = table.get_schema();
 
@@ -103,7 +106,7 @@ fn import_table_columns<'a>(name: &str, ctx: &'a mut Context) {
     }
 }
 
-fn check_select(select: &Select, ctx: &mut Context) -> Result<(), TypeError> {
+fn check_select<T: TTable>(select: &Select, ctx: &mut Context<T>) -> Result<(), TypeError> {
     if let Some(from) = &select.from {
         check_select_from(from, ctx)?;
     }
@@ -115,7 +118,7 @@ fn check_select(select: &Select, ctx: &mut Context) -> Result<(), TypeError> {
     Ok(())
 }
 
-fn check_select_from(from: &SelectFrom, ctx: &mut Context) -> Result<(), TypeError> {
+fn check_select_from<T: TTable>(from: &SelectFrom, ctx: &mut Context<T>) -> Result<(), TypeError> {
     match from {
         SelectFrom::Select(nsel) => {
             check_select(&nsel, ctx)?;
@@ -145,7 +148,7 @@ fn check_select_from(from: &SelectFrom, ctx: &mut Context) -> Result<(), TypeErr
     Ok(())
 }
 
-fn check_select_item(item: &SelectItem, ctx: &Context) -> Result<(), TypeError> {
+fn check_select_item<T: TTable>(item: &SelectItem, ctx: &Context<T>) -> Result<(), TypeError> {
     match item {
         SelectItem::Expr(expr) => {
             check_expr(expr, ctx)?;
@@ -160,7 +163,11 @@ fn check_select_item(item: &SelectItem, ctx: &Context) -> Result<(), TypeError> 
     Ok(())
 }
 
-fn check_pattern(pattern: &Pattern, type_id: TypeId, ctx: &Context) -> Result<(), TypeError> {
+fn check_pattern<T: TTable>(
+    pattern: &Pattern,
+    type_id: TypeId,
+    ctx: &Context<T>,
+) -> Result<(), TypeError> {
     match pattern {
         Pattern::Int(_) => {
             assert_type_as(ctx.globals.type_map.get_base_id(BaseType::Integer), type_id)?;
@@ -181,7 +188,7 @@ fn check_pattern(pattern: &Pattern, type_id: TypeId, ctx: &Context) -> Result<()
     Ok(())
 }
 
-fn check_update(update: &Update, ctx: &mut Context) -> Result<(), TypeError> {
+fn check_update<T: TTable>(update: &Update, ctx: &mut Context<T>) -> Result<(), TypeError> {
     import_table_columns(&update.table, ctx);
     let table = ctx.globals.read_table(&update.table);
     let schema = table.get_schema();
@@ -206,7 +213,7 @@ fn check_update(update: &Update, ctx: &mut Context) -> Result<(), TypeError> {
     Ok(())
 }
 
-fn check_delete(delete: &Delete, ctx: &mut Context) -> Result<(), TypeError> {
+fn check_delete<T: TTable>(delete: &Delete, ctx: &mut Context<T>) -> Result<(), TypeError> {
     let bool_id = ctx.globals.type_map.get_base_id(BaseType::Bool);
     match &delete.where_clause {
         Some(WhereClause(cond)) => {
@@ -222,12 +229,12 @@ fn check_delete(delete: &Delete, ctx: &mut Context) -> Result<(), TypeError> {
     }
 }
 
-fn check_drop(_drop: &Drop, _ctx: &mut Context) -> Result<(), TypeError> {
+fn check_drop<T: TTable>(_drop: &Drop, _ctx: &mut Context<T>) -> Result<(), TypeError> {
     // no need to add stuff hihi
     Ok(())
 }
 
-fn check_insert(insert: &Insert, ctx: &mut Context) -> Result<(), TypeError> {
+fn check_insert<T: TTable>(insert: &Insert, ctx: &mut Context<T>) -> Result<(), TypeError> {
     let table = ctx.globals.read_table(&insert.table);
     let schema = table.get_schema();
 
@@ -276,7 +283,10 @@ fn check_insert(insert: &Insert, ctx: &mut Context) -> Result<(), TypeError> {
     Ok(())
 }
 
-fn check_create_table(create_table: &CreateTable, ctx: &mut Context) -> Result<(), TypeError> {
+fn check_create_table<T: TTable>(
+    create_table: &CreateTable,
+    ctx: &mut Context<T>,
+) -> Result<(), TypeError> {
     if create_table.columns.len() == 0 {
         return Err(TypeError::NotSupported("Creating empty tables"));
     }
@@ -299,7 +309,10 @@ fn check_create_table(create_table: &CreateTable, ctx: &mut Context) -> Result<(
     Ok(())
 }
 
-fn check_create_type(create: &CreateType, ctx: &mut Context) -> Result<(), TypeError> {
+fn check_create_type<T: TTable>(
+    create: &CreateType,
+    ctx: &mut Context<T>,
+) -> Result<(), TypeError> {
     // For a type:
     // MyVariant = Var1 TypeA | Var2 TypeB TypeC
     // We have to check that the type name MyVariant is not taken
@@ -323,7 +336,7 @@ fn check_create_type(create: &CreateType, ctx: &mut Context) -> Result<(), TypeE
     Ok(())
 }
 
-fn check_expr(expr: &Expr, ctx: &Context) -> Result<TypeId, TypeError> {
+fn check_expr<T: TTable>(expr: &Expr, ctx: &Context<T>) -> Result<TypeId, TypeError> {
     match expr {
         Expr::Ident(ident) => ctx.search_locals(ident),
 
@@ -405,18 +418,18 @@ pub fn type_of_value(value: &Value, types: &TypeMap) -> Result<TypeId, TypeError
 mod tests {
     use super::*;
     use crate::ast::Expr;
-    use crate::global::{Resource, ResourcesGuard};
-    use crate::table::tests::create_type_map;
+    use crate::local::{Resource, ResourcesGuard};
+    use crate::table::{tests::create_type_map, Table};
+    use futures::executor::block_on;
     use std::sync::Arc;
     use tokio::sync::RwLock;
-    use futures::executor::block_on;
 
     #[test]
     fn type_check_exprs() {
         let (_ids, type_map) = create_type_map();
         let type_map = Arc::new(RwLock::new(type_map));
 
-        let dummy_ctx = Context {
+        let dummy_ctx: Context<Table> = Context {
             globals: &ResourcesGuard {
                 type_map: Resource::Read(block_on(type_map.read())),
                 tables: vec![],

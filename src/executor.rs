@@ -1,5 +1,5 @@
 use crate::ast::*;
-use crate::global::{send_request, Request, ResourcesGuard, Response};
+use crate::local::{DbState, DbmsState, ResourcesGuard};
 use crate::pattern::CompiledPattern;
 use crate::table::{Schema, Table};
 use crate::types::{Type, TypeId, Value};
@@ -18,11 +18,14 @@ impl Context {
 
 pub(crate) async fn execute_query(
     ast: Stmt,
-    resources: ResourcesGuard<'_>,
+    s: &DbmsState,
+    resources: ResourcesGuard<'_, Table>,
     w: &mut (dyn AsyncWrite + Send + Unpin),
 ) -> Result<(), Box<dyn Error>> {
     match ast {
-        Stmt::CreateTable(create_table) => execute_create_table(create_table, resources, w).await,
+        Stmt::CreateTable(create_table) => {
+            execute_create_table(create_table, s, resources, w).await
+        }
         Stmt::CreateType(create_type) => execute_create_type(create_type, resources, w).await,
         Stmt::Insert(insert) => execute_insert(insert, resources, w).await,
         Stmt::Select(select) => execute_select(select, resources, w).await,
@@ -32,7 +35,7 @@ pub(crate) async fn execute_query(
 
 async fn execute_select(
     select: Select,
-    resources: ResourcesGuard<'_>,
+    resources: ResourcesGuard<'_, Table>,
     w: &mut (dyn AsyncWrite + Send + Unpin),
 ) -> Result<(), Box<dyn Error>> {
     match select.from {
@@ -63,7 +66,8 @@ async fn execute_select(
 
 async fn execute_create_table(
     create_table: CreateTable,
-    resources: ResourcesGuard<'_>,
+    s: &DbmsState,
+    resources: ResourcesGuard<'_, Table>,
     w: &mut (dyn AsyncWrite + Send + Unpin),
 ) -> Result<(), Box<dyn Error>> {
     let columns: Vec<_> = create_table
@@ -81,19 +85,16 @@ async fn execute_create_table(
     let schema = Schema::new(columns);
     let table = Table::new(schema, &resources.type_map);
 
-    let request = Request::CreateTable(create_table.table, table);
-
-    match send_request(request).await {
-        Response::TableCreated => w.write_all(b"Table created\n").await?,
-        Response::TableAlreadyExists => w.write_all(b"Table already exists\n").await?,
-        _ => unreachable!(),
+    match s.create_table(create_table.table, table).await {
+        Ok(()) => w.write_all(b"Table created\n").await?,
+        Err(()) => w.write_all(b"Table already exists\n").await?,
     };
     Ok(())
 }
 
 async fn execute_create_type(
     create_type: CreateType,
-    mut resources: ResourcesGuard<'_>,
+    mut resources: ResourcesGuard<'_, Table>,
     w: &mut (dyn AsyncWrite + Send + Unpin),
 ) -> Result<(), Box<dyn Error>> {
     let types = &mut resources.type_map;
@@ -130,7 +131,7 @@ async fn execute_create_type(
 
 async fn execute_insert(
     insert: Insert,
-    mut resources: ResourcesGuard<'_>,
+    mut resources: ResourcesGuard<'_, Table>,
     w: &mut (dyn AsyncWrite + Send + Unpin),
 ) -> Result<(), Box<dyn Error>> {
     let (table, types) = resources.write_table(&insert.table);

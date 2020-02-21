@@ -10,6 +10,7 @@ pub use self::pattern_iter::{CellPatternIter, RowPatternIter};
 pub use self::row::Row;
 pub use self::schema::Schema;
 
+use crate::local::TTable;
 use crate::pattern::CompiledPattern;
 use crate::types::{TypeId, TypeMap, Value};
 
@@ -24,6 +25,12 @@ pub struct Table {
     schema: Schema,
     data: Vec<u8>,
     row_size: usize,
+}
+
+impl TTable for Table {
+    fn get_schema(&self) -> &Schema {
+        &self.schema
+    }
 }
 
 impl Table {
