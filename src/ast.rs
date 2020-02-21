@@ -76,7 +76,7 @@ pub struct Drop{
 pub struct Insert {
     pub table: String,
     pub columns: Vec<String>,
-    pub values: Vec<Expr>,
+    pub rows: Vec<Vec<Expr>>,
 }
 
 #[derive(Debug)]
@@ -117,6 +117,7 @@ fn ast_grammar() {
         r#"SELECT hello, asdsad FROM adssad;"#,
         r#"INSERT INTO empty;"#,
         r#"INSERT INTO empty () VALUES ();"#,
+        r#"INSERT INTO empty () VALUES (), (), ();"#,
         r#"INSERT INTO empty VALUES ();"#,
         r#"INSERT INTO feffes_mom (foo, bar, baz) VALUES (1, myself, hello);"#,
         r#"SELECT bleh FROM (SELECT 3);"#,
@@ -158,6 +159,7 @@ fn ast_grammar() {
         r#"SELECT c FROM t1 INNER LEFT JOIN t2;"#,
         r#"SELECT c FROM t1 INNER OUTER JOIN t2;"#,
         r#"INSERT INTO empty (2) VALUES ();"#,
+        r#"INSERT INTO empty () VALUES ,,;"#,
         r#"DELETE just;"#,
         r#"DELETE FROM just WHERE ;"#,
         r#"DELETE FROM just some more tables ;"#,

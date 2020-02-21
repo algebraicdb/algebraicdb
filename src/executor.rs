@@ -133,13 +133,13 @@ fn execute_insert(
 
     let ctx = Context::empty();
 
-    let values: Vec<_> = insert
-        .values
-        .into_iter()
-        .map(|expr| execute_expr(expr, &ctx))
-        .collect();
-
-    table.push_row(&values, &types);
+    for row in insert.rows.into_iter() {
+        let values: Vec<_> = row
+            .into_iter()
+            .map(|expr| execute_expr(expr, &ctx))
+            .collect();
+        table.push_row(&values, &types);
+    }
 
     write!(w, "Row inserted\n")?;
     write!(w, "{:#?}\n", table)?;
