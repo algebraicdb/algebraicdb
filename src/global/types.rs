@@ -4,18 +4,19 @@ use std::ops::{Deref, DerefMut};
 use std::sync::Arc;
 use tokio::sync::{RwLock, RwLockReadGuard, RwLockWriteGuard};
 
-#[derive(Clone, Copy, PartialOrd, Ord, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialOrd, Ord, PartialEq, Eq)]
 pub enum RW {
     Read,
     Write,
 }
 
-#[derive(Ord, PartialOrd, PartialEq, Eq)]
+#[derive(Debug, Ord, PartialOrd, PartialEq, Eq)]
 pub struct TableRequest {
     pub table: String,
     pub rw: RW,
 }
 
+#[derive(Debug)]
 pub enum Request {
     AcquireResources {
         table_reqs: Vec<TableRequest>,

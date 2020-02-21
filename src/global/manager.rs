@@ -6,6 +6,7 @@ use tokio::sync::mpsc;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
+use futures::executor::block_on;
 
 type RequestSender = mpsc::UnboundedSender<(Request, oneshot::Sender<Response>)>;
 type RequestReceiver = mpsc::UnboundedReceiver<(Request, oneshot::Sender<Response>)>;
@@ -14,8 +15,8 @@ lazy_static! {
     pub(super) static ref REQUEST_SENDER: RequestSender = {
         let (requests_in, requests_out) = mpsc::unbounded_channel();
 
-            tokio::spawn(async move {
-                match resource_manager(requests_out).await {
+            std::thread::spawn(move || {
+                match resource_manager(requests_out) {
                     Err(msg) => panic!("Resource manager crashed: {}", msg),
                     Ok(_) => unreachable!(),
                 }
@@ -25,12 +26,12 @@ lazy_static! {
     };
 }
 
-async fn resource_manager(mut requests: RequestReceiver) -> Result<!, String> {
+fn resource_manager(mut requests: RequestReceiver) -> Result<!, String> {
     let mut tables: HashMap<String, Arc<RwLock<Table>>> = HashMap::new();
     let type_map: Arc<RwLock<TypeMap>> = Arc::new(RwLock::new(TypeMap::new()));
 
     loop {
-        let (request, response_ch) = requests.recv().await.ok_or_else(|| String::from("Channel closed."))?;
+        let (request, response_ch) = block_on(requests.recv()).ok_or_else(|| String::from("Channel closed."))?;
 
         match request {
             Request::AcquireResources {

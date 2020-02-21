@@ -1,22 +1,24 @@
 use super::*;
 use crate::table::{Schema, Table};
 use crate::types::TypeMap;
-use crossbeam::thread;
+use futures::executor::block_on;
 use rand::Rng;
+use crossbeam::thread;
 //use colorful::Color;
 //use colorful::Colorful;
 
 /// Make sure there are not deadlocks when multiple threads are requesting resources.
-#[test]
-fn global_resources_contention() {
+#[tokio::test]
+async fn global_resources_contention() {
     let table_ids: Vec<usize> = (0..20).collect();
 
     for &id in table_ids.iter() {
-        let resp = send_request(Request::CreateTable(
+        let resp = block_on(send_request(Request::CreateTable(
             format!("table_{}", id),
             Table::new(Schema::empty(), &TypeMap::new()),
-        ));
+        )));
         if let Response::TableCreated = resp {
+            // everything is fine
         } else {
             panic!("Invalid response, expected TableCreated");
         }
@@ -49,19 +51,21 @@ fn global_resources_contention() {
                             }
                         })
                         .collect();
-                    //eprintln!("{} {} {} {:?}", "==".color(Color::Red), thread, "requesting".color(Color::Red), request);
 
                     let table_count = table_reqs.len();
 
-                    let response = send_request(Request::AcquireResources {
+                    let request = Request::AcquireResources {
                         table_reqs,
                         type_map_perms: RW::Read,
-                    });
-                    match response {
+                    };
+
+                    //eprintln!("{} {} {} {:?}", "==".color(Color::Red), thread, "requesting".color(Color::Red), request);
+
+                    match block_on(send_request(request)) {
                         Response::AcquiredResources(mut resources) => {
-                            let guard = resources.take();
+                        let guard = block_on(resources.take());
                             assert_eq!(guard.tables.len(), table_count);
-                            drop(guard)
+                            drop(guard);
                             // TODO: verity correct tables
                         }
                         // TODO: Response does not impl Debug
@@ -73,6 +77,5 @@ fn global_resources_contention() {
                 }
             });
         }
-    })
-    .unwrap();
+    }).unwrap();
 }
