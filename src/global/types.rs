@@ -1,7 +1,8 @@
 use crate::table::Table;
 use crate::types::TypeMap;
 use std::ops::{Deref, DerefMut};
-use std::sync::{Arc, RwLock, RwLockReadGuard, RwLockWriteGuard};
+use std::sync::Arc;
+use tokio::sync::{RwLock, RwLockReadGuard, RwLockWriteGuard};
 
 #[derive(Clone, Copy, PartialOrd, Ord, PartialEq, Eq)]
 pub enum RW {
@@ -69,29 +70,26 @@ impl Resources {
     ///
     /// You may only call this function once. This is to ensure atomicness. That is,
     /// to not drop the guard (and the locks) until you are done with the resources.
-    pub fn take<'a>(&'a mut self) -> ResourcesGuard<'a> {
+    pub async fn take<'a>(&'a mut self) -> ResourcesGuard<'a> {
         assert_eq!(self.dirty, false);
         self.dirty = true;
 
-        let pmsg = "Lock is poisoned";
+        let mut tables = Vec::with_capacity(self.tables.len());
+        for (rw, name, lock) in self.tables.iter() {
+            let resource = match rw {
+                RW::Read => Resource::Read(lock.read().await),
+                RW::Write => Resource::Write(lock.write().await),
+            };
+
+            tables.push((name.as_str(), resource));
+        }
 
         ResourcesGuard {
             type_map: match self.type_map_perms {
-                RW::Read => Resource::Read(self.type_map.read().expect(pmsg)),
-                RW::Write => Resource::Write(self.type_map.write().expect(pmsg)),
+                RW::Read => Resource::Read(self.type_map.read().await),
+                RW::Write => Resource::Write(self.type_map.write().await),
             },
-            tables: self
-                .tables
-                .iter()
-                .map(|(rw, name, lock)| {
-                    let resource = match rw {
-                        RW::Read => Resource::Read(lock.read().expect(pmsg)),
-                        RW::Write => Resource::Write(lock.write().expect(pmsg)),
-                    };
-
-                    (name.as_str(), resource)
-                })
-                .collect(),
+            tables,
         }
     }
 }
