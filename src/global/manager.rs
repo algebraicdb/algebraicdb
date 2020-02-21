@@ -1,32 +1,37 @@
 use super::types::*;
 use crate::table::Table;
 use crate::types::TypeMap;
-use crossbeam::{channel, Receiver, Sender};
+use tokio::sync::oneshot;
+use tokio::sync::mpsc;
 use std::collections::HashMap;
-use std::sync::{Arc, RwLock};
-use std::thread;
+use std::sync::Arc;
+use tokio::sync::RwLock;
+use futures::executor::block_on;
 
-type RequestSender = Sender<(Request, Sender<Response>)>;
+type RequestSender = mpsc::UnboundedSender<(Request, oneshot::Sender<Response>)>;
+type RequestReceiver = mpsc::UnboundedReceiver<(Request, oneshot::Sender<Response>)>;
 
 lazy_static! {
     pub(super) static ref REQUEST_SENDER: RequestSender = {
-        let (requests_in, requests_out) = channel::unbounded();
+        let (requests_in, requests_out) = mpsc::unbounded_channel();
 
-        thread::spawn(move || match resource_manager(requests_out) {
-            Err(msg) => panic!("Resource manager crashed: {}", msg),
-            Ok(_) => unreachable!(),
-        });
+            std::thread::spawn(move || {
+                match resource_manager(requests_out) {
+                    Err(msg) => panic!("Resource manager crashed: {}", msg),
+                    Ok(_) => unreachable!(),
+                }
+            });
 
         requests_in
     };
 }
 
-fn resource_manager(requests: Receiver<(Request, Sender<Response>)>) -> Result<!, String> {
+fn resource_manager(mut requests: RequestReceiver) -> Result<!, String> {
     let mut tables: HashMap<String, Arc<RwLock<Table>>> = HashMap::new();
     let type_map: Arc<RwLock<TypeMap>> = Arc::new(RwLock::new(TypeMap::new()));
 
     loop {
-        let (request, response_ch) = requests.recv().map_err(|e| e.to_string())?;
+        let (request, response_ch) = block_on(requests.recv()).ok_or_else(|| String::from("Channel closed."))?;
 
         match request {
             Request::AcquireResources {
@@ -53,19 +58,18 @@ fn resource_manager(requests: Receiver<(Request, Sender<Response>)>) -> Result<!
                         tables,
                     ))),
                     Err(response) => response_ch.send(response),
-                }
-                .map_err(|e| e.to_string())?;
+                }.unwrap_or_else(|_| eprintln!("global::manager: response channel closed."));
             }
             Request::CreateTable(name, table) => {
                 if tables.contains_key(&name) {
                     response_ch
                         .send(Response::TableAlreadyExists)
-                        .map_err(|e| e.to_string())?;
+                        .unwrap_or_else(|_| eprintln!("global::manager: response channel closed."));
                 } else {
                     tables.insert(name, Arc::new(RwLock::new(table)));
                     response_ch
                         .send(Response::TableCreated)
-                        .map_err(|e| e.to_string())?;
+                        .unwrap_or_else(|_| eprintln!("global::manager: response channel closed."));
                 }
             }
         }

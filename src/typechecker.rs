@@ -407,7 +407,9 @@ mod tests {
     use crate::ast::Expr;
     use crate::global::{Resource, ResourcesGuard};
     use crate::table::tests::create_type_map;
-    use std::sync::{Arc, RwLock};
+    use std::sync::Arc;
+    use tokio::sync::RwLock;
+    use futures::executor::block_on;
 
     #[test]
     fn type_check_exprs() {
@@ -416,7 +418,7 @@ mod tests {
 
         let dummy_ctx = Context {
             globals: &ResourcesGuard {
-                type_map: Resource::Read(type_map.read().unwrap()),
+                type_map: Resource::Read(block_on(type_map.read())),
                 tables: vec![],
             },
             locals: vec![],

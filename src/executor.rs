@@ -4,7 +4,7 @@ use crate::pattern::CompiledPattern;
 use crate::table::{Schema, Table};
 use crate::types::{Type, TypeId, Value};
 use std::error::Error;
-use std::io::Write;
+use tokio::io::{AsyncWrite, AsyncWriteExt};
 
 struct Context {
     // TODO
@@ -16,24 +16,24 @@ impl Context {
     }
 }
 
-pub(crate) fn execute_query(
+pub(crate) async fn execute_query(
     ast: Stmt,
-    resources: ResourcesGuard,
-    w: &mut dyn Write,
+    resources: ResourcesGuard<'_>,
+    w: &mut (dyn AsyncWrite + Send + Unpin),
 ) -> Result<(), Box<dyn Error>> {
     match ast {
-        Stmt::CreateTable(create_table) => execute_create_table(create_table, resources, w),
-        Stmt::CreateType(create_type) => execute_create_type(create_type, resources, w),
-        Stmt::Insert(insert) => execute_insert(insert, resources, w),
-        Stmt::Select(select) => execute_select(select, resources, w),
+        Stmt::CreateTable(create_table) => execute_create_table(create_table, resources, w).await,
+        Stmt::CreateType(create_type) => execute_create_type(create_type, resources, w).await,
+        Stmt::Insert(insert) => execute_insert(insert, resources, w).await,
+        Stmt::Select(select) => execute_select(select, resources, w).await,
         _ => unimplemented!("Not implemented: {:?}", ast),
     }
 }
 
-fn execute_select(
+async fn execute_select(
     select: Select,
-    resources: ResourcesGuard,
-    w: &mut dyn Write,
+    resources: ResourcesGuard<'_>,
+    w: &mut (dyn AsyncWrite + Send + Unpin),
 ) -> Result<(), Box<dyn Error>> {
     match select.from {
         Some(SelectFrom::Table(table_name)) => {
@@ -43,16 +43,16 @@ fn execute_select(
                 CompiledPattern::compile(&select.items, table.get_schema(), &resources.type_map);
 
             for row in table.pattern_iter(&p, &resources.type_map) {
-                write!(w, "[")?;
+                w.write_all(b"[").await?;
                 let mut first = true;
                 for (_name, cell) in row {
                     if !first {
-                        write!(w, ", ")?;
+                        w.write_all(b", ").await?;
                     }
                     first = false;
-                    write!(w, "{}", cell)?;
+                    w.write_all(format!("{}", cell).as_bytes()).await?;
                 }
-                write!(w, "]\n")?;
+                w.write_all(b"]\n").await?;
             }
         }
         select_from => unimplemented!("Not implemented: {:?}", select_from),
@@ -61,10 +61,10 @@ fn execute_select(
     Ok(())
 }
 
-fn execute_create_table(
+async fn execute_create_table(
     create_table: CreateTable,
-    resources: ResourcesGuard,
-    w: &mut dyn Write,
+    resources: ResourcesGuard<'_>,
+    w: &mut (dyn AsyncWrite + Send + Unpin),
 ) -> Result<(), Box<dyn Error>> {
     let columns: Vec<_> = create_table
         .columns
@@ -83,18 +83,18 @@ fn execute_create_table(
 
     let request = Request::CreateTable(create_table.table, table);
 
-    match send_request(request) {
-        Response::TableCreated => write!(w, "Table created\n")?,
-        Response::TableAlreadyExists => write!(w, "Table already exists\n")?,
+    match send_request(request).await {
+        Response::TableCreated => w.write_all(b"Table created\n").await?,
+        Response::TableAlreadyExists => w.write_all(b"Table already exists\n").await?,
         _ => unreachable!(),
     };
     Ok(())
 }
 
-fn execute_create_type(
+async fn execute_create_type(
     create_type: CreateType,
-    mut resources: ResourcesGuard,
-    w: &mut dyn Write,
+    mut resources: ResourcesGuard<'_>,
+    w: &mut (dyn AsyncWrite + Send + Unpin),
 ) -> Result<(), Box<dyn Error>> {
     let types = &mut resources.type_map;
 
@@ -112,22 +112,26 @@ fn execute_create_type(
                 })
                 .collect();
 
-            write!(w, "Type {} created.\n", name)?;
+            w.write_all(b"Type ").await?;
+            w.write_all(name.as_bytes()).await?;
+            w.write_all(b" created \n").await?;
             types.insert(name, Type::Sum(variant_types));
         }
     }
 
-    write!(w, "Current types:\n")?;
+    w.write_all(b"Current types:\n").await?;
     for name in types.identifiers().keys() {
-        write!(w, "  {}\n", name)?;
+        w.write_all(b" ").await?;
+        w.write_all(name.as_bytes()).await?;
+        w.write_all(b"\n").await?;
     }
     Ok(())
 }
 
-fn execute_insert(
+async fn execute_insert(
     insert: Insert,
-    mut resources: ResourcesGuard,
-    w: &mut dyn Write,
+    mut resources: ResourcesGuard<'_>,
+    w: &mut (dyn AsyncWrite + Send + Unpin),
 ) -> Result<(), Box<dyn Error>> {
     let (table, types) = resources.write_table(&insert.table);
 
@@ -141,8 +145,8 @@ fn execute_insert(
         table.push_row(&values, &types);
     }
 
-    write!(w, "Row inserted\n")?;
-    write!(w, "{:#?}\n", table)?;
+    w.write_all(b"Row inserted\n").await?;
+    w.write_all(format!("{:#?}\n", table).as_bytes()).await?;
     Ok(())
 }
 

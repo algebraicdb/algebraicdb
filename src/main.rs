@@ -1,6 +1,7 @@
 #![feature(str_strip)]
 #![feature(never_type)]
 #![feature(box_syntax)]
+#![feature(async_closure)]
 #![allow(dead_code)]
 
 #[macro_use]
@@ -21,13 +22,14 @@ use crate::ast::Stmt;
 use api::tcp_api::tcp_api;
 use std::error::Error;
 use std::io::Write;
+use tokio::io::{AsyncWrite, AsyncWriteExt};
 
 #[tokio::main]
 async fn main() -> Result<!, Box<dyn Error>> {
-    tcp_api(execute_query, "127.0.0.1:5432".to_string()).await
+    tcp_api("127.0.0.1:5432").await
 }
 
-fn execute_query(input: &str, w: &mut dyn Write) -> Result<(), Box<dyn Error>> {
+async fn execute_query(input: &str, w: &mut (dyn AsyncWrite + Send + Unpin)) -> Result<(), Box<dyn Error>> {
     // 1. parse
     use crate::global::*;
     use crate::grammar::StmtParser;
@@ -35,25 +37,25 @@ fn execute_query(input: &str, w: &mut dyn Write) -> Result<(), Box<dyn Error>> {
     let result: Result<Stmt, _> = StmtParser::new().parse(&input);
     let ast = match result {
         Ok(ast) => ast,
-        Err(e) => return Ok(write!(w, "{:#?}\n", e)?),
+        Err(e) => return Ok(w.write_all(format!("{:#?}\n", e).as_bytes()).await?),
     };
 
     // 2. determine resources
     let request = pre_typechecker::get_resource_request(&ast);
 
     // 3. acquire resources
-    let response = send_request(request);
+    let response = send_request(request).await;
     let mut resources = match response {
         Response::AcquiredResources(resources) => resources,
-        Response::NoSuchTable(name) => return Ok(write!(w, "No such table: {}\n", name)?),
+        Response::NoSuchTable(name) => return Ok(w.write_all(format!("No such table: {}\n", name).as_bytes()).await?),
         _ => unreachable!("Invalid reponse from global::send_request"),
     };
-    let resources = resources.take();
+    let resources = resources.take().await;
 
     // 4. typecheck
     match typechecker::check_stmt(&ast, &resources) {
         Ok(()) => {}
-        Err(e) => return Ok(write!(w, "{:#?}\n", e)?),
+        Err(e) => return Ok(w.write_all(format!("{:#?}\n", e).as_bytes()).await?),
     }
 
     // TODO:
@@ -61,7 +63,7 @@ fn execute_query(input: &str, w: &mut dyn Write) -> Result<(), Box<dyn Error>> {
     // (See EXPLAIN in postgres/mysql)
 
     // 6. Execute query
-    executor::execute_query(ast, resources, w)
+    executor::execute_query(ast, resources, w).await
 }
 
 fn echo_ast(input: &str, w: &mut dyn Write) -> Result<(), Box<dyn Error>> {
