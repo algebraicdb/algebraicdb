@@ -2,28 +2,6 @@ use std::error::Error;
 use tokio::io::{AsyncBufReadExt, AsyncWrite, AsyncWriteExt, BufReader};
 use tokio::net::TcpListener;
 
-//use futures::executor::block_on;
-//use std::io::{self, BufWriter, Write};
-//struct BlockingWriter<W: AsyncWrite + Unpin> {
-//    writer: W,
-//}
-//
-//impl<W: AsyncWrite + Unpin> BlockingWriter<W> {
-//    pub fn new(writer: W) -> Self {
-//        BlockingWriter { writer }
-//    }
-//}
-//
-//impl<W: AsyncWrite + Unpin> Write for BlockingWriter<W> {
-//    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-//        block_on(self.writer.write(buf))
-//    }
-//
-//    fn flush(&mut self) -> io::Result<()> {
-//        block_on(self.writer.flush())
-//    }
-//}
-
 pub async fn tcp_api(
     address: &str,
 ) -> Result<!, Box<dyn Error>> {
@@ -34,7 +12,6 @@ pub async fn tcp_api(
             Ok((mut socket, _)) => {
                 tokio::spawn(async move {
                     let (reader, mut writer) = socket.split();
-                    //let mut writer = BufWriter::new(BlockingWriter::new(writer));
                     let mut buf = vec![];
                     let mut rest = String::new();
                     let mut reader: BufReader<_> = BufReader::new(reader);
@@ -48,7 +25,6 @@ pub async fn tcp_api(
                         rest = conga(input, &mut writer).await;
 
                         writer.flush().await.expect("Flushing writer failed");
-                        //writer.flush().expect("Flushing writer failed");
 
                         // TODO: fix for unicode
                         buf.drain(..n);
