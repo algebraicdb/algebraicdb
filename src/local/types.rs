@@ -1,4 +1,3 @@
-use crate::table::Table;
 use crate::types::TypeMap;
 use std::ops::{Deref, DerefMut};
 use std::sync::Arc;
@@ -17,32 +16,40 @@ pub struct TableRequest {
 }
 
 #[derive(Debug)]
-pub enum Request {
-    AcquireResources {
-        table_reqs: Vec<TableRequest>,
-        type_map_perms: RW,
-    },
-    CreateTable(String, Table),
+pub enum Request<T> {
+    Acquire(Acquire),
+    CreateTable(String, T),
 }
 
-pub enum Response {
-    AcquiredResources(Resources),
-    NoSuchTable(String),
+#[derive(Debug)]
+pub struct Acquire {
+    pub table_reqs: Vec<TableRequest>,
+    pub type_map_perms: RW,
+}
+
+#[derive(Debug)]
+pub enum CreateTableResponse {
     TableCreated,
     TableAlreadyExists,
+}
+
+pub enum Response<T> {
+    AcquiredResources(Resources<T>),
+    NoSuchTable(String),
+    CreateTable(Result<(), ()>),
     // TODO add future table deleted???????
 }
 
-pub struct Resources {
+pub struct Resources<T> {
     dirty: bool,
     type_map_perms: RW,
     type_map: Arc<RwLock<TypeMap>>,
-    tables: Vec<(RW, String, Arc<RwLock<Table>>)>,
+    tables: Vec<(RW, String, Arc<RwLock<T>>)>,
 }
 
-pub struct ResourcesGuard<'a> {
+pub struct ResourcesGuard<'a, T> {
     pub type_map: Resource<'a, TypeMap>,
-    pub tables: Vec<(&'a str, Resource<'a, Table>)>,
+    pub tables: Vec<(&'a str, Resource<'a, T>)>,
 }
 
 pub enum Resource<'a, T> {
@@ -50,11 +57,11 @@ pub enum Resource<'a, T> {
     Read(RwLockReadGuard<'a, T>),
 }
 
-impl Resources {
+impl<T> Resources<T> {
     pub(super) fn new(
         type_map: Arc<RwLock<TypeMap>>,
         type_map_perms: RW,
-        tables: Vec<(RW, String, Arc<RwLock<Table>>)>,
+        tables: Vec<(RW, String, Arc<RwLock<T>>)>,
     ) -> Self {
         Self {
             dirty: false,
@@ -71,7 +78,7 @@ impl Resources {
     ///
     /// You may only call this function once. This is to ensure atomicness. That is,
     /// to not drop the guard (and the locks) until you are done with the resources.
-    pub async fn take<'a>(&'a mut self) -> ResourcesGuard<'a> {
+    pub async fn take<'a>(&'a mut self) -> ResourcesGuard<'a, T> {
         assert_eq!(self.dirty, false);
         self.dirty = true;
 
@@ -116,11 +123,11 @@ impl<'a, T> DerefMut for Resource<'a, T> {
     }
 }
 
-impl<'a> ResourcesGuard<'a> {
+impl<'a, T> ResourcesGuard<'a, T> {
     // Get a read-only handle to a table.
     //
     // Panics if the read-handle wasn't requested.
-    pub fn read_table(&self, name: &str) -> &Table {
+    pub fn read_table(&self, name: &str) -> &T {
         self.tables
             .iter()
             .find(|(entry_name, _)| entry_name == &name)
@@ -128,7 +135,7 @@ impl<'a> ResourcesGuard<'a> {
             .unwrap()
     }
 
-    pub fn write_table(&mut self, name: &str) -> (&mut Table, &Resource<'a, TypeMap>) {
+    pub fn write_table(&mut self, name: &str) -> (&mut T, &Resource<'a, TypeMap>) {
         let table = self
             .tables
             .iter_mut()

@@ -1,0 +1,13 @@
+version: '3.7'
+
+services:
+  psql:
+    image: 'postgres:alpine'
+    environment: 
+      POSTGRES_PASSWORD: example
+    ports:
+      - 5555:5432
+  adminer:
+    image: 'adminer:4.7.6'
+    ports:
+      - 8080:8080

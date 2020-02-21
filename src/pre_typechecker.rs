@@ -1,8 +1,8 @@
 use crate::ast::*;
-use crate::global::{Request, TableRequest, RW};
+use crate::local::*;
 
-pub fn get_resource_request(stmt: &Stmt) -> Request {
-    Request::AcquireResources {
+pub fn get_resource_request(stmt: &Stmt) -> Acquire {
+    Acquire {
         table_reqs: get_table_resource_requests(stmt),
         type_map_perms: get_type_map_resource_perm(stmt),
     }
@@ -32,10 +32,10 @@ fn get_table_resource_requests(stmt: &Stmt) -> Vec<TableRequest> {
         }],
         Stmt::CreateType(_) => vec![],
         Stmt::CreateTable(_) => vec![],
-        Stmt::Drop(drop) => vec![TableRequest{ //
+        Stmt::Drop(drop) => vec![TableRequest {
             table: drop.table.clone(),
             rw: RW::Write,
-        }]
+        }],
     }
 }
 
