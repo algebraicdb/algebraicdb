@@ -138,6 +138,7 @@ async fn execute_insert(
 
     let ctx = Context::empty();
 
+    let row_count = insert.rows.len();
     for row in insert.rows.into_iter() {
         let values: Vec<_> = row
             .into_iter()
@@ -146,8 +147,7 @@ async fn execute_insert(
         table.push_row(&values, &types);
     }
 
-    w.write_all(b"Row inserted\n").await?;
-    w.write_all(format!("{:#?}\n", table).as_bytes()).await?;
+    w.write_all(format!("{} row(s) inserted\n", row_count).as_bytes()).await?;
     Ok(())
 }
 
