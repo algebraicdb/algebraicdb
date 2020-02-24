@@ -10,9 +10,12 @@ pub async fn tcp_api(address: &str) -> Result<!, Box<dyn Error>> {
 
     loop {
         match listener.accept().await {
-            Ok((mut socket, _)) => {
+            Ok((mut socket, client_address)) => {
+                println!("new client [{}] connected", client_address);
+
                 // Copy state accessor, not the state itself.
                 let state = state.clone();
+
                 tokio::spawn(async move {
                     let (reader, mut writer) = socket.split();
                     let mut buf = vec![];
@@ -20,7 +23,19 @@ pub async fn tcp_api(address: &str) -> Result<!, Box<dyn Error>> {
                     let mut reader: BufReader<_> = BufReader::new(reader);
 
                     loop {
-                        let n: usize = reader.read_until(b';', &mut buf).await.unwrap();
+                        let n: usize = match reader.read_until(b';', &mut buf).await {
+                            Err(e) => {
+                                println!("error on client [{}] socket: {}", client_address, e);
+                                return;
+                            }
+                            // No bytes read means EOF was reached
+                            Ok(0) => {
+                                println!("client [{}] socket closed", client_address);
+                                return;
+                            }
+                            // Read n bytes
+                            Ok(n) => n,
+                        };
 
                         let input = std::str::from_utf8(&buf[..n]).expect("Not valid utf-8");
 
