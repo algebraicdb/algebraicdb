@@ -1,0 +1,28 @@
+CREATE TYPE Color AS VARIANT {
+	RGB(Integer, Integer, Integer),
+	CMYK(Integer, Integer, Integer, Integer),
+	GrayScale(Double),
+};
+
+CREATE TABLE pretty_colors(color Color, is_pretty Bool);
+
+INSERT INTO pretty_colors(color, is_pretty) VALUES
+
+(Color::RGB(255,   0,   0),  true),
+(Color::RGB(  0, 255,   0), false),
+(Color::RGB(  0,   0, 255),  true),
+(Color::RGB(255, 255, 255), false),
+(Color::RGB(  0,   0,   0), false),
+
+(Color::CMYK(  0, 100, 100,   0),  true),
+(Color::CMYK(100,   0, 100,   0), false),
+(Color::CMYK(100, 100,   0,   0),  true),
+(Color::CMYK(  0,   0,   0,   0), false),
+(Color::CMYK(  0,   0,   0, 100), false),
+
+(Color::GrayScale(1.0), false),
+(Color::GrayScale(0.5),  true),
+(Color::GrayScale(0.0), false);
+
+SELECT is_pretty, color FROM pretty_colors;
+

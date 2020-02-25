@@ -1,0 +1,60 @@
+Type MaybeInt created 
+Current types:
+ MaybeInt
+ Integer
+ Double
+ Bool
+ Color
+Type Foo created 
+Current types:
+ MaybeInt
+ Foo
+ Integer
+ Double
+ Bool
+ Color
+Type Boi created 
+Current types:
+ Boi
+ MaybeInt
+ Foo
+ Integer
+ Double
+ Bool
+ Color
+Type WeMustGoDeeper created 
+Current types:
+ MaybeInt
+ Foo
+ Double
+ Bool
+ WeMustGoDeeper
+ Boi
+ Integer
+ Color
+Table created
+Table created
+13 row(s) inserted
+[Lessesst(Nothing())]
+[DeepInto(Hoi(Bar(Just(0))))]
+[DeepInto(Hoi(Bar(Just(0))))]
+[DeepInto(Hoi(Bar(Just(0))))]
+[DeepInto(Hoi(Bar(Just(0))))]
+[DeepInto(Hoi(Bar(Just(0))))]
+[Lessesst(Nothing())]
+[Lessesst(Nothing())]
+[LessDeep(Baz(true))]
+[LessDeep(Baz(false))]
+[LessDeep(Baz(true))]
+[Lessesst(Nothing())]
+[Lessesst(Nothing())]
+[DeepInto(Hoi(Bar(Just(0)))), 4, 42]
+[DeepInto(Hoi(Bar(Just(0)))), 5, 42]
+[DeepInto(Hoi(Bar(Just(0)))), 6, 42]
+[Lessesst(Nothing()), 7, 42]
+[Lessesst(Nothing()), 8, 42]
+[42, 42, 42, 42]
+[42, 42, 42, 42]
+[42, 42, 42, 42]
+[42, 42, 42, 42]
+[42, 42, 42, 42]

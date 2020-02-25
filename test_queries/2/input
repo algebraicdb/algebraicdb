@@ -1,0 +1,46 @@
+CREATE TYPE MaybeInt AS VARIANT {
+    Just(Integer),
+    Nothing(),
+};
+
+CREATE TYPE Foo AS VARIANT {
+    Bar(MaybeInt),
+    Baz(Bool),
+};
+
+CREATE TYPE Boi AS VARIANT {
+    Hoi(Foo),
+    Goi(Double),
+    Foi(),
+};
+
+CREATE TYPE WeMustGoDeeper AS VARIANT {
+    DeepInto(Boi),
+    LessDeep(Foo),
+    Lessesst(MaybeInt),
+};
+
+CREATE TABLE t1(a WeMustGoDeeper, n1 Integer, n2 Integer, answer Integer);
+
+CREATE TABLE t2(i MaybeInt);
+
+INSERT INTO t1(a, n1, n2, answer) VALUES
+(WeMustGoDeeper::Lessesst(MaybeInt::Nothing()),                    1, 2, 42),
+(WeMustGoDeeper::DeepInto(Boi::Hoi(Foo::Bar(MaybeInt::Just(0)))),  2, 4, 42),
+(WeMustGoDeeper::DeepInto(Boi::Hoi(Foo::Bar(MaybeInt::Just(0)))),  3, 2, 42),
+(WeMustGoDeeper::DeepInto(Boi::Hoi(Foo::Bar(MaybeInt::Just(0)))),  4, 3, 42),
+(WeMustGoDeeper::DeepInto(Boi::Hoi(Foo::Bar(MaybeInt::Just(0)))),  5, 3, 42),
+(WeMustGoDeeper::DeepInto(Boi::Hoi(Foo::Bar(MaybeInt::Just(0)))),  6, 3, 42),
+(WeMustGoDeeper::Lessesst(MaybeInt::Nothing()),                    7, 3, 42),
+(WeMustGoDeeper::Lessesst(MaybeInt::Nothing()),                    8, 3, 42),
+(WeMustGoDeeper::LessDeep(Foo::Baz(true)),                         9, 2, 42),
+(WeMustGoDeeper::LessDeep(Foo::Baz(false)),                       10, 2, 42),
+(WeMustGoDeeper::LessDeep(Foo::Baz(true)),                        11, 4, 42),
+(WeMustGoDeeper::Lessesst(MaybeInt::Nothing()),                   12, 4, 42),
+(WeMustGoDeeper::Lessesst(MaybeInt::Nothing()),                   13, 2, 42);
+
+SELECT a FROM t1;
+
+SELECT a, n1, n2: 3, answer FROM t1;
+
+SELECT n2: 2, answer, answer, answer, answer FROM t1;
