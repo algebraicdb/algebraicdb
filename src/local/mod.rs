@@ -1,6 +1,8 @@
 mod dbms_state;
-mod tests;
 mod types;
+
+#[cfg(test)]
+mod tests;
 
 pub use self::dbms_state::*;
 pub use self::types::*;
