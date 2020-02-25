@@ -1,7 +1,10 @@
 use crate::local::*;
+use regex::Regex;
 use std::error::Error;
-use tokio::io::{AsyncBufReadExt, AsyncWrite, AsyncWriteExt, BufReader};
-use tokio::net::TcpListener;
+use tokio::io::{AsyncReadExt, AsyncWriteExt, BufWriter};
+use tokio::net::{TcpStream, TcpListener};
+use std::net::SocketAddr;
+use crate::execute_query;
 
 pub async fn tcp_api(address: &str) -> Result<!, Box<dyn Error>> {
     let state = DbmsState::new();
@@ -10,42 +13,18 @@ pub async fn tcp_api(address: &str) -> Result<!, Box<dyn Error>> {
 
     loop {
         match listener.accept().await {
-            Ok((mut socket, client_address)) => {
+            Ok((socket, client_address)) => {
                 println!("new client [{}] connected", client_address);
 
                 // Copy state accessor, not the state itself.
                 let state = state.clone();
 
                 tokio::spawn(async move {
-                    let (reader, mut writer) = socket.split();
-                    let mut buf = vec![];
-                    let mut rest = String::new();
-                    let mut reader: BufReader<_> = BufReader::new(reader);
-
-                    loop {
-                        let n: usize = match reader.read_until(b';', &mut buf).await {
-                            Err(e) => {
-                                println!("error on client [{}] socket: {}", client_address, e);
-                                return;
-                            }
-                            // No bytes read means EOF was reached
-                            Ok(0) => {
-                                println!("client [{}] socket closed", client_address);
-                                return;
-                            }
-                            // Read n bytes
-                            Ok(n) => n,
-                        };
-
-                        let input = std::str::from_utf8(&buf[..n]).expect("Not valid utf-8");
-
-                        rest.push_str(input);
-                        rest = conga(input, &state, &mut writer).await;
-
-                        writer.flush().await.expect("Flushing writer failed");
-
-                        // TODO: fix for unicode
-                        buf.drain(..n);
+                    match client(socket, client_address, state).await {
+                        Ok(()) => {}
+                        Err(e) => {
+                            println!("client [{}] errored: {}", client_address, e);
+                        }
                     }
                 });
             }
@@ -54,80 +33,55 @@ pub async fn tcp_api(address: &str) -> Result<!, Box<dyn Error>> {
     }
 }
 
-// CONGA IS GREAT OK?
-async fn conga(stmt: &str, state: &DbmsState, w: &mut (dyn AsyncWrite + Send + Unpin)) -> String
-//where S: DbState<T>,
-//      T: TTable,
-{
-    let mut in_string = false;
-    let mut lasti = 0;
-    let chars = stmt.chars().enumerate();
+async fn client(mut socket: TcpStream, client_address: SocketAddr, state: DbmsState) -> Result<(), Box<dyn Error>> {
+    let (mut reader, writer) = socket.split();
+    let mut writer = BufWriter::new(writer);
+    let mut buf = vec![];
 
-    for (i, ch) in chars {
-        // TODO: Handle escape characters
-        if ch == '"' {
-            in_string = !in_string;
+    // This regex matches the entire string from the start to the first non-quoted semi-colon.
+    // It also properly handles escaped quotes
+    // valid string: SELECT "this is a quote -> \", this is a semicolon -> ;.";
+    let r = Regex::new(r#"^(("((\\.)|[^"])*")|[^";])*;"#).expect("Invalid regex");
+
+    loop {
+        let _n: usize = match reader.read_buf(&mut buf).await? {
+            // No bytes read means EOF was reached
+            0 => {
+                println!("client [{}] socket closed", client_address);
+                return Ok(());
+            }
+            // Read n bytes
+            n => n,
+        };
+
+        // Loop over every statement (every substring ending with a semicolon)
+        // This leaves the remaining un-terminated string in the buf.
+        //   stmt 1         stmt 2           stmt 3   rest
+        // ┍╌╌╌┷╌╌╌┑┍╌╌╌╌╌╌╌╌╌┷╌╌╌╌╌╌╌╌╌╌┑┍╌╌╌╌┷╌╌╌╌┑┍╌┷╌┑
+        // SELECT 1; SELECT "stuff: \" ;";  SELECT 3; SELE
+        loop {
+            // Validate bytes as utf-8 string
+            let input = match std::str::from_utf8(&buf[..]) {
+                Ok(input) => input,
+                Err(e) => {
+                    writer.write_all(format!("Error: {}\n", e).as_bytes()).await?;
+                    writer.flush().await?;
+                    return Err(e.into());
+                }
+            };
+
+
+            // Match string against regex
+            let (input, end) = match r.find(input) {
+                Some(matches) => (matches.as_str(), matches.end()),
+                None => break,
+            };
+
+            execute_query(input, &state, &mut writer).await?;
+            writer.flush().await?;
+
+            // Remove the string of the executed query from the buffer
+            buf.drain(..end);
         }
-
-        if ch == ';' && !in_string {
-            let query = &stmt[lasti..=i];
-
-            #[cfg(test)]
-            tests::always_success(query, state, w).await.unwrap();
-
-            #[cfg(not(test))]
-            crate::execute_query(query, state, w)
-                .await
-                .expect("Query errored");
-
-            lasti = i + 1;
-        }
-    }
-
-    if stmt.len() == 0 {
-        String::new()
-    } else if lasti != (stmt.len() - 1) {
-        String::from(&stmt[lasti..stmt.len()])
-    } else {
-        String::new()
-    }
-}
-
-#[cfg(test)]
-pub mod tests {
-
-    use super::conga;
-    use crate::local::DbmsState;
-    use futures::executor::block_on;
-    use std::error::Error;
-    use tokio::io::{AsyncWrite, AsyncWriteExt};
-
-    #[test]
-    pub fn test_conga() {
-        let state = DbmsState::new();
-
-        let s1 = "SELECT dsdasd FROM dadasd".to_string();
-        let s2 = "SELECT dasdas FROM dasdasd; INSERT dadasd into sdadad;".to_string();
-
-        let mut r1: Vec<u8> = vec![];
-        let rest1 = block_on(conga(&s1, &state, &mut r1));
-
-        assert!(r1.is_empty());
-        assert_eq!(rest1, s1);
-
-        let mut r2: Vec<u8> = vec![];
-        let rest2 = block_on(conga(&s2, &state, &mut r2));
-
-        assert!(!r2.is_empty());
-        assert_eq!(rest2, "");
-    }
-
-    pub(super) async fn always_success<S>(
-        _: &str,
-        _: &S,
-        w: &mut (dyn AsyncWrite + Send + Unpin),
-    ) -> Result<(), Box<dyn Error>> {
-        w.write_all(b"Success").await?;
-        Ok(())
     }
 }
