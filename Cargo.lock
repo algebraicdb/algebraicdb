@@ -28,7 +28,6 @@ dependencies = [
  "futures",
  "lalrpop",
  "lalrpop-util",
- "lazy_static",
  "rand 0.7.3",
  "regex 0.2.11",
  "smallvec",
