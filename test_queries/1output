@@ -1,0 +1,21 @@
+Type Color created 
+Current types:
+ Integer
+ Double
+ Bool
+ Color
+Table created
+13 row(s) inserted
+[true, RGB(255, 0, 0)]
+[false, RGB(0, 255, 0)]
+[true, RGB(0, 0, 255)]
+[false, RGB(255, 255, 255)]
+[false, RGB(0, 0, 0)]
+[true, CMYK(0, 100, 100, 0)]
+[false, CMYK(100, 0, 100, 0)]
+[true, CMYK(100, 100, 0, 0)]
+[false, CMYK(0, 0, 0, 0)]
+[false, CMYK(0, 0, 0, 100)]
+[false, GrayScale(1)]
+[true, GrayScale(0.5)]
+[false, GrayScale(0)]
