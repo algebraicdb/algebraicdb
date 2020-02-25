@@ -1,7 +1,7 @@
 use crate::local::*;
 use regex::Regex;
 use std::error::Error;
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::io::{AsyncReadExt, AsyncWriteExt, BufWriter};
 use tokio::net::TcpListener;
 
 pub async fn tcp_api(address: &str) -> Result<!, Box<dyn Error>> {
@@ -18,7 +18,8 @@ pub async fn tcp_api(address: &str) -> Result<!, Box<dyn Error>> {
                 let state = state.clone();
 
                 tokio::spawn(async move {
-                    let (mut reader, mut writer) = socket.split();
+                    let (mut reader, writer) = socket.split();
+                    let mut writer = BufWriter::new(writer);
                     let mut buf = vec![];
 
                     // This regex matches the entire string from the start to the first non-quoted semi-colon.
