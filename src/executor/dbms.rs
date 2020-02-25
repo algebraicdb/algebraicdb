@@ -3,6 +3,8 @@ use crate::local::{DbState, DbmsState, ResourcesGuard};
 use crate::pattern::CompiledPattern;
 use crate::table::{Schema, Table};
 use crate::types::{Type, TypeId, Value};
+use crate::typechecker;
+use crate::pre_typechecker;
 use std::error::Error;
 use tokio::io::{AsyncWrite, AsyncWriteExt};
 
@@ -17,6 +19,49 @@ impl Context {
 }
 
 pub(crate) async fn execute_query(
+    input: &str,
+    s: &DbmsState,
+    w: &mut (dyn AsyncWrite + Send + Unpin),
+) -> Result<(), Box<dyn Error>> {
+    // 1. parse
+    use crate::grammar::StmtParser;
+
+    let result: Result<Stmt, _> = StmtParser::new().parse(&input);
+    let ast = match result {
+        Ok(ast) => ast,
+        Err(e) => return Ok(w.write_all(format!("{:#?}\n", e).as_bytes()).await?),
+    };
+
+    // 2. determine resources
+    let request = pre_typechecker::get_resource_request(&ast);
+
+    // 3. acquire resources
+    let response = s.acquire_resources(request).await;
+    let mut resources = match response {
+        Ok(resources) => resources,
+        Err(name) => {
+            return Ok(w
+                .write_all(format!("No such table: {}\n", name).as_bytes())
+                .await?)
+        }
+    };
+    let resources = resources.take().await;
+
+    // 4. typecheck
+    match typechecker::check_stmt(&ast, &resources) {
+        Ok(()) => {}
+        Err(e) => return Ok(w.write_all(format!("{:#?}\n", e).as_bytes()).await?),
+    }
+
+    // TODO:
+    // 5. Maybe convert ast to some internal representation of a query
+    // (See EXPLAIN in postgres/mysql)
+
+    // 6. Execute query
+    execute_stmt(ast, s, resources, w).await
+}
+
+async fn execute_stmt(
     ast: Stmt,
     s: &DbmsState,
     resources: ResourcesGuard<'_, Table>,
@@ -119,13 +164,6 @@ async fn execute_create_type(
             types.insert(name, Type::Sum(variant_types));
         }
     }
-
-    w.write_all(b"Current types:\n").await?;
-    for name in types.identifiers().keys() {
-        w.write_all(b" ").await?;
-        w.write_all(name.as_bytes()).await?;
-        w.write_all(b"\n").await?;
-    }
     Ok(())
 }
 
@@ -147,7 +185,8 @@ async fn execute_insert(
         table.push_row(&values, &types);
     }
 
-    w.write_all(format!("{} row(s) inserted\n", row_count).as_bytes()).await?;
+    w.write_all(format!("{} row(s) inserted\n", row_count).as_bytes())
+        .await?;
     Ok(())
 }
 

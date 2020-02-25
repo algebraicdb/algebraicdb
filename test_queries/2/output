@@ -1,37 +1,7 @@
 Type MaybeInt created 
-Current types:
- MaybeInt
- Integer
- Double
- Bool
- Color
 Type Foo created 
-Current types:
- MaybeInt
- Foo
- Integer
- Double
- Bool
- Color
 Type Boi created 
-Current types:
- Boi
- MaybeInt
- Foo
- Integer
- Double
- Bool
- Color
 Type WeMustGoDeeper created 
-Current types:
- MaybeInt
- Foo
- Double
- Bool
- WeMustGoDeeper
- Boi
- Integer
- Color
 Table created
 Table created
 13 row(s) inserted

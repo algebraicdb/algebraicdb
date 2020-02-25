@@ -1,9 +1,4 @@
 Type Color created 
-Current types:
- Integer
- Double
- Bool
- Color
 Table created
 13 row(s) inserted
 [true, RGB(255, 0, 0)]
