@@ -20,6 +20,10 @@ pub async fn tcp_api(address: &str) -> Result<!, Box<dyn Error>> {
                 tokio::spawn(async move {
                     let (mut reader, mut writer) = socket.split();
                     let mut buf = vec![];
+
+                    // This regex matches the entire string from the start to the first non-quoted semi-colon.
+                    // It also properly handles escaped quotes
+                    // valid string: SELECT "this is a quote -> \", this is a semicolon -> ;.";
                     let r = Regex::new(r#"^(("((\\.)|[^"])*")|[^";])*;"#).unwrap();
 
                     loop {
@@ -37,8 +41,16 @@ pub async fn tcp_api(address: &str) -> Result<!, Box<dyn Error>> {
                             Ok(n) => n,
                         };
 
+                        // Loop over every statement (every substring ending with a semicolon)
+                        // This leaves the remaining un-terminated string in the buf.
+                        //   stmt 1         stmt 2           stmt 3   rest
+                        // ┍╌╌╌┷╌╌╌┑┍╌╌╌╌╌╌╌╌╌┷╌╌╌╌╌╌╌╌╌╌┑┍╌╌╌╌┷╌╌╌╌┑┍╌┷╌┑
+                        // SELECT 1; SELECT "stuff: \" ;";  SELECT 3; SELE
                         loop {
+                            // Validate bytes as utf-8 string
                             let input = std::str::from_utf8(&buf[..]).expect("Not valid utf-8");
+
+                            // Match string against regex
                             let (input, end) = match r.find(input) {
                                 Some(matches) => (matches.as_str(), matches.end()),
                                 None => break,
@@ -49,6 +61,7 @@ pub async fn tcp_api(address: &str) -> Result<!, Box<dyn Error>> {
                                 .unwrap();
                             writer.flush().await.expect("Flushing writer failed");
 
+                            // Remove the string of the executed query from the buffer
                             buf.drain(..end);
                         }
                     }
