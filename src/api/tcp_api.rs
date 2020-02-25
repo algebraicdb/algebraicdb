@@ -1,7 +1,7 @@
 use crate::client::client;
+use crate::client::State;
 use std::error::Error;
 use tokio::net::TcpListener;
-use crate::client::State;
 
 /// Start an instance of the dbms which binds itself to a tcp socket
 pub async fn create_tcp_server(address: &str) -> Result<!, Box<dyn Error>> {

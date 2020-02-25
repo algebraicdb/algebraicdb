@@ -1,12 +1,12 @@
 use algebraicdb::create_with_writers;
-use tokio::net::UnixStream;
-use std::net::Shutdown;
-use tokio::io::{AsyncWriteExt, BufReader, AsyncBufReadExt};
-use std::io;
-use tokio::stream::{StreamExt};
-use tokio::fs;
-use prettydiff::text::diff_lines;
 use prettydiff::basic::DiffOp;
+use prettydiff::text::diff_lines;
+use std::io;
+use std::net::Shutdown;
+use tokio::fs;
+use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
+use tokio::net::UnixStream;
+use tokio::stream::StreamExt;
 
 #[tokio::test]
 async fn test_example_queries() {
@@ -22,7 +22,10 @@ async fn test_example_queries() {
             let input = fs::read_to_string(input_path).await.unwrap();
             let output = fs::read_to_string(output_path).await.unwrap();
 
-            run_example_query(input, output).await.unwrap().expect("Invalid query output")
+            run_example_query(input, output)
+                .await
+                .unwrap()
+                .expect("Invalid query output")
         }
     }
 }
@@ -44,9 +47,7 @@ async fn run_example_query(input: String, expected_output: String) -> io::Result
     // Read output lines
     let (reader, _) = our_stream.split();
     let reader = BufReader::new(reader);
-    let output: Vec<String> = reader
-        .lines()
-        .collect::<Result<_, _>>().await?;
+    let output: Vec<String> = reader.lines().collect::<Result<_, _>>().await?;
     let output = output.join("\n");
 
     // Check if output matches the expected
@@ -57,7 +58,10 @@ async fn run_example_query(input: String, expected_output: String) -> io::Result
     }) {
         Ok(Ok(()))
     } else {
-        println!("The following query gave an unexpected output:\n\n{}\n-- END QUERY\n", input);
+        println!(
+            "The following query gave an unexpected output:\n\n{}\n-- END QUERY\n",
+            input
+        );
         diff.prettytable();
         Ok(Err(()))
     }

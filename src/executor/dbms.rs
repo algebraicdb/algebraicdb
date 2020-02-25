@@ -1,10 +1,10 @@
 use crate::ast::*;
 use crate::local::{DbState, DbmsState, ResourcesGuard};
 use crate::pattern::CompiledPattern;
-use crate::table::{Schema, Table};
-use crate::types::{Type, TypeId, Value};
-use crate::typechecker;
 use crate::pre_typechecker;
+use crate::table::{Schema, Table};
+use crate::typechecker;
+use crate::types::{Type, TypeId, Value};
 use std::error::Error;
 use tokio::io::{AsyncWrite, AsyncWriteExt};
 

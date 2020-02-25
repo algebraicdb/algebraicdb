@@ -1,6 +1,6 @@
+use crate::local::PgWrapperState;
 use std::error::Error;
 use tokio::io::{AsyncWrite, AsyncWriteExt};
-use crate::local::PgWrapperState;
 
 pub async fn execute_query(
     _input: &str,
