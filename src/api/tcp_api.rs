@@ -1,7 +1,7 @@
 use crate::local::*;
 use regex::Regex;
 use std::error::Error;
-use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpListener;
 
 pub async fn tcp_api(address: &str) -> Result<!, Box<dyn Error>> {
@@ -18,13 +18,12 @@ pub async fn tcp_api(address: &str) -> Result<!, Box<dyn Error>> {
                 let state = state.clone();
 
                 tokio::spawn(async move {
-                    let (reader, mut writer) = socket.split();
+                    let (mut reader, mut writer) = socket.split();
                     let mut buf = vec![];
-                    let mut reader: BufReader<_> = BufReader::new(reader);
                     let r = Regex::new(r#"^(("((\\.)|[^"])*")|[^";])*;"#).unwrap();
 
                     loop {
-                        let n: usize = match reader.read_until(b';', &mut buf).await {
+                        let _n: usize = match reader.read_buf(&mut buf).await {
                             Err(e) => {
                                 println!("error on client [{}] socket: {}", client_address, e);
                                 return;
@@ -38,18 +37,20 @@ pub async fn tcp_api(address: &str) -> Result<!, Box<dyn Error>> {
                             Ok(n) => n,
                         };
 
-                        let input = std::str::from_utf8(&buf[..n]).expect("Not valid utf-8");
-                        let (input, end) = match r.find(input) {
-                            Some(matches) => (matches.as_str(), matches.end()),
-                            None => continue,
-                        };
+                        loop {
+                            let input = std::str::from_utf8(&buf[..]).expect("Not valid utf-8");
+                            let (input, end) = match r.find(input) {
+                                Some(matches) => (matches.as_str(), matches.end()),
+                                None => break,
+                            };
 
-                        crate::execute_query(input, &state, &mut writer)
-                            .await
-                            .unwrap();
-                        writer.flush().await.expect("Flushing writer failed");
+                            crate::execute_query(input, &state, &mut writer)
+                                .await
+                                .unwrap();
+                            writer.flush().await.expect("Flushing writer failed");
 
-                        buf.drain(..end);
+                            buf.drain(..end);
+                        }
                     }
                 });
             }
