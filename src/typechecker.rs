@@ -73,6 +73,7 @@ pub enum TypeError {
     NotSupported(&'static str),
     Undefined(String),
     AmbiguousReference(String),
+    NotASumType,
     AlreadyDefined,
     MissingColumn(String),
     MismatchingTypes { type_1: TypeId, type_2: TypeId },
@@ -182,7 +183,49 @@ fn check_pattern<T: TTable>(
         Pattern::Binding(_) => {
             // TODO: add to ctx
         }
-        Pattern::Variant(_variant, _sub_patterns) => unimplemented!("typecheck Pattern::Variant"),
+        Pattern::Variant {
+            namespace,
+            name,
+            sub_patterns,
+        } => {
+            let types = &ctx.globals.type_map;
+            if let Some(namespace) = namespace {
+                if types.get_name(type_id).unwrap() == namespace {
+                    return Err(TypeError::InvalidType{
+                        expected: type_id,
+                        actual: 0,
+                    })
+                }
+            }
+
+            if let Type::Sum(variants) = &types[&type_id] {
+                let (i, (_, sub_types)) = variants
+                    .iter()
+                    .enumerate()
+                    .find(|(_, (variant, _))| variant == name)
+                    .ok_or_else(|| TypeError::Undefined(name.clone()))?;
+
+                if sub_types.len() != sub_patterns.len() {
+                    return Err(TypeError::InvalidCount {
+                        expected: sub_types.len(),
+                        actual: sub_patterns.len(),
+                    });
+                }
+
+                for (t, p) in sub_types.iter().zip(sub_patterns.iter()) {
+                    check_pattern(p, t.clone(), ctx)?;
+                }
+            } else if let Some(namespace) = namespace {
+                    let actual_type_id = types.get_id(namespace)
+                        .ok_or_else(|| TypeError::Undefined(name.clone()))?;
+                    return Err(TypeError::InvalidType {
+                        expected: type_id,
+                        actual: actual_type_id,
+                    });
+            } else {
+                return Err(TypeError::NotASumType);
+            }
+        }
     }
 
     Ok(())

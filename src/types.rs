@@ -81,6 +81,16 @@ impl TypeMap {
         self.get_id(name).and_then(|id| self.types.get(&id))
     }
 
+    pub fn get_name(&self, type_id: TypeId) -> Option<&str> {
+        // TODO: Make this not O(n)
+        for (name, id) in self.identifiers.iter() {
+            if id == &type_id {
+                return Some(name);
+            }
+        }
+        None
+    }
+
     pub fn types(&self) -> &HashMap<TypeId, Type> {
         &self.types
     }

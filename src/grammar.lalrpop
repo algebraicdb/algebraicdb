@@ -240,7 +240,14 @@ pub Pattern: Pattern = {
     Bool => Pattern::Bool(<>),
     Double => Pattern::Double(<>),
     Ident => Pattern::Binding(<>),
-    <id:Ident> "(" <ps:Comma<Pattern>> ")" => Pattern::Variant(id, ps),
+    <namespace:Namespace?>
+        <name:Ident>
+        "(" <sub_patterns:Comma<Pattern>> ")"
+    => Pattern::Variant {
+        namespace,
+        name,
+        sub_patterns
+    },
 }
 
 Ident: String = {

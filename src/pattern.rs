@@ -16,7 +16,11 @@ pub enum Pattern {
     Double(f64),
 
     /// Actual pattern matching
-    Variant(String, Vec<Pattern>),
+    Variant {
+        namespace: Option<String>,
+        name: String,
+        sub_patterns: Vec<Pattern>,
+    },
 
     /// _
     Ignore,
@@ -54,8 +58,12 @@ impl CompiledPattern {
                 }
                 Pattern::Ignore => {}
                 Pattern::Binding(ident) => bindings.push((byte_index, type_id, ident.into())),
-                Pattern::Variant(name, patterns) => {
-                    println!("Variant pattern {} ( {:?} )", name, patterns);
+                Pattern::Variant {
+                    namespace,
+                    name,
+                    sub_patterns,
+                } => {
+                    println!("Variant pattern {} ( {:?} )", name, sub_patterns);
                     if let Type::Sum(variants) = &types[&type_id] {
                         let (i, (_, sub_types)) = variants
                             .iter()
@@ -65,13 +73,13 @@ impl CompiledPattern {
                         matches.push((byte_index, SmallVec::from_vec(serialize(&i).unwrap())));
 
                         byte_index += std::mem::size_of::<EnumTag>();
-                        for (type_id, pattern) in sub_types.iter().zip(patterns.iter()) {
+                        for (type_id, pattern) in sub_types.iter().zip(sub_patterns.iter()) {
                             let t = &types[type_id];
                             build_pattern(pattern, byte_index, types, *type_id, matches, bindings);
                             byte_index += t.size_of(types);
                         }
                     } else {
-                        panic!("Not a sum-type")
+                        panic!("not a sum-type")
                     }
                 }
             }
