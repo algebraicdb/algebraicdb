@@ -1,0 +1,5 @@
+CREATE TABLE ints(int Integer);
+
+INSERT INTO ints(int) VALUES (true), (false);
+INSERT INTO ints(int) VALUES (1.0), (42.42);
+

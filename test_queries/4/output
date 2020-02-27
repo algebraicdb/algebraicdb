@@ -1,0 +1,9 @@
+Table created
+InvalidType {
+    expected: 1,
+    actual: 3,
+}
+InvalidType {
+    expected: 1,
+    actual: 2,
+}
