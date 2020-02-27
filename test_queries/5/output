@@ -1,0 +1,32 @@
+Type MaybeInt created 
+Type MaybeMaybeInt created 
+Table created
+InvalidType {
+    expected: 4,
+    actual: 1,
+}
+NotASumType
+6 row(s) inserted
+[Just(Just(42))]
+[Just(Just(24))]
+[Just(Nothing())]
+[Just(Nothing())]
+[Nothing()]
+[Nothing()]
+[Just(Just(42))]
+[Just(Just(24))]
+[Just(Nothing())]
+[Just(Nothing())]
+[Just(Just(42))]
+[Just(Just(24))]
+[Just(Just(42))]
+[Just(Nothing())]
+[Just(Nothing())]
+[Nothing()]
+[Nothing()]
+[Just(Just(42))]
+[Just(Just(24))]
+[Just(Nothing())]
+[Just(Nothing())]
+[Nothing()]
+[Nothing()]

@@ -81,16 +81,15 @@ pub enum TypeError {
     InvalidCount { expected: usize, actual: usize },
 }
 
+#[derive(Clone, Copy, Debug)]
 pub enum DuckType<'a> {
     Concrete(TypeId),
     Variant(&'a str, &'a [Value]),
 }
 
-impl From<TypeId> for DuckType<'_> {
-    fn from(id: TypeId) -> DuckType {
-        DuckType {
-            //todo
-        }
+impl From<TypeId> for DuckType<'static> {
+    fn from(id: TypeId) -> DuckType<'static> {
+        DuckType::Concrete(id)
     }
 }
 
@@ -152,9 +151,11 @@ fn check_select_from<T: TTable>(from: &SelectFrom, ctx: &mut Context<T>) -> Resu
 
             if let Some(on_clause) = &join.on_clause {
                 let clause_type = check_expr(on_clause, ctx)?;
+                let type_map = &ctx.globals.type_map;
                 assert_type_as(
                     clause_type,
-                    ctx.globals.type_map.get_base_id(BaseType::Bool),
+                    type_map.get_base_id(BaseType::Bool),
+                    type_map,
                 )?;
             }
         }
@@ -182,15 +183,16 @@ fn check_pattern<T: TTable>(
     type_id: TypeId,
     ctx: &Context<T>,
 ) -> Result<(), TypeError> {
+    let type_map = &ctx.globals.type_map;
     match pattern {
         Pattern::Int(_) => {
-            assert_type_as(ctx.globals.type_map.get_base_id(BaseType::Integer), type_id)?;
+            assert_type_as(type_map.get_base_id(BaseType::Integer), type_id, type_map)?;
         }
         Pattern::Bool(_) => {
-            assert_type_as(ctx.globals.type_map.get_base_id(BaseType::Bool), type_id)?;
+            assert_type_as(type_map.get_base_id(BaseType::Bool), type_id, type_map)?;
         }
         Pattern::Double(_) => {
-            assert_type_as(ctx.globals.type_map.get_base_id(BaseType::Double), type_id)?;
+            assert_type_as(type_map.get_base_id(BaseType::Double), type_id, type_map)?;
         }
         Pattern::Ignore => {}
         Pattern::Binding(_) => {
@@ -214,10 +216,9 @@ fn check_pattern<T: TTable>(
             }
 
             if let Type::Sum(variants) = &types[&type_id] {
-                let (i, (_, sub_types)) = variants
+                let (_, sub_types) = variants
                     .iter()
-                    .enumerate()
-                    .find(|(_, (variant, _))| variant == name)
+                    .find(|(variant, _)| variant == name)
                     .ok_or_else(|| TypeError::Undefined(name.clone()))?;
 
                 if sub_types.len() != sub_patterns.len() {
@@ -256,14 +257,9 @@ fn check_update<T: TTable>(update: &Update, ctx: &mut Context<T>) -> Result<(), 
             None => return Err(TypeError::Undefined(assignment.col.clone())),
             Some(expected_type_id) => {
                 ctx.push_local(assignment.col.clone(), expected_type_id);
-                let expr_type_id = check_expr(&assignment.expr, ctx)?;
+                let expr_type = check_expr(&assignment.expr, ctx)?;
 
-                if expected_type_id != expr_type_id {
-                    return Err(TypeError::InvalidType {
-                        expected: expected_type_id,
-                        actual: expr_type_id,
-                    });
-                }
+                assert_type_as(expr_type, expected_type_id, &ctx.globals.type_map)?;
             }
         }
     }
@@ -278,7 +274,7 @@ fn check_delete<T: TTable>(delete: &Delete, ctx: &mut Context<T>) -> Result<(), 
             import_table_columns(&delete.table, ctx);
 
             let cond_type = check_expr(cond, &ctx)?;
-            assert_type_as(cond_type, bool_id)?;
+            assert_type_as(cond_type, bool_id, &ctx.globals.type_map)?;
 
             Ok(())
         }
@@ -312,15 +308,8 @@ fn check_insert<T: TTable>(insert: &Insert, ctx: &mut Context<T>) -> Result<(), 
             let expected_type = schema
                 .column(column)
                 .ok_or_else(|| TypeError::Undefined(column.clone()))?;
-
             let actual_type = check_expr(expr, ctx)?;
-
-            if expected_type != actual_type {
-                return Err(TypeError::InvalidType {
-                    actual: actual_type,
-                    expected: expected_type,
-                });
-            }
+            assert_type_as(actual_type, expected_type, &ctx.globals.type_map)?;
 
             // Make sure the user doesn't assign to the same column twice
             if !populated_columns.insert(column) {
@@ -394,11 +383,12 @@ fn check_create_type<T: TTable>(
     Ok(())
 }
 
-fn check_expr<T: TTable>(expr: &Expr, ctx: &Context<T>) -> Result<TypeId, TypeError> {
+fn check_expr<'a, T: TTable>(expr: &'a Expr, ctx: &Context<T>) -> Result<DuckType<'a>, TypeError> {
+    let type_map = &ctx.globals.type_map;
     match expr {
-        Expr::Ident(ident) => ctx.search_locals(ident),
+        Expr::Ident(ident) => Ok(ctx.search_locals(ident)?.into()),
 
-        Expr::Value(value) => type_of_value(&value, &ctx.globals.type_map),
+        Expr::Value(value) => type_of_value(&value, type_map),
 
         // All types are currently Eq and Ord
         Expr::Equals(e1, e2)
@@ -411,7 +401,7 @@ fn check_expr<T: TTable>(expr: &Expr, ctx: &Context<T>) -> Result<TypeId, TypeEr
             let type_2 = check_expr(e2, ctx)?;
             assert_type_eq(type_1, type_2)?;
 
-            Ok(ctx.globals.type_map.get_base_id(BaseType::Bool))
+            Ok(ctx.globals.type_map.get_base_id(BaseType::Bool).into())
         }
 
         Expr::And(e1, e2) | Expr::Or(e1, e2) => {
@@ -420,69 +410,84 @@ fn check_expr<T: TTable>(expr: &Expr, ctx: &Context<T>) -> Result<TypeId, TypeEr
 
             let bool_id = ctx.globals.type_map.get_base_id(BaseType::Bool);
 
-            assert_type_as(bool_id, type_1)?;
-            assert_type_as(bool_id, type_2)
+            assert_type_as(type_1, bool_id, type_map)?;
+            let t_id = assert_type_as(type_2, bool_id, type_map)?;
+            Ok(t_id.into())
         }
     }
 }
 
-fn assert_type_eq(type_1: TypeId, type_2: TypeId) -> Result<TypeId, TypeError> {
-    if type_1 != type_2 {
-        Err(TypeError::MismatchingTypes { type_1, type_2 })
-    } else {
-        Ok(type_1)
+fn assert_type_eq<'a, T1, T2>(type_1: T1, type_2: T2) -> Result<DuckType<'a>, TypeError>
+where DuckType<'a>: From<T1>,
+      DuckType<'a>: From<T2>,
+{
+    let (type_1, type_2) = (DuckType::from(type_1), DuckType::from(type_2));
+    use DuckType::*;
+    match (type_1, type_2) {
+        (Concrete(type_1), Concrete(type_2)) => {
+            if type_1 != type_2 {
+                return Err(TypeError::MismatchingTypes { type_1, type_2 });
+            }
+        }
+        (_, _) => unimplemented!("Comparing, duck-types"),
     }
+
+    Ok(type_1)
 }
 
-fn assert_type_as<T: Into<DuckType>>(actual: T, expected: TypeId) -> Result<TypeId, TypeError> {
-    if actual != expected {
-        Err(TypeError::InvalidType { actual, expected })
-    } else {
-        Ok(actual)
+fn assert_type_as<'a, T>(actual: T, expected: TypeId, types: &TypeMap) -> Result<TypeId, TypeError>
+where T: Into<DuckType<'a>>,
+{
+    match actual.into() {
+        DuckType::Concrete(actual) => {
+            if actual != expected {
+                return Err(TypeError::InvalidType { actual, expected });
+            }
+        }
+        DuckType::Variant(variant_name, sub_values) => {
+            let t = types.get_by_id(expected);
+
+            if let Type::Sum(variants) = t {
+                let (_, sub_types) = variants.iter()
+                    .find(|(name, _)| name == variant_name)
+                    .ok_or_else(|| TypeError::Undefined(variant_name.to_owned()))?;
+
+                if sub_types.len() != sub_values.len() {
+                    return Err(TypeError::InvalidCount {
+                        expected: sub_types.len(),
+                        actual: sub_values.len(),
+                    });
+                }
+
+                for (sub_type, sub_value) in sub_types.iter().zip(sub_values.iter()) {
+                    let vt = type_of_value(sub_value, types)?;
+                    assert_type_as(vt, *sub_type, types)?;
+                }
+            } else {
+                return Err(TypeError::NotASumType);
+            }
+        }
     }
+
+    Ok(expected)
 }
 
 pub fn type_of_value<'a>(value: &'a Value, types: &TypeMap) -> Result<DuckType<'a>, TypeError> {
     match value {
-        Value::Integer(_) => Ok(DuckType::Concrete(types.get_base_id(BaseType::Integer))),
-        Value::Double(_) => Ok(DuckType::Concrete(types.get_base_id(BaseType::Double)),
-        Value::Bool(_) => Ok(DuckType::Concrete(types.get_base_id(BaseType::Bool))),
+        Value::Integer(_) => Ok(types.get_base_id(BaseType::Integer).into()),
+        Value::Double(_) => Ok(types.get_base_id(BaseType::Double).into()),
+        Value::Bool(_) => Ok(types.get_base_id(BaseType::Bool).into()),
         Value::Sum(namespace, variant_name, sub_values) => {
             if let Some(namespace) = namespace {
                 let type_id = types
                     .get_id(namespace)
-                    .ok_or_else(|| TypeError::Undefined(namespace.clone()));
+                    .ok_or_else(|| TypeError::Undefined(namespace.clone()))?;
 
-                let t = types.get_by_id(type_id);
+                assert_type_as(DuckType::Variant(variant_name, sub_values), type_id, types)?;
 
-                assert_type_as()?;
-
-                if let Type::Sum(variants) = t {
-                    let variant = variants.iter()
-                        .find(|(name, _)| name == variant_name)
-                        .ok_or_else(|| TypeError::Undefined(variant_name.clone()))?;
-
-                    
-                } else {
-                    return Err(TypeError::NotASumType);
-                }
-
-                unimplemented!("Type check variant values");
-                if let Some(possible_constructors) = possible_constructors {
-                    if possible_constructors.len() == 0 {
-                        Err(TypeError::Undefined(variant.clone()))
-                    } else if possible_constructors.len() == 1 {
-                        Ok(possible_constructors[0])
-                    } else {
-                        Err(TypeError::AmbiguousReference(variant.clone()))
-                    }
-                } else {
-                    Err(TypeError::Undefined(variant.clone()))
-                }
-
-                Ok(DuckType::Concrete(type_id));
+                Ok(DuckType::Concrete(type_id))
             } else {
-                Ok(DuckType::Variant(variant, sub_values))
+                Ok(DuckType::Variant(variant_name, sub_values))
             }
         }
     }

@@ -59,11 +59,12 @@ impl CompiledPattern {
                 Pattern::Ignore => {}
                 Pattern::Binding(ident) => bindings.push((byte_index, type_id, ident.into())),
                 Pattern::Variant {
-                    namespace,
+                    namespace: _namespace,
                     name,
                     sub_patterns,
                 } => {
                     println!("Variant pattern {} ( {:?} )", name, sub_patterns);
+
                     if let Type::Sum(variants) = &types[&type_id] {
                         let (i, (_, sub_types)) = variants
                             .iter()
