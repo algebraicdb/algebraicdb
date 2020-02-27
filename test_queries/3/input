@@ -1,0 +1,11 @@
+CREATE TABLE ints(int Integer);
+INSERT INTO ints(int) VALUES (42);
+SELECT int FROM ints;
+
+CREATE TABLE f64s(f64 Double);
+INSERT INTO f64s(f64) VALUES (123.321);
+SELECT f64 FROM f64s;
+
+CREATE TABLE bools(bool Bool);
+INSERT INTO bools(bool) VALUES (true);
+SELECT bool FROM bools;

@@ -13,6 +13,6 @@ pub async fn setup(types: TypeMap, tables: TableMap) -> Result<Wrapper, Error>{
     let (client, _) =
         tokio_postgres::connect("host=localhost user=postgres", NoTls).await?;
 
-    
+
     Ok(Wrapper{client, types, tables})
 }

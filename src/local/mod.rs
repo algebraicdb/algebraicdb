@@ -22,4 +22,10 @@ where
     async fn create_table(&self, name: String, table: T) -> Result<(), ()>;
 }
 
+#[derive(Clone)]
 pub struct PgWrapperState {}
+impl PgWrapperState {
+    pub fn new() -> Self {
+        Self {}
+    }
+}
