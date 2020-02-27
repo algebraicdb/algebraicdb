@@ -81,6 +81,19 @@ pub enum TypeError {
     InvalidCount { expected: usize, actual: usize },
 }
 
+pub enum DuckType<'a> {
+    Concrete(TypeId),
+    Variant(&'a str, &'a [Value]),
+}
+
+impl From<TypeId> for DuckType<'_> {
+    fn from(id: TypeId) -> DuckType {
+        DuckType {
+            //todo
+        }
+    }
+}
+
 pub fn check_stmt<T: TTable>(
     stmt: &Stmt,
     globals: &ResourcesGuard<'_, T>,
@@ -190,11 +203,13 @@ fn check_pattern<T: TTable>(
         } => {
             let types = &ctx.globals.type_map;
             if let Some(namespace) = namespace {
-                if types.get_name(type_id).unwrap() == namespace {
-                    return Err(TypeError::InvalidType{
+                let actual_type_id = types.get_id(namespace)
+                    .ok_or_else(|| TypeError::Undefined(namespace.clone()))?;
+                if actual_type_id != type_id {
+                    return Err(TypeError::InvalidType {
                         expected: type_id,
-                        actual: 0,
-                    })
+                        actual: actual_type_id,
+                    });
                 }
             }
 
@@ -419,7 +434,7 @@ fn assert_type_eq(type_1: TypeId, type_2: TypeId) -> Result<TypeId, TypeError> {
     }
 }
 
-fn assert_type_as(actual: TypeId, expected: TypeId) -> Result<TypeId, TypeError> {
+fn assert_type_as<T: Into<DuckType>>(actual: T, expected: TypeId) -> Result<TypeId, TypeError> {
     if actual != expected {
         Err(TypeError::InvalidType { actual, expected })
     } else {
@@ -427,20 +442,32 @@ fn assert_type_as(actual: TypeId, expected: TypeId) -> Result<TypeId, TypeError>
     }
 }
 
-pub fn type_of_value(value: &Value, types: &TypeMap) -> Result<TypeId, TypeError> {
+pub fn type_of_value<'a>(value: &'a Value, types: &TypeMap) -> Result<DuckType<'a>, TypeError> {
     match value {
-        // TODO: maybe we should have a list of "keywords" somewhere we can use
-        Value::Integer(_) => Ok(types.get_base_id(BaseType::Integer)),
-        Value::Double(_) => Ok(types.get_base_id(BaseType::Double)),
-        Value::Bool(_) => Ok(types.get_base_id(BaseType::Bool)),
-        Value::Sum(namespace, variant, _) => {
+        Value::Integer(_) => Ok(DuckType::Concrete(types.get_base_id(BaseType::Integer))),
+        Value::Double(_) => Ok(DuckType::Concrete(types.get_base_id(BaseType::Double)),
+        Value::Bool(_) => Ok(DuckType::Concrete(types.get_base_id(BaseType::Bool))),
+        Value::Sum(namespace, variant_name, sub_values) => {
             if let Some(namespace) = namespace {
-                types
+                let type_id = types
                     .get_id(namespace)
-                    .ok_or_else(|| TypeError::Undefined(namespace.clone()))
-            } else {
-                let possible_constructors = types.constructors_of(variant);
+                    .ok_or_else(|| TypeError::Undefined(namespace.clone()));
 
+                let t = types.get_by_id(type_id);
+
+                assert_type_as()?;
+
+                if let Type::Sum(variants) = t {
+                    let variant = variants.iter()
+                        .find(|(name, _)| name == variant_name)
+                        .ok_or_else(|| TypeError::Undefined(variant_name.clone()))?;
+
+                    
+                } else {
+                    return Err(TypeError::NotASumType);
+                }
+
+                unimplemented!("Type check variant values");
                 if let Some(possible_constructors) = possible_constructors {
                     if possible_constructors.len() == 0 {
                         Err(TypeError::Undefined(variant.clone()))
@@ -452,6 +479,10 @@ pub fn type_of_value(value: &Value, types: &TypeMap) -> Result<TypeId, TypeError
                 } else {
                     Err(TypeError::Undefined(variant.clone()))
                 }
+
+                Ok(DuckType::Concrete(type_id));
+            } else {
+                Ok(DuckType::Variant(variant, sub_values))
             }
         }
     }

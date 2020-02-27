@@ -78,7 +78,11 @@ impl TypeMap {
     }
 
     pub fn get(&self, name: &str) -> Option<&Type> {
-        self.get_id(name).and_then(|id| self.types.get(&id))
+        self.get_id(name).map(|id| self.get_by_id(&id))
+    }
+
+    pub fn get_by_id(&self, id: TypeId) -> &Type {
+        self.types.get(&id).unwrap_or_else(|| panic!("No type with id: {}", id))
     }
 
     pub fn get_name(&self, type_id: TypeId) -> Option<&str> {
