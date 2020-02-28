@@ -78,7 +78,23 @@ impl TypeMap {
     }
 
     pub fn get(&self, name: &str) -> Option<&Type> {
-        self.get_id(name).and_then(|id| self.types.get(&id))
+        self.get_id(name).map(|id| self.get_by_id(id))
+    }
+
+    pub fn get_by_id(&self, id: TypeId) -> &Type {
+        self.types
+            .get(&id)
+            .unwrap_or_else(|| panic!("No type with id: {}", id))
+    }
+
+    pub fn get_name(&self, type_id: TypeId) -> Option<&str> {
+        // TODO: Make this not O(n)
+        for (name, id) in self.identifiers.iter() {
+            if id == &type_id {
+                return Some(name);
+            }
+        }
+        None
     }
 
     pub fn types(&self) -> &HashMap<TypeId, Type> {
@@ -142,7 +158,7 @@ impl Value {
             Value::Integer(val) => serialize_into(writer, val).unwrap(),
             Value::Double(val) => serialize_into(writer, val).unwrap(),
             Value::Bool(val) => serialize_into(writer, val).unwrap(),
-            Value::Sum(_type_name, variant, values) => {
+            Value::Sum(type_name, variant, values) => {
                 if let Type::Sum(variants) = t {
                     let (tag, variant_types) = variants
                         .iter()
@@ -165,7 +181,10 @@ impl Value {
                         writer.write_all(&[0]).unwrap();
                     }
                 } else {
-                    panic!("Not a sum-type");
+                    panic!(
+                        "Not a sum-type: {:?}::{}({:?})\nIs actually: {:?}",
+                        type_name, variant, values, t
+                    );
                 }
             }
         }

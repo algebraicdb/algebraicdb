@@ -1,0 +1,47 @@
+CREATE TYPE MaybeInt AS VARIANT {
+    Just(Integer),
+    Nothing(),
+};
+
+CREATE TYPE MaybeMaybeInt AS VARIANT {
+    Just(MaybeInt),
+    Nothing(),
+};
+
+CREATE TABLE oh_no(ambiguity MaybeMaybeInt);
+
+INSERT INTO oh_no(ambiguity) VALUES (Just(42));
+INSERT INTO oh_no(ambiguity) VALUES (Just(Just(Just(42))));
+
+INSERT INTO oh_no(ambiguity) VALUES
+    (Just(Just(42))),
+    (Just(Just(24))),
+
+    (Just(Nothing())),
+    (Just(Nothing())),
+
+    (Nothing()),
+    (Nothing()),
+
+    (MaybeMaybeInt::Just(          Just(1337))),
+    (               Just(MaybeInt::Just(1338))),
+    (MaybeMaybeInt::Just(MaybeInt::Just(1339))),
+
+    (MaybeMaybeInt::Nothing()),
+    (               Just(MaybeInt::Nothing())),
+    (MaybeMaybeInt::Just(MaybeInt::Nothing()));
+
+
+SELECT ambiguity FROM oh_no;
+
+SELECT ambiguity: Just(_), ambiguity FROM oh_no;
+
+SELECT ambiguity: Just(Just(_)), ambiguity FROM oh_no;
+
+SELECT ambiguity: Just(Just(42)), ambiguity FROM oh_no;
+
+SELECT ambiguity: Just(Nothing()), ambiguity FROM oh_no;
+
+SELECT ambiguity: Nothing(), ambiguity FROM oh_no;
+
+SELECT ambiguity: _, ambiguity FROM oh_no;
