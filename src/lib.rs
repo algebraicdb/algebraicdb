@@ -15,7 +15,7 @@ mod pre_typechecker;
 mod table;
 mod typechecker;
 mod types;
-//mod psqlwrapper;
+mod psqlwrapper;
 
 pub use api::custom::create_with_writers;
 pub use api::tcp_api::create_tcp_server;

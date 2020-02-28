@@ -1,7 +1,7 @@
 use crate::ast::*;
 //use crate::pattern::*;
 use crate::types::*;
-pub fn translate(ins: &Insert) -> String {
+pub fn translate_insert(ins: &Insert) -> String {
     let rows: String = ins
         .rows
         .iter()

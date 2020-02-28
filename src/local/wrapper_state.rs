@@ -1,6 +1,5 @@
 use super::types::*;
 use super::*;
-use crate::table::Table;
 use crate::types::TypeMap;
 use async_trait::async_trait;
 use futures::executor::block_on;
@@ -12,9 +11,11 @@ use tokio::sync::oneshot;
 use tokio::sync::RwLock;
 use tokio_postgres::{Config, Client, NoTls};
 use tokio_postgres;
+use crate::table::Schema;
 
-type RequestSender = mpsc::UnboundedSender<(Request<Table>, oneshot::Sender<Response<Table>>)>;
-type RequestReceiver = mpsc::UnboundedReceiver<(Request<Table>, oneshot::Sender<Response<Table>>)>;
+
+type RequestSender = mpsc::UnboundedSender<(Request<Schema>, oneshot::Sender<Response<Schema>>)>;
+type RequestReceiver = mpsc::UnboundedReceiver<(Request<Schema>, oneshot::Sender<Response<Schema>>)>;
 
 #[derive(Clone)]
 pub struct WrapperState {
@@ -22,7 +23,7 @@ pub struct WrapperState {
 }
 
 impl WrapperState {
-    async fn send_request(&self, request: Request<Table>) -> Response<Table> {
+    async fn send_request(&self, request: Request<Schema>) -> Response<Schema> {
         let (response_in, response_out) = oneshot::channel();
         self.channel
             .send((request, response_in))
@@ -34,8 +35,8 @@ impl WrapperState {
 }
 
 #[async_trait]
-impl DbState<Table> for WrapperState {
-    async fn acquire_resources(&self, acquire: Acquire) -> Result<Resources<Table>, String> {
+impl DbState<Schema> for WrapperState {
+    async fn acquire_resources(&self, acquire: Acquire) -> Result<Resources<Schema>, String> {
         match self.send_request(Request::Acquire(acquire)).await {
             Response::AcquiredResources(resources) => Ok(resources),
             Response::NoSuchTable(name) => Err(name),
@@ -43,7 +44,7 @@ impl DbState<Table> for WrapperState {
         }
     }
 
-    async fn create_table(&self, name: String, table: Table) -> Result<(), ()> {
+    async fn create_table(&self, name: String, table: Schema) -> Result<(), ()> {
         match self.send_request(Request::CreateTable(name, table)).await {
             Response::CreateTable(resp) => resp,
             _ => unreachable!(),
@@ -55,7 +56,7 @@ impl WrapperState {
     pub async fn new() -> Result<Self, Box<dyn Error>> {
         let (requests_in, requests_out) = mpsc::unbounded_channel();
 
-        std::thread::spawn(move || resource_manager(requests_out));
+        tokio::spawn(resource_manager(requests_out));
         
         Ok(Self {
             channel: requests_in,
@@ -63,8 +64,8 @@ impl WrapperState {
     }
 }
 
-fn resource_manager(mut requests: RequestReceiver) {
-    let mut tables: HashMap<String, Arc<RwLock<Table>>> = HashMap::new();
+async fn resource_manager(mut requests: RequestReceiver) {
+    let mut tables: HashMap<String, Arc<RwLock<Schema>>> = HashMap::new();
     let type_map: Arc<RwLock<TypeMap>> = Arc::new(RwLock::new(TypeMap::new()));
 
     let mut config = Config::new();
@@ -115,6 +116,7 @@ fn resource_manager(mut requests: RequestReceiver) {
                         .send(Response::CreateTable(Err(())))
                         .unwrap_or_else(|_| eprintln!("global::manager: response channel closed."));
                 } else {
+                    &client.query(format!("CREATE TABLE {};", &name).as_str(), &[]).await.unwrap();
                     tables.insert(name, Arc::new(RwLock::new(table)));
                     response_ch
                         .send(Response::CreateTable(Ok(())))

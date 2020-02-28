@@ -1,19 +1,6 @@
 use crate::ast::*;
 
 
-
-pub fn translate (stmt: &Stmt) -> String {
-    match stmt {
-        Stmt::Insert(ins) => super::insert::translate(ins),
-        _ => unimplemented!(),
-    }
-}
-
-
-
-
-
-
 #[cfg(test)]
 pub mod test {
     use super::*;
@@ -33,9 +20,7 @@ pub mod test {
         
 
         for (ast, out) in asts.iter().zip(output) {
-
             assert_eq!(translate(ast), out);
-
         }
         
     }

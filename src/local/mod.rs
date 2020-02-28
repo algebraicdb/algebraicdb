@@ -15,6 +15,11 @@ pub trait TTable {
     fn get_schema(&self) -> &Schema;
 }
 
+impl TTable for Schema{
+    fn get_schema(&self) -> &Schema{
+        return &self
+    }
+}
 #[async_trait]
 pub trait DbState<T>
 where
@@ -22,12 +27,4 @@ where
 {
     async fn acquire_resources(&self, acquire: Acquire) -> Result<Resources<T>, String>;
     async fn create_table(&self, name: String, table: T) -> Result<(), ()>;
-}
-
-#[derive(Clone)]
-pub struct PgWrapperState {}
-impl PgWrapperState {
-    pub fn new() -> Self {
-        Self {}
-    }
 }

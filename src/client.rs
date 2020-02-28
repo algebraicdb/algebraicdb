@@ -8,7 +8,7 @@ use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, BufWriter};
 pub type State = local::DbmsState;
 
 #[cfg(feature = "wrapper")]
-pub type State = local::PgWrapperState;
+pub type State = local::WrapperState;
 
 pub(crate) async fn client<R, W>(
     mut reader: R,

@@ -30,5 +30,5 @@ prettydiff = "0.3.1"
 lalrpop = "0.17.2"
 
 [features]
-default = []
+default = ["wrapper"]
 wrapper = []
