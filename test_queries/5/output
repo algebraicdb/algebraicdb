@@ -6,7 +6,7 @@ InvalidType {
     actual: 1,
 }
 NotASumType
-13 row(s) inserted
+12 row(s) inserted
 [Just(Just(42))]
 [Just(Just(24))]
 [Just(Nothing())]
@@ -16,7 +16,6 @@ NotASumType
 [Just(Just(1337))]
 [Just(Just(1338))]
 [Just(Just(1339))]
-[Just(Just(1339))]
 [Nothing()]
 [Just(Nothing())]
 [Just(Nothing())]
@@ -27,14 +26,12 @@ NotASumType
 [Just(Just(1337))]
 [Just(Just(1338))]
 [Just(Just(1339))]
-[Just(Just(1339))]
 [Just(Nothing())]
 [Just(Nothing())]
 [Just(Just(42))]
 [Just(Just(24))]
 [Just(Just(1337))]
 [Just(Just(1338))]
-[Just(Just(1339))]
 [Just(Just(1339))]
 [Just(Just(42))]
 [Just(Nothing())]
@@ -52,7 +49,6 @@ NotASumType
 [Nothing()]
 [Just(Just(1337))]
 [Just(Just(1338))]
-[Just(Just(1339))]
 [Just(Just(1339))]
 [Nothing()]
 [Just(Nothing())]
