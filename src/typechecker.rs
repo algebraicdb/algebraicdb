@@ -399,7 +399,7 @@ fn check_expr<'a, T: TTable>(expr: &'a Expr, ctx: &Context<T>) -> Result<DuckTyp
         | Expr::GreaterThan(e1, e2) => {
             let type_1 = check_expr(e1, ctx)?;
             let type_2 = check_expr(e2, ctx)?;
-            assert_type_eq(type_1, type_2)?;
+            assert_type_eq(type_1, type_2, type_map)?;
 
             Ok(ctx.globals.type_map.get_base_id(BaseType::Bool).into())
         }
@@ -417,7 +417,7 @@ fn check_expr<'a, T: TTable>(expr: &'a Expr, ctx: &Context<T>) -> Result<DuckTyp
     }
 }
 
-fn assert_type_eq<'a, T1, T2>(type_1: T1, type_2: T2) -> Result<DuckType<'a>, TypeError>
+fn assert_type_eq<'a, T1, T2>(type_1: T1, type_2: T2, type_map: &TypeMap) -> Result<DuckType<'a>, TypeError>
 where DuckType<'a>: From<T1>,
       DuckType<'a>: From<T2>,
 {
@@ -429,13 +429,17 @@ where DuckType<'a>: From<T1>,
                 return Err(TypeError::MismatchingTypes { type_1, type_2 });
             }
         }
+        (Concrete(concrete_type), variant@Variant(_, _)) |
+        (variant@Variant(_, _), Concrete(concrete_type)) => {
+            return assert_type_as(variant, concrete_type, type_map).map(Into::into);
+        }
         (_, _) => unimplemented!("Comparing, duck-types"),
     }
 
     Ok(type_1)
 }
 
-fn assert_type_as<'a, T>(actual: T, expected: TypeId, types: &TypeMap) -> Result<TypeId, TypeError>
+fn assert_type_as<'a, T>(actual: T, expected: TypeId, type_map: &TypeMap) -> Result<TypeId, TypeError>
 where T: Into<DuckType<'a>>,
 {
     match actual.into() {
@@ -445,7 +449,7 @@ where T: Into<DuckType<'a>>,
             }
         }
         DuckType::Variant(variant_name, sub_values) => {
-            let t = types.get_by_id(expected);
+            let t = type_map.get_by_id(expected);
 
             if let Type::Sum(variants) = t {
                 let (_, sub_types) = variants.iter()
@@ -460,8 +464,8 @@ where T: Into<DuckType<'a>>,
                 }
 
                 for (sub_type, sub_value) in sub_types.iter().zip(sub_values.iter()) {
-                    let vt = type_of_value(sub_value, types)?;
-                    assert_type_as(vt, *sub_type, types)?;
+                    let vt = type_of_value(sub_value, type_map)?;
+                    assert_type_as(vt, *sub_type, type_map)?;
                 }
             } else {
                 return Err(TypeError::NotASumType);
