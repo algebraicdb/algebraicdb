@@ -399,18 +399,19 @@ fn check_expr<'a, T: TTable>(expr: &'a Expr, ctx: &Context<T>) -> Result<DuckTyp
             let type_2 = check_expr(e2, ctx)?;
             assert_type_eq(type_1, type_2, type_map)?;
 
-            Ok(ctx.globals.type_map.get_base_id(BaseType::Bool).into())
+            Ok(type_map.get_base_id(BaseType::Bool).into())
         }
 
         Expr::And(e1, e2) | Expr::Or(e1, e2) => {
             let type_1 = check_expr(e1, ctx)?;
             let type_2 = check_expr(e2, ctx)?;
 
-            let bool_id = ctx.globals.type_map.get_base_id(BaseType::Bool);
+            let bool_id = type_map.get_base_id(BaseType::Bool);
 
             assert_type_as(type_1, bool_id, type_map)?;
-            let t_id = assert_type_as(type_2, bool_id, type_map)?;
-            Ok(t_id.into())
+            assert_type_as(type_2, bool_id, type_map)?;
+
+            Ok(bool_id.into())
         }
     }
 }
