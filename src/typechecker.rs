@@ -12,6 +12,31 @@ pub struct Context<'a, T> {
 
 type Scope = HashMap<String, Vec<TypeId>>;
 
+#[derive(Debug)]
+pub enum TypeError {
+    NotSupported(&'static str),
+    Undefined(String),
+    AmbiguousReference(String),
+    NotASumType,
+    AlreadyDefined,
+    MissingColumn(String),
+    MismatchingTypes { type_1: TypeId, type_2: TypeId },
+    InvalidType { expected: TypeId, actual: TypeId },
+    InvalidCount { expected: usize, actual: usize },
+}
+
+#[derive(Clone, Copy, Debug)]
+pub enum DuckType<'a> {
+    Concrete(TypeId),
+    Variant(&'a str, &'a [Value]),
+}
+
+impl From<TypeId> for DuckType<'static> {
+    fn from(id: TypeId) -> DuckType<'static> {
+        DuckType::Concrete(id)
+    }
+}
+
 impl<'a, T: TTable> Context<'a, T> {
     pub fn new(globals: &'a ResourcesGuard<'a, T>) -> Self {
         Context {
@@ -65,31 +90,6 @@ impl<'a, T: TTable> Context<'a, T> {
 
     pub fn locals(&self) -> &[Scope] {
         &self.locals[..]
-    }
-}
-
-#[derive(Debug)]
-pub enum TypeError {
-    NotSupported(&'static str),
-    Undefined(String),
-    AmbiguousReference(String),
-    NotASumType,
-    AlreadyDefined,
-    MissingColumn(String),
-    MismatchingTypes { type_1: TypeId, type_2: TypeId },
-    InvalidType { expected: TypeId, actual: TypeId },
-    InvalidCount { expected: usize, actual: usize },
-}
-
-#[derive(Clone, Copy, Debug)]
-pub enum DuckType<'a> {
-    Concrete(TypeId),
-    Variant(&'a str, &'a [Value]),
-}
-
-impl From<TypeId> for DuckType<'static> {
-    fn from(id: TypeId) -> DuckType<'static> {
-        DuckType::Concrete(id)
     }
 }
 

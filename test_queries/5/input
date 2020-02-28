@@ -21,7 +21,15 @@ INSERT INTO oh_no(ambiguity) VALUES
     (Just(Nothing())),
 
     (Nothing()),
-    (Nothing());
+    (Nothing()),
+
+    (MaybeMaybeInt::Just(          Just(1337))),
+    (               Just(MaybeInt::Just(1338))),
+    (MaybeMaybeInt::Just(MaybeInt::Just(1339))),
+
+    (MaybeMaybeInt::Nothing()),
+    (               Just(MaybeInt::Nothing())),
+    (MaybeMaybeInt::Just(MaybeInt::Nothing()));
 
 
 SELECT ambiguity FROM oh_no;
