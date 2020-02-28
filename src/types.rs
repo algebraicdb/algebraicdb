@@ -82,7 +82,9 @@ impl TypeMap {
     }
 
     pub fn get_by_id(&self, id: TypeId) -> &Type {
-        self.types.get(&id).unwrap_or_else(|| panic!("No type with id: {}", id))
+        self.types
+            .get(&id)
+            .unwrap_or_else(|| panic!("No type with id: {}", id))
     }
 
     pub fn get_name(&self, type_id: TypeId) -> Option<&str> {
@@ -179,7 +181,10 @@ impl Value {
                         writer.write_all(&[0]).unwrap();
                     }
                 } else {
-                    panic!("Not a sum-type: {:?}::{}({:?})\nIs actually: {:?}", type_name, variant, values, t);
+                    panic!(
+                        "Not a sum-type: {:?}::{}({:?})\nIs actually: {:?}",
+                        type_name, variant, values, t
+                    );
                 }
             }
         }
