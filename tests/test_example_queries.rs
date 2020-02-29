@@ -1,4 +1,4 @@
-use algebraicdb::create_with_writers;
+/*use algebraicdb::create_with_writers;
 use prettydiff::basic::DiffOp;
 use prettydiff::text::diff_lines;
 use std::io;
@@ -66,3 +66,4 @@ async fn run_example_query(input: String, expected_output: String) -> io::Result
         Ok(Err(()))
     }
 }
+*/
