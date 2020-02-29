@@ -4,10 +4,10 @@ use crate::types::{TypeMap, TypeId, Type};
 
 
 pub fn translate_create_table(create_table: CreateTable, schema: &Schema, typemap: &TypeMap) -> String  {
-    return format!("CREATE TABLE {};", translate_table(schema, typemap))
+    return format!("CREATE TABLE {} ({});", create_table.table, translate_schema(schema, typemap))
 }
 
-fn translate_table(schema: &Schema, typemap: &TypeMap)-> String {
+fn translate_schema(schema: &Schema, typemap: &TypeMap)-> String {
     schema.columns.iter().map(|x| col_to_string(x, typemap)).collect::<Vec<String>>().join(",")
 }
 
@@ -24,3 +24,34 @@ fn translate_typeid(tid: &TypeId, typemap: &TypeMap) -> String {
     }
     
 }
+/*
+#[cfg(test)]
+pub mod test{
+    use crate::grammar::StmtParser;
+    use crate::ast::*;
+    use super::translate_create_table;
+    fn test_create_table(){
+        let parser = StmtParser::new();
+
+        let inputs = vec![
+            r#"CREATE TABLE table (col Integer);"#,
+            r#"CREATE TABLE table (col Sum(Thing(Integer)), col2 Integer);"#,
+        ];
+        let outputs = vec![
+            r#"CREATE TABLE table (col Integer);"#,
+            r#"CREATE TABLE table (col Sum(Thing(Integer)), col2 Integer);"#,
+        ];
+
+        let asts = inputs.iter().map(|x| parser.parse(x).unwrap()).collect::<Vec<Stmt>>();
+
+        let tables = asts.iter().map(|x| match x {
+            Stmt::CreateTable(ctable) => ctable
+        }).collect::<Vec<CreateTable>>();
+
+
+        for (table, out) in tables.iter().zip(outputs) {
+            assert_eq!(translate_create_table(table, ), out);
+        }
+    }
+}
+*/

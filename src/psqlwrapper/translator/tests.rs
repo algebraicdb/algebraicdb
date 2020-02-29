@@ -20,7 +20,7 @@ pub mod test {
         
 
         for (ast, out) in asts.iter().zip(output) {
-            assert_eq!(translate(ast), out);
+            assert_eq!(translate_insert(ast), out);
         }
         
     }
