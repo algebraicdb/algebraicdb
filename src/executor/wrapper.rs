@@ -27,15 +27,18 @@ pub(crate) async fn execute_query(
     use crate::grammar::StmtParser;
 
     let result: Result<Stmt, _> = StmtParser::new().parse(&input);
+
     let ast = match result {
         Ok(ast) => ast,
         Err(e) => return Ok(w.write_all(format!("{:#?}\n", e).as_bytes()).await?),
     };
+
     // 2. pre-tc
     let request = pre_typechecker::get_resource_request(&ast);
 
 
     // 3. Get schema access
+    
     let response = s.acquire_resources(request).await;
     let mut resources = match response {
         Ok(resources) => resources,
@@ -45,6 +48,8 @@ pub(crate) async fn execute_query(
                 .await?)
         }
     };
+    dbg!("gotdasdasdasdawsd");
+
     let resources = resources.take().await;
     // 4. TC
     match typechecker::check_stmt(&ast, &resources) {
@@ -98,7 +103,7 @@ async fn execute_create_table(
             (column_name, t_id)
         })
         .collect();
-    //TODO RUN PSQL QUERY
+    
     let schema = Schema::new(columns);
     s.create_table(create_table.table, schema);
     Ok(())

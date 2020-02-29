@@ -36,9 +36,10 @@ impl WrapperState {
 
 #[async_trait]
 impl DbState<Schema> for WrapperState {
+    // FIXME: This is where shit breaks, it never get the resource for some reason.
     async fn acquire_resources(&self, acquire: Acquire) -> Result<Resources<Schema>, String> {
         match self.send_request(Request::Acquire(acquire)).await {
-            Response::AcquiredResources(resources) => Ok(resources),
+            Response::AcquiredResources(resources) =>  Ok(resources),
             Response::NoSuchTable(name) => Err(name),
             _ => unreachable!(),
         }
@@ -55,9 +56,7 @@ impl DbState<Schema> for WrapperState {
 impl WrapperState {
     pub async fn new() -> Result<Self, Box<dyn Error>> {
         let (requests_in, requests_out) = mpsc::unbounded_channel();
-
         tokio::spawn(resource_manager(requests_out));
-        
         Ok(Self {
             channel: requests_in,
         })
@@ -65,10 +64,11 @@ impl WrapperState {
 }
 
 async fn resource_manager(mut requests: RequestReceiver) {
+    use crate::psqlwrapper::translator;
     let mut tables: HashMap<String, Arc<RwLock<Schema>>> = HashMap::new();
     let type_map: Arc<RwLock<TypeMap>> = Arc::new(RwLock::new(TypeMap::new()));
-
     let mut config = Config::new();
+
     config
         .user("postgres")
         .password("example")
@@ -116,7 +116,9 @@ async fn resource_manager(mut requests: RequestReceiver) {
                         .send(Response::CreateTable(Err(())))
                         .unwrap_or_else(|_| eprintln!("global::manager: response channel closed."));
                 } else {
-                    &client.query(format!("CREATE TABLE {};", &name).as_str(), &[]).await.unwrap();
+                    println!("got here");
+                    let guard = type_map.read().await;
+                    &client.query(translator::translate_create_table(&name, &table, &guard).as_str(), &[]).await.unwrap();
                     tables.insert(name, Arc::new(RwLock::new(table)));
                     response_ch
                         .send(Response::CreateTable(Ok(())))

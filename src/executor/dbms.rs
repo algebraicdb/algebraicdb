@@ -115,6 +115,7 @@ async fn execute_create_table(
     resources: ResourcesGuard<'_, Table>,
     w: &mut (dyn AsyncWrite + Send + Unpin),
 ) -> Result<(), Box<dyn Error>> {
+    
     let columns: Vec<_> = create_table
         .columns
         .into_iter()

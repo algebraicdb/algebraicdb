@@ -1,2 +1,5 @@
-pub mod insert;
-pub mod create_table;
+mod insert;
+mod create_table;
+
+pub use self::insert::*;
+pub use self::create_table::*;

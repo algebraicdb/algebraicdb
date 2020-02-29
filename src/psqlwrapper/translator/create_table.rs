@@ -3,12 +3,12 @@ use crate::ast::*;
 use crate::types::{TypeMap, TypeId, Type};
 
 
-pub fn translate_create_table(create_table: CreateTable, schema: &Schema, typemap: &TypeMap) -> String  {
-    return format!("CREATE TABLE {} ({});", create_table.table, translate_schema(schema, typemap))
+pub fn translate_create_table(name: &String, schema: &Schema, typemap: &TypeMap) -> String  {
+    return format!("CREATE TABLE {} ({});", name, translate_schema(schema, &typemap))
 }
 
 fn translate_schema(schema: &Schema, typemap: &TypeMap)-> String {
-    schema.columns.iter().map(|x| col_to_string(x, typemap)).collect::<Vec<String>>().join(",")
+    schema.columns.iter().map(|x| col_to_string(x, &typemap)).collect::<Vec<String>>().join(",")
 }
 
 fn col_to_string(col: &(String, TypeId), typemap: &TypeMap) -> String {
