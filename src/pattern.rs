@@ -1,4 +1,4 @@
-use crate::ast::{Expr, SelectItem};
+use crate::ast::{Expr, WhereItem};
 use crate::table::Schema;
 use crate::types::{EnumTag, Type, TypeId, TypeMap};
 use bincode::serialize;
@@ -37,7 +37,7 @@ pub struct CompiledPattern {
 }
 
 impl CompiledPattern {
-    pub fn compile(pattern: &[SelectItem], schema: &Schema, types: &TypeMap) -> Self {
+    pub fn compile(pattern: &[WhereItem], schema: &Schema, types: &TypeMap) -> Self {
         fn build_pattern(
             pattern: &Pattern,
             mut byte_index: usize,
@@ -91,8 +91,9 @@ impl CompiledPattern {
 
         for select_item in pattern {
             match select_item {
-                SelectItem::Expr(Expr::Ident(name)) => {
-                    let mut byte_index = 0;
+                /*
+                WhereItem::Expr(Expr::Ident(name)) => {
+                    let mut byte_ind ex = 0;
                     for (column, type_id) in &schema.columns {
                         if column == name {
                             bindings.push((byte_index, *type_id, name.into()));
@@ -103,8 +104,9 @@ impl CompiledPattern {
                         byte_index += t.size_of(types);
                     }
                 }
-                SelectItem::Expr(_) => {} // Ignore expressions for now
-                SelectItem::Pattern(name, pattern) => {
+                */
+                WhereItem::Expr(_) => {} // Ignore expressions for now
+                WhereItem::Pattern(name, pattern) => {
                     let mut byte_index = 0;
                     for (column, t_id) in &schema.columns {
                         if column == name {

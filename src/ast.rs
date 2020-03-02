@@ -23,13 +23,13 @@ pub struct Ass {
 
 #[derive(Debug)]
 pub struct Select {
-    pub items: Vec<SelectItem>,
+    pub items: Vec<Expr>,
     pub from: Option<SelectFrom>,
     pub where_clause: Option<WhereClause>,
 }
 
 #[derive(Debug)]
-pub enum SelectItem {
+pub enum WhereItem {
     Expr(Expr),
     Pattern(String, Pattern),
 }
@@ -58,7 +58,9 @@ pub enum JoinType {
 }
 
 #[derive(Debug)]
-pub struct WhereClause(pub Expr);
+pub struct WhereClause {
+    pub items: Vec<WhereItem>,
+}
 
 #[derive(Debug)]
 pub struct Delete {

@@ -87,12 +87,31 @@ async fn execute_select(
         Some(SelectFrom::Table(table_name)) => {
             let table = resources.read_table(&table_name);
 
-            let p =
-                CompiledPattern::compile(&select.items, table.get_schema(), &resources.type_map);
+            let p = if let Some(where_clause) = select.where_clause {
+                CompiledPattern::compile(&where_clause.items, table.get_schema(), &resources.type_map)
+            } else {
+                CompiledPattern::compile(&[], table.get_schema(), &resources.type_map)
+            };
 
             for row in table.pattern_iter(&p, &resources.type_map) {
                 w.write_all(b"[").await?;
                 let mut first = true;
+
+                for expr in &select.items {
+                    match expr {
+                        Expr::Ident(ident) => {
+                            for (name, cell) in row) {
+                                if name == ident {
+                                    if !first {
+                                        w.write_all(b", ").await?;
+                                    }
+                                    first = false;
+                                    w.write_all(format!("{}", cell).as_bytes()).await?;
+                                }
+                            }
+                        }
+                    }
+                }
                 for (_name, cell) in row {
                     if !first {
                         w.write_all(b", ").await?;
