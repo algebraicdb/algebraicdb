@@ -305,7 +305,9 @@ pub mod tests {
 
         // helper function for extracting a pattern match ast from sql input
         let parse_pattern = |input: &str| -> CompiledPattern {
-            let stmt = StmtParser::new().parse(input).unwrap_or_else(|_| panic!("Parsing pattern \"{}\" failed.", input));
+            let stmt = StmtParser::new()
+                .parse(input)
+                .unwrap_or_else(|_| panic!("Parsing pattern \"{}\" failed.", input));
             match stmt {
                 Stmt::Select(Select { where_clause, .. }) => {
                     if let Some(wc) = where_clause {

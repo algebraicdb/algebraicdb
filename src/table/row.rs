@@ -11,7 +11,7 @@ pub struct Row<'tb> {
 pub struct CellIter<'tb, 'ts> {
     schema: &'tb Schema,
     pub data: &'tb [u8],
-    type_map: &'ts TypeMap ,
+    type_map: &'ts TypeMap,
     cursor: usize,
     col: usize,
 }
@@ -39,7 +39,6 @@ impl<'tb, 'ts> Iterator for CellIter<'tb, 'ts> {
         Some((name, cell))
     }
 }
-
 
 impl<'tb> Row<'tb> {
     pub fn new(schema: &'tb Schema, data: &'tb [u8]) -> Self {

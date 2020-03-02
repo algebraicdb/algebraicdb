@@ -89,7 +89,11 @@ async fn execute_select(
             let table = resources.read_table(&table_name);
 
             let p = if let Some(where_clause) = select.where_clause {
-                CompiledPattern::compile(&where_clause.items, table.get_schema(), &resources.type_map)
+                CompiledPattern::compile(
+                    &where_clause.items,
+                    table.get_schema(),
+                    &resources.type_map,
+                )
             } else {
                 CompiledPattern::compile(&[], table.get_schema(), &resources.type_map)
             };
@@ -99,7 +103,8 @@ async fn execute_select(
             let mut fmt_buf = String::new();
 
             // Iterator of all bindings in pattern matches, chained with iterator of all columns.
-            let rows = table.pattern_iter(&p, &resources.type_map)
+            let rows = table
+                .pattern_iter(&p, &resources.type_map)
                 .map(|row| row.chain(table.get_row(row.row()).iter(&resources.type_map)));
 
             for row in rows {

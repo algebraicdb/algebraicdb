@@ -201,9 +201,7 @@ fn check_pattern<T: TTable>(
             assert_type_as(type_map.get_base_id(BaseType::Double), type_id, type_map)?;
         }
         Pattern::Ignore => {}
-        Pattern::Binding(name) => {
-            ctx.push_local(name.to_owned(), type_id)
-        }
+        Pattern::Binding(name) => ctx.push_local(name.to_owned(), type_id),
         Pattern::Variant {
             namespace,
             name,
