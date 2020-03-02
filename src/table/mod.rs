@@ -305,10 +305,14 @@ pub mod tests {
 
         // helper function for extracting a pattern match ast from sql input
         let parse_pattern = |input: &str| -> CompiledPattern {
-            let stmt = StmtParser::new().parse(input).unwrap();
+            let stmt = StmtParser::new().parse(input).unwrap_or_else(|_| panic!("Parsing pattern \"{}\" failed.", input));
             match stmt {
-                Stmt::Select(Select { items, .. }) => {
-                    CompiledPattern::compile(&items, &schema, &types)
+                Stmt::Select(Select { where_clause, .. }) => {
+                    if let Some(wc) = where_clause {
+                        CompiledPattern::compile(&wc.items, &schema, &types)
+                    } else {
+                        CompiledPattern::compile(&[], &schema, &types)
+                    }
                 }
                 _ => panic!("Not a select statement"),
             }
@@ -323,16 +327,16 @@ pub mod tests {
         };
 
         // iterate over all matching rows
-        test_pattern("SELECT x: Int(1);", box |i| assert_eq!(i.count(), 2));
-        test_pattern("SELECT x: Int(2);", box |i| assert_eq!(i.count(), 4));
-        test_pattern("SELECT x: Int(3);", box |i| assert_eq!(i.count(), 1));
-        test_pattern("SELECT x: Int(42);", box |i| assert_eq!(i.count(), 0));
-        test_pattern("SELECT x: Nil();", box |i| assert_eq!(i.count(), 7));
+        test_pattern("SELECT WHERE x: Int(1);", box |i| assert_eq!(i.count(), 2));
+        test_pattern("SELECT WHERE x: Int(2);", box |i| assert_eq!(i.count(), 4));
+        test_pattern("SELECT WHERE x: Int(3);", box |i| assert_eq!(i.count(), 1));
+        test_pattern("SELECT WHERE x: Int(42);", box |i| assert_eq!(i.count(), 0));
+        test_pattern("SELECT WHERE x: Nil();", box |i| assert_eq!(i.count(), 7));
 
         // iterate over all bound cells of all matching rows.
         // two rows should match, multiplied by three bindings x1, ý2, x3.
         test_pattern(
-            "SELECT x: Int(2), x: x1, y: y2, x: x3, y: Int(2);",
+            "SELECT WHERE x: Int(2), x: x1, y: y2, x: x3, y: Int(2);",
             box |i| assert_eq!(i.flatten().count(), 6),
         );
     }

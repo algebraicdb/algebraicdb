@@ -1,5 +1,6 @@
 use super::{Row, Table};
 
+#[derive(Clone, Copy)]
 pub struct RowIter<'tb> {
     table: &'tb Table,
     row: usize,

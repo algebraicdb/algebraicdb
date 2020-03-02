@@ -187,7 +187,7 @@ fn check_where_clause<T: TTable>(
 fn check_pattern<T: TTable>(
     pattern: &Pattern,
     type_id: TypeId,
-    ctx: &Context<T>,
+    ctx: &mut Context<T>,
 ) -> Result<(), TypeError> {
     let type_map = &ctx.globals.type_map;
     match pattern {
@@ -201,8 +201,8 @@ fn check_pattern<T: TTable>(
             assert_type_as(type_map.get_base_id(BaseType::Double), type_id, type_map)?;
         }
         Pattern::Ignore => {}
-        Pattern::Binding(_) => {
-            // TODO: add to ctx
+        Pattern::Binding(name) => {
+            ctx.push_local(name.to_owned(), type_id)
         }
         Pattern::Variant {
             namespace,
@@ -276,7 +276,6 @@ fn check_update<T: TTable>(update: &Update, ctx: &mut Context<T>) -> Result<(), 
 }
 
 fn check_delete<T: TTable>(delete: &Delete, ctx: &mut Context<T>) -> Result<(), TypeError> {
-    let bool_id = ctx.globals.type_map.get_base_id(BaseType::Bool);
     match &delete.where_clause {
         Some(clause) => {
             import_table_columns(&delete.table, ctx);

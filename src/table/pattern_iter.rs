@@ -2,6 +2,7 @@ use super::{Cell, Table};
 use crate::pattern::CompiledPattern;
 use crate::types::TypeMap;
 
+#[derive(Clone, Copy)]
 pub struct RowPatternIter<'p, 'ts, 'tb> {
     pattern: &'p CompiledPattern,
     types: &'ts TypeMap,
@@ -9,11 +10,13 @@ pub struct RowPatternIter<'p, 'ts, 'tb> {
     row: usize,
 }
 
+#[derive(Clone, Copy)]
 pub struct CellPatternIter<'p, 'ts, 'tb> {
     pattern: &'p CompiledPattern,
     types: &'ts TypeMap,
     data: &'tb [u8],
     cursor: usize,
+    row: usize,
 }
 
 impl<'p, 'ts, 'tb> RowPatternIter<'p, 'ts, 'tb> {
@@ -24,6 +27,16 @@ impl<'p, 'ts, 'tb> RowPatternIter<'p, 'ts, 'tb> {
             row: 0,
             types,
         }
+    }
+
+    pub fn row(&self) -> usize {
+        self.row
+    }
+}
+
+impl<'p, 'ts, 'tb> CellPatternIter<'p, 'ts, 'tb> {
+    pub fn row(&self) -> usize {
+        self.row
     }
 }
 
@@ -48,6 +61,7 @@ impl<'p, 'ts, 'tb> Iterator for RowPatternIter<'p, 'ts, 'tb> {
 
             return Some(CellPatternIter {
                 cursor: 0,
+                row: self.row - 1,
                 pattern: self.pattern,
                 types: self.types,
                 data: row.data,
@@ -57,7 +71,7 @@ impl<'p, 'ts, 'tb> Iterator for RowPatternIter<'p, 'ts, 'tb> {
 }
 
 impl<'p, 'ts, 'tb> Iterator for CellPatternIter<'p, 'ts, 'tb> {
-    type Item = (&'p str, Cell<'ts, 'tb>);
+    type Item = (&'p str, Cell<'tb, 'ts>);
 
     fn next(&mut self) -> Option<Self::Item> {
         self.pattern

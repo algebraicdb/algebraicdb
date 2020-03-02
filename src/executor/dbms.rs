@@ -6,6 +6,7 @@ use crate::table::{Schema, Table};
 use crate::typechecker;
 use crate::types::{Type, TypeId, Value};
 use std::error::Error;
+use std::fmt::Write;
 use tokio::io::{AsyncWrite, AsyncWriteExt};
 
 struct Context {
@@ -93,31 +94,39 @@ async fn execute_select(
                 CompiledPattern::compile(&[], table.get_schema(), &resources.type_map)
             };
 
-            for row in table.pattern_iter(&p, &resources.type_map) {
+            // Buffer for string formatting.
+            // Avoids allocating a new string every time we want to write a string-formatted value.
+            let mut fmt_buf = String::new();
+
+            // Iterator of all bindings in pattern matches, chained with iterator of all columns.
+            let rows = table.pattern_iter(&p, &resources.type_map)
+                .map(|row| row.chain(table.get_row(row.row()).iter(&resources.type_map)));
+
+            for row in rows {
                 w.write_all(b"[").await?;
                 let mut first = true;
 
-                for expr in &select.items {
+                'selitems: for expr in &select.items {
                     match expr {
                         Expr::Ident(ident) => {
-                            for (name, cell) in row) {
+                            for (name, cell) in row.clone() {
                                 if name == ident {
                                     if !first {
                                         w.write_all(b", ").await?;
                                     }
                                     first = false;
-                                    w.write_all(format!("{}", cell).as_bytes()).await?;
+
+                                    write!(&mut fmt_buf, "{}", cell)?;
+                                    w.write_all(fmt_buf.as_bytes()).await?;
+                                    fmt_buf.clear();
+
+                                    continue 'selitems;
                                 }
                             }
+                            panic!("No such binding: \"{}\"", ident);
                         }
+                        e => unimplemented!("{:?}", e),
                     }
-                }
-                for (_name, cell) in row {
-                    if !first {
-                        w.write_all(b", ").await?;
-                    }
-                    first = false;
-                    w.write_all(format!("{}", cell).as_bytes()).await?;
                 }
                 w.write_all(b"]\n").await?;
             }

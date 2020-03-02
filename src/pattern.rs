@@ -1,4 +1,4 @@
-use crate::ast::{Expr, WhereItem};
+use crate::ast::WhereItem;
 use crate::table::Schema;
 use crate::types::{EnumTag, Type, TypeId, TypeMap};
 use bincode::serialize;
@@ -63,8 +63,6 @@ impl CompiledPattern {
                     name,
                     sub_patterns,
                 } => {
-                    println!("Variant pattern {} ( {:?} )", name, sub_patterns);
-
                     if let Type::Sum(variants) = &types[&type_id] {
                         let (i, (_, sub_types)) = variants
                             .iter()

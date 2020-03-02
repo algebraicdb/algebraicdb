@@ -3,13 +3,13 @@ use bincode::deserialize;
 use std::cmp::{Ord, Ordering, PartialOrd};
 use std::fmt::{self, Display, Formatter};
 
-pub struct Cell<'ts, 'tb> {
+pub struct Cell<'tb, 'ts> {
     type_id: TypeId,
     types: &'ts TypeMap,
     pub data: &'tb [u8],
 }
 
-impl<'ts, 'tb> Cell<'ts, 'tb> {
+impl<'tb, 'ts> Cell<'tb, 'ts> {
     pub fn new(type_id: TypeId, data: &'tb [u8], types: &'ts TypeMap) -> Self {
         Cell {
             type_id,
@@ -19,7 +19,7 @@ impl<'ts, 'tb> Cell<'ts, 'tb> {
     }
 }
 
-impl<'ts, 'tb> Display for Cell<'ts, 'tb> {
+impl<'tb, 'ts> Display for Cell<'tb, 'ts> {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         let t = &self.types[&self.type_id];
         let t_size = t.size_of(self.types);
