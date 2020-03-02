@@ -1,0 +1,82 @@
+Type MaybeInt created 
+Table created
+InvalidType {
+    expected: 1,
+    actual: 2,
+}
+InvalidType {
+    expected: 1,
+    actual: 3,
+}
+InvalidType {
+    expected: 1,
+    actual: 2,
+}
+InvalidType {
+    expected: 1,
+    actual: 3,
+}
+InvalidType {
+    expected: 4,
+    actual: 1,
+}
+UnrecognizedToken {
+    token: (
+        44,
+        Token(
+            7,
+            ")",
+        ),
+        45,
+    ),
+    expected: [
+        "\"(\"",
+    ],
+}
+UnrecognizedToken {
+    token: (
+        41,
+        Token(
+            1,
+            "42",
+        ),
+        43,
+    ),
+    expected: [
+        "\"!=\"",
+        "\"(\"",
+        "\")\"",
+        "\",\"",
+        "\":\"",
+        "\"::\"",
+        "\";\"",
+        "\"<\"",
+        "\"<=\"",
+        "\"=\"",
+        "\">\"",
+        "\">=\"",
+        "AND",
+        "AS",
+        "FROM",
+        "FULL",
+        "IDENT",
+        "INNER",
+        "JOIN",
+        "LEFT",
+        "ON",
+        "OR",
+        "RIGHT",
+        "SET",
+        "VALUES",
+        "WHERE",
+    ],
+}
+1 row(s) inserted
+1 row(s) inserted
+[Just(42)]
+[Nothing()]
+2 row(s) inserted
+[Just(42)]
+[Nothing()]
+[Nothing()]
+[Just(42)]

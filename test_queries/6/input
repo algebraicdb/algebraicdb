@@ -1,0 +1,26 @@
+CREATE TYPE MaybeInt AS VARIANT {
+	Just(Integer),
+	Nothing(),
+};
+
+CREATE TABLE t(m MaybeInt);
+
+INSERT INTO t(m) VALUES (MaybeInt::Just(42.42));
+INSERT INTO t(m) VALUES (MaybeInt::Just(true));
+INSERT INTO t(m) VALUES (          Just(42.42));
+INSERT INTO t(m) VALUES (          Just(true));
+INSERT INTO t(m) VALUES (42);
+
+INSERT INTO t(m) VALUES (MaybeInt::Nothing);
+INSERT INTO t(m) VALUES (MaybeInt::Just 42);
+
+INSERT INTO t(m) VALUES (Just(42));
+INSERT INTO t(m) VALUES (Nothing());
+
+SELECT m FROM t;
+
+INSERT INTO t(m) VALUES
+	(MaybeInt::Nothing()),
+	(MaybeInt::Just(42));
+
+SELECT m FROM t;
