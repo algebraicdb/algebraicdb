@@ -20,6 +20,7 @@ type RequestReceiver =
 #[derive(Clone)]
 pub struct WrapperState {
     channel: RequestSender,
+    pub client: Arc<Client>,
 }
 
 impl WrapperState {
@@ -55,39 +56,41 @@ impl DbState<Schema> for WrapperState {
 
 impl WrapperState {
     pub async fn new() -> Result<Self, Box<dyn Error>> {
+        use tokio_postgres::config::SslMode;
+        let mut config = Config::new();
+
+        config
+            .user("postgres")
+            .password("example")
+            .host("localhost")
+            .port(5432)
+            .dbname("postgres")
+            .ssl_mode(SslMode::Disable);
+        let (client, bit_coooonnect) = config.connect(NoTls).await.unwrap();
+        let refcli = Arc::new(client);
+        // The connection object performs the actual communication with the database,
+        // so spawn it off to run on its own.
+        tokio::spawn(async move {
+            if let Err(e) = bit_coooonnect.await {
+                eprintln!("connection error: {}", e);
+            }
+        });
+
         let (requests_in, requests_out) = mpsc::unbounded_channel();
-        tokio::spawn(resource_manager(requests_out));
+        tokio::spawn(resource_manager(requests_out, refcli.clone()));
         Ok(Self {
             channel: requests_in,
+            client: refcli,
         })
     }
 }
 
-async fn resource_manager(mut requests: RequestReceiver) {
+async fn resource_manager(mut requests: RequestReceiver, client: Arc<Client>) {
     use crate::psqlwrapper::translator;
-    use tokio_postgres::config::SslMode;
     let mut tables: HashMap<String, Arc<RwLock<Schema>>> = HashMap::new();
     let type_map: Arc<RwLock<TypeMap>> = Arc::new(RwLock::new(TypeMap::new()));
-    let mut config = Config::new();
 
-    config
-        .user("postgres")
-        .password("example")
-        .host("localhost")
-        .port(5432)
-        .dbname("postgres")
-        .ssl_mode(SslMode::Disable);
-    let (client, bit_coooonnect) = config.connect(NoTls).await.unwrap();
 
-    // The connection object performs the actual communication with the database,
-    // so spawn it off to run on its own.
-    tokio::spawn(async move {
-        if let Err(e) = bit_coooonnect.await {
-            eprintln!("connection error: {}", e);
-        }
-    });
-
-    &client.query("SELECT 5;", &[]).await.unwrap();
     loop {
         let (request, response_ch) = match requests.recv().await {
             Some(r) => r,
@@ -128,7 +131,7 @@ async fn resource_manager(mut requests: RequestReceiver) {
                         .unwrap_or_else(|_| eprintln!("global::manager: response channel closed."));
                 } else {
                     let guard = type_map.read().await;
-                    &client
+                    client
                         .execute(
                             translator::translate_create_table(&name, &table, &guard).as_str(),
                             &[],

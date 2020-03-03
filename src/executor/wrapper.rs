@@ -7,7 +7,7 @@ use crate::typechecker;
 use crate::types::{Type, TypeId, Value};
 use std::error::Error;
 use tokio::io::{AsyncWrite, AsyncWriteExt};
-
+use crate::psqlwrapper::translator::*;
 struct Context {
     // TODO
 }
@@ -47,15 +47,15 @@ pub(crate) async fn execute_query(
                 .await?)
         }
     };
-    dbg!(" i got de schema");
+
     let resources = resources.take().await;
     // 4. TC
-    dbg!(" i git deee resrsc");
+
     match typechecker::check_stmt(&ast, &resources) {
         Ok(()) => {}
         Err(e) => return Ok(w.write_all(format!("{:#?}\n", e).as_bytes()).await?),
     }
-    dbg!(" i  chiaodacked d stm");
+
     // 5. Translate and excute query
     execute_stmt(ast, s, resources, w).await
 }
@@ -68,11 +68,10 @@ async fn execute_stmt(
 ) -> Result<(), Box<dyn Error>> {
     match ast {
         Stmt::CreateTable(create_table) => {
-            dbg!(" i adsads did the thing");
             execute_create_table(create_table, s, resources, w).await
         }
         Stmt::CreateType(create_type) => execute_create_type(create_type, resources, w).await,
-        Stmt::Insert(insert) => execute_insert(insert, resources, w).await,
+        Stmt::Insert(insert) => execute_insert(insert, resources, w, &s).await,
         Stmt::Select(select) => execute_select(select, resources, w).await,
         _ => unimplemented!("Not implemented: {:?}", ast),
     }
@@ -143,11 +142,13 @@ async fn execute_insert(
     insert: Insert,
     mut resources: ResourcesGuard<'_, Schema>,
     w: &mut (dyn AsyncWrite + Send + Unpin),
+    s: &WrapperState,
 ) -> Result<(), Box<dyn Error>> {
     let (table, types) = resources.write_table(&insert.table);
-
     let row_count = insert.rows.len();
-    // TODO: translate and psql query
+
+    s.client.execute(translate_insert(&insert).as_str(), &[]).await.unwrap();
+
     w.write_all(format!("{} row(s) inserted\n", row_count).as_bytes())
         .await?;
     Ok(())

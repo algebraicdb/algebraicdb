@@ -26,7 +26,7 @@ fn col_to_string(col: &(String, TypeId), typemap: &TypeMap) -> String {
 fn translate_typeid(tid: &TypeId, typemap: &TypeMap) -> String {
     match typemap.get_by_id(*tid) {
         Type::Bool => String::from("BOOLEAN"),
-        Type::Double => String::from("float64"),
+        Type::Double => String::from("float(53)"),
         Type::Integer => String::from("INT"),
         Type::Sum(_) => String::from("json"),
     }
