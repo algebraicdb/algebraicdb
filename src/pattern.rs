@@ -89,20 +89,6 @@ impl CompiledPattern {
 
         for select_item in pattern {
             match select_item {
-                /*
-                WhereItem::Expr(Expr::Ident(name)) => {
-                    let mut byte_ind ex = 0;
-                    for (column, type_id) in &schema.columns {
-                        if column == name {
-                            bindings.push((byte_index, *type_id, name.into()));
-                            break;
-                        }
-
-                        let t = &types[type_id];
-                        byte_index += t.size_of(types);
-                    }
-                }
-                */
                 WhereItem::Expr(_) => {} // Ignore expressions for now
                 WhereItem::Pattern(name, pattern) => {
                     let mut byte_index = 0;
