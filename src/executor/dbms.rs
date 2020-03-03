@@ -9,16 +9,6 @@ use std::error::Error;
 use std::fmt::Write;
 use tokio::io::{AsyncWrite, AsyncWriteExt};
 
-struct Context {
-    // TODO
-}
-
-impl Context {
-    pub fn empty() -> Context {
-        Context {}
-    }
-}
-
 pub(crate) async fn execute_query(
     input: &str,
     s: &DbmsState,
@@ -207,13 +197,11 @@ async fn execute_insert(
 ) -> Result<(), Box<dyn Error>> {
     let (table, types) = resources.write_table(&insert.table);
 
-    let ctx = Context::empty();
-
     let row_count = insert.rows.len();
     for row in insert.rows.into_iter() {
         let values: Vec<_> = row
             .into_iter()
-            .map(|expr| execute_expr(expr, &ctx))
+            .map(|expr| execute_expr(expr))
             .collect();
         table.push_row(&values, &types);
     }
@@ -223,7 +211,7 @@ async fn execute_insert(
     Ok(())
 }
 
-fn execute_expr(expr: Expr, _ctx: &Context) -> Value {
+fn execute_expr(expr: Expr) -> Value {
     match expr {
         Expr::Value(v) => v,
         _ => unimplemented!("Non-value exprs"),
