@@ -6,17 +6,8 @@ use crate::table::{Schema, Table};
 use crate::typechecker;
 use crate::types::{Type, TypeId, Value};
 use std::error::Error;
+use std::fmt::Write;
 use tokio::io::{AsyncWrite, AsyncWriteExt};
-
-struct Context {
-    // TODO
-}
-
-impl Context {
-    pub fn empty() -> Context {
-        Context {}
-    }
-}
 
 pub(crate) async fn execute_query(
     input: &str,
@@ -87,18 +78,50 @@ async fn execute_select(
         Some(SelectFrom::Table(table_name)) => {
             let table = resources.read_table(&table_name);
 
-            let p =
-                CompiledPattern::compile(&select.items, table.get_schema(), &resources.type_map);
+            let p = if let Some(where_clause) = select.where_clause {
+                CompiledPattern::compile(
+                    &where_clause.items,
+                    table.get_schema(),
+                    &resources.type_map,
+                )
+            } else {
+                CompiledPattern::compile(&[], table.get_schema(), &resources.type_map)
+            };
 
-            for row in table.pattern_iter(&p, &resources.type_map) {
+            // Buffer for string formatting.
+            // Avoids allocating a new string every time we want to write a string-formatted value.
+            let mut fmt_buf = String::new();
+
+            // Iterator of all bindings in pattern matches, chained with iterator of all columns.
+            let rows = table
+                .pattern_iter(&p, &resources.type_map)
+                .map(|row| row.chain(table.get_row(row.row()).iter(&resources.type_map)));
+
+            for row in rows {
                 w.write_all(b"[").await?;
                 let mut first = true;
-                for (_name, cell) in row {
-                    if !first {
-                        w.write_all(b", ").await?;
+
+                'selitems: for expr in &select.items {
+                    match expr {
+                        Expr::Ident(ident) => {
+                            for (name, cell) in row.clone() {
+                                if name == ident {
+                                    if !first {
+                                        w.write_all(b", ").await?;
+                                    }
+                                    first = false;
+
+                                    write!(&mut fmt_buf, "{}", cell)?;
+                                    w.write_all(fmt_buf.as_bytes()).await?;
+                                    fmt_buf.clear();
+
+                                    continue 'selitems;
+                                }
+                            }
+                            panic!("No such binding: \"{}\"", ident);
+                        }
+                        e => unimplemented!("{:?}", e),
                     }
-                    first = false;
-                    w.write_all(format!("{}", cell).as_bytes()).await?;
                 }
                 w.write_all(b"]\n").await?;
             }
@@ -174,13 +197,11 @@ async fn execute_insert(
 ) -> Result<(), Box<dyn Error>> {
     let (table, types) = resources.write_table(&insert.table);
 
-    let ctx = Context::empty();
-
     let row_count = insert.rows.len();
     for row in insert.rows.into_iter() {
         let values: Vec<_> = row
             .into_iter()
-            .map(|expr| execute_expr(expr, &ctx))
+            .map(|expr| execute_expr(expr))
             .collect();
         table.push_row(&values, &types);
     }
@@ -190,7 +211,7 @@ async fn execute_insert(
     Ok(())
 }
 
-fn execute_expr(expr: Expr, _ctx: &Context) -> Value {
+fn execute_expr(expr: Expr) -> Value {
     match expr {
         Expr::Value(v) => v,
         _ => unimplemented!("Non-value exprs"),

@@ -34,14 +34,11 @@ INSERT INTO oh_no(ambiguity) VALUES
 
 SELECT ambiguity FROM oh_no;
 
-SELECT ambiguity: Just(_), ambiguity FROM oh_no;
-
-SELECT ambiguity: Just(Just(_)), ambiguity FROM oh_no;
-
-SELECT ambiguity: Just(Just(42)), ambiguity FROM oh_no;
-
-SELECT ambiguity: Just(Nothing()), ambiguity FROM oh_no;
-
-SELECT ambiguity: Nothing(), ambiguity FROM oh_no;
-
-SELECT ambiguity: _, ambiguity FROM oh_no;
+SELECT ambiguity FROM oh_no WHERE ambiguity: Just(_);
+SELECT bambguity FROM oh_no WHERE ambiguity: Just(bambguity);
+SELECT ambiguity FROM oh_no WHERE ambiguity: Just(Just(_));
+SELECT cambguity FROM oh_no WHERE ambiguity: Just(Just(cambguity));
+SELECT ambiguity FROM oh_no WHERE ambiguity: Just(Just(42));
+SELECT ambiguity FROM oh_no WHERE ambiguity: Just(Nothing());
+SELECT ambiguity FROM oh_no WHERE ambiguity: Nothing();
+SELECT ambiguity FROM oh_no WHERE ambiguity: _;
