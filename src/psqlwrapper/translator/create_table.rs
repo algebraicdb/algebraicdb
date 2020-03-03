@@ -1,14 +1,22 @@
-use crate::table::*;
 use crate::ast::*;
-use crate::types::{TypeMap, TypeId, Type};
+use crate::table::*;
+use crate::types::{Type, TypeId, TypeMap};
 
-
-pub fn translate_create_table(name: &String, schema: &Schema, typemap: &TypeMap) -> String  {
-    return format!("CREATE TABLE {} ({});", name, translate_schema(schema, &typemap))
+pub fn translate_create_table(name: &String, schema: &Schema, typemap: &TypeMap) -> String {
+    return format!(
+        "CREATE TABLE {} ({});",
+        name,
+        translate_schema(schema, &typemap)
+    );
 }
 
-fn translate_schema(schema: &Schema, typemap: &TypeMap)-> String {
-    schema.columns.iter().map(|x| col_to_string(x, &typemap)).collect::<Vec<String>>().join(",")
+fn translate_schema(schema: &Schema, typemap: &TypeMap) -> String {
+    schema
+        .columns
+        .iter()
+        .map(|x| col_to_string(x, &typemap))
+        .collect::<Vec<String>>()
+        .join(",")
 }
 
 fn col_to_string(col: &(String, TypeId), typemap: &TypeMap) -> String {
@@ -22,7 +30,6 @@ fn translate_typeid(tid: &TypeId, typemap: &TypeMap) -> String {
         Type::Integer => String::from("INT"),
         Type::Sum(_) => String::from("json"),
     }
-    
 }
 /*
 #[cfg(test)]

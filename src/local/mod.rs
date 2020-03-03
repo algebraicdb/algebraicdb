@@ -15,9 +15,9 @@ pub trait TTable {
     fn get_schema(&self) -> &Schema;
 }
 
-impl TTable for Schema{
-    fn get_schema(&self) -> &Schema{
-        return &self
+impl TTable for Schema {
+    fn get_schema(&self) -> &Schema {
+        return &self;
     }
 }
 #[async_trait]

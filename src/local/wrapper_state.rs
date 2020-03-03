@@ -1,21 +1,21 @@
 use super::types::*;
 use super::*;
+use crate::table::Schema;
 use crate::types::TypeMap;
 use async_trait::async_trait;
 use futures::executor::block_on;
 use std::collections::HashMap;
-use std::sync::Arc;
 use std::error::Error;
+use std::sync::Arc;
 use tokio::sync::mpsc;
 use tokio::sync::oneshot;
 use tokio::sync::RwLock;
-use tokio_postgres::{Config, Client, NoTls};
 use tokio_postgres;
-use crate::table::Schema;
-
+use tokio_postgres::{Client, Config, NoTls};
 
 type RequestSender = mpsc::UnboundedSender<(Request<Schema>, oneshot::Sender<Response<Schema>>)>;
-type RequestReceiver = mpsc::UnboundedReceiver<(Request<Schema>, oneshot::Sender<Response<Schema>>)>;
+type RequestReceiver =
+    mpsc::UnboundedReceiver<(Request<Schema>, oneshot::Sender<Response<Schema>>)>;
 
 #[derive(Clone)]
 pub struct WrapperState {
@@ -39,7 +39,7 @@ impl DbState<Schema> for WrapperState {
     // FIXME: This is where shit breaks, it never get the resource for some reason.
     async fn acquire_resources(&self, acquire: Acquire) -> Result<Resources<Schema>, String> {
         match self.send_request(Request::Acquire(acquire)).await {
-            Response::AcquiredResources(resources) =>  Ok(resources),
+            Response::AcquiredResources(resources) => Ok(resources),
             Response::NoSuchTable(name) => Err(name),
             _ => unreachable!(),
         }
@@ -65,6 +65,7 @@ impl WrapperState {
 
 async fn resource_manager(mut requests: RequestReceiver) {
     use crate::psqlwrapper::translator;
+    use tokio_postgres::config::SslMode;
     let mut tables: HashMap<String, Arc<RwLock<Schema>>> = HashMap::new();
     let type_map: Arc<RwLock<TypeMap>> = Arc::new(RwLock::new(TypeMap::new()));
     let mut config = Config::new();
@@ -73,15 +74,25 @@ async fn resource_manager(mut requests: RequestReceiver) {
         .user("postgres")
         .password("example")
         .host("localhost")
-        .port(5432);
-    let (client, _) = block_on(config.connect(NoTls)).unwrap();
+        .port(5432)
+        .dbname("postgres")
+        .ssl_mode(SslMode::Disable);
+    let (client, bit_coooonnect) = config.connect(NoTls).await.unwrap();
 
+    // The connection object performs the actual communication with the database,
+    // so spawn it off to run on its own.
+    tokio::spawn(async move {
+        if let Err(e) = bit_coooonnect.await {
+            eprintln!("connection error: {}", e);
+        }
+    });
+
+    &client.query("SELECT 5;", &[]).await.unwrap();
     loop {
-        let (request, response_ch) = match block_on(requests.recv()) {
+        let (request, response_ch) = match requests.recv().await {
             Some(r) => r,
             None => return, // channel closed, exit manager.
         };
-
         match request {
             Request::Acquire(Acquire {
                 table_reqs,
@@ -116,9 +127,15 @@ async fn resource_manager(mut requests: RequestReceiver) {
                         .send(Response::CreateTable(Err(())))
                         .unwrap_or_else(|_| eprintln!("global::manager: response channel closed."));
                 } else {
-                    println!("got here");
                     let guard = type_map.read().await;
-                    &client.query(translator::translate_create_table(&name, &table, &guard).as_str(), &[]).await.unwrap();
+                    &client
+                        .execute(
+                            translator::translate_create_table(&name, &table, &guard).as_str(),
+                            &[],
+                        )
+                        .await
+                        .unwrap();
+                    //let statement = client.prepare("SELECT 5").await.unwrap();
                     tables.insert(name, Arc::new(RwLock::new(table)));
                     response_ch
                         .send(Response::CreateTable(Ok(())))

@@ -20,7 +20,7 @@ crossbeam = "0.7.3"
 tokio = { version = "0.2.11", features = ["full"] }
 tokio-util = {version = "0.2", features = ["udp", "codec"]}
 futures = "0.3.4"
-tokio-postgres = "0.5.2"
+tokio-postgres = "0.5.1"
 async-trait = "0.1.24"
 
 [dev-dependencies]

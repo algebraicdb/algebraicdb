@@ -12,10 +12,10 @@ mod grammar;
 mod local;
 mod pattern;
 mod pre_typechecker;
+mod psqlwrapper;
 mod table;
 mod typechecker;
 mod types;
-mod psqlwrapper;
 
 pub use api::custom::create_with_writers;
 pub use api::tcp_api::create_tcp_server;

@@ -1,8 +1,8 @@
 use crate::ast::*;
-use crate::local::{DbState, WrapperState, ResourcesGuard};
+use crate::local::{DbState, ResourcesGuard, WrapperState};
 use crate::pattern::CompiledPattern;
 use crate::pre_typechecker;
-use crate::table::{Schema};
+use crate::table::Schema;
 use crate::typechecker;
 use crate::types::{Type, TypeId, Value};
 use std::error::Error;
@@ -36,9 +36,8 @@ pub(crate) async fn execute_query(
     // 2. pre-tc
     let request = pre_typechecker::get_resource_request(&ast);
 
-
     // 3. Get schema access
-    
+
     let response = s.acquire_resources(request).await;
     let mut resources = match response {
         Ok(resources) => resources,
@@ -48,17 +47,17 @@ pub(crate) async fn execute_query(
                 .await?)
         }
     };
-    dbg!("gotdasdasdasdawsd");
-
+    dbg!(" i got de schema");
     let resources = resources.take().await;
     // 4. TC
+    dbg!(" i git deee resrsc");
     match typechecker::check_stmt(&ast, &resources) {
         Ok(()) => {}
         Err(e) => return Ok(w.write_all(format!("{:#?}\n", e).as_bytes()).await?),
     }
+    dbg!(" i  chiaodacked d stm");
     // 5. Translate and excute query
     execute_stmt(ast, s, resources, w).await
-
 }
 
 async fn execute_stmt(
@@ -69,6 +68,7 @@ async fn execute_stmt(
 ) -> Result<(), Box<dyn Error>> {
     match ast {
         Stmt::CreateTable(create_table) => {
+            dbg!(" i adsads did the thing");
             execute_create_table(create_table, s, resources, w).await
         }
         Stmt::CreateType(create_type) => execute_create_type(create_type, resources, w).await,
@@ -103,9 +103,9 @@ async fn execute_create_table(
             (column_name, t_id)
         })
         .collect();
-    
+
     let schema = Schema::new(columns);
-    s.create_table(create_table.table, schema);
+    s.create_table(create_table.table, schema).await.unwrap();
     Ok(())
 }
 
@@ -129,7 +129,7 @@ async fn execute_create_type(
                     (constructor, subtype_ids)
                 })
                 .collect();
-            
+
             w.write_all(b"Type ").await?;
             w.write_all(name.as_bytes()).await?;
             w.write_all(b" created \n").await?;
