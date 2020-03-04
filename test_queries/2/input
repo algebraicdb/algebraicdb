@@ -41,6 +41,6 @@ INSERT INTO t1(a, n1, n2, answer) VALUES
 
 SELECT a FROM t1;
 
-SELECT a, n1, n2: 3, answer FROM t1;
+SELECT a, n1, answer FROM t1 WHERE n2: 3;
 
-SELECT n2: 2, answer, answer, answer, answer FROM t1;
+SELECT answer, answer, answer, answer FROM t1 WHERE n2: 2;

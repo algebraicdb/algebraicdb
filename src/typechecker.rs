@@ -124,8 +124,12 @@ fn check_select<T: TTable>(select: &Select, ctx: &mut Context<T>) -> Result<(), 
         check_select_from(from, ctx)?;
     }
 
-    for item in &select.items {
-        check_select_item(item, ctx)?;
+    if let Some(where_clause) = &select.where_clause {
+        check_where_clause(where_clause, ctx)?;
+    }
+
+    for expr in &select.items {
+        check_expr(expr, ctx)?;
     }
 
     Ok(())
@@ -159,16 +163,22 @@ fn check_select_from<T: TTable>(from: &SelectFrom, ctx: &mut Context<T>) -> Resu
     Ok(())
 }
 
-fn check_select_item<T: TTable>(item: &SelectItem, ctx: &Context<T>) -> Result<(), TypeError> {
-    match item {
-        SelectItem::Expr(expr) => {
-            check_expr(expr, ctx)?;
-        }
-        SelectItem::Pattern(ident, pattern) => {
-            // TODO: get type of ident
-
-            let type_id = ctx.search_locals(ident)?;
-            check_pattern(pattern, type_id, ctx)?;
+fn check_where_clause<T: TTable>(
+    clause: &WhereClause,
+    ctx: &mut Context<T>,
+) -> Result<(), TypeError> {
+    let type_map = &ctx.globals.type_map;
+    for item in &clause.items {
+        match item {
+            WhereItem::Expr(expr) => {
+                let expr_type = check_expr(expr, ctx)?;
+                let bool_id = type_map.get_base_id(BaseType::Bool);
+                assert_type_as(expr_type, bool_id, type_map)?;
+            }
+            WhereItem::Pattern(ident, pattern) => {
+                let type_id = ctx.search_locals(ident)?;
+                check_pattern(pattern, type_id, ctx)?;
+            }
         }
     }
     Ok(())
@@ -177,7 +187,7 @@ fn check_select_item<T: TTable>(item: &SelectItem, ctx: &Context<T>) -> Result<(
 fn check_pattern<T: TTable>(
     pattern: &Pattern,
     type_id: TypeId,
-    ctx: &Context<T>,
+    ctx: &mut Context<T>,
 ) -> Result<(), TypeError> {
     let type_map = &ctx.globals.type_map;
     match pattern {
@@ -191,9 +201,7 @@ fn check_pattern<T: TTable>(
             assert_type_as(type_map.get_base_id(BaseType::Double), type_id, type_map)?;
         }
         Pattern::Ignore => {}
-        Pattern::Binding(_) => {
-            // TODO: add to ctx
-        }
+        Pattern::Binding(name) => ctx.push_local(name.to_owned(), type_id),
         Pattern::Variant {
             namespace,
             name,
@@ -266,15 +274,10 @@ fn check_update<T: TTable>(update: &Update, ctx: &mut Context<T>) -> Result<(), 
 }
 
 fn check_delete<T: TTable>(delete: &Delete, ctx: &mut Context<T>) -> Result<(), TypeError> {
-    let bool_id = ctx.globals.type_map.get_base_id(BaseType::Bool);
     match &delete.where_clause {
-        Some(WhereClause(cond)) => {
+        Some(clause) => {
             import_table_columns(&delete.table, ctx);
-
-            let cond_type = check_expr(cond, &ctx)?;
-            assert_type_as(cond_type, bool_id, &ctx.globals.type_map)?;
-
-            Ok(())
+            check_where_clause(clause, ctx)
         }
 
         None => Ok(()),

@@ -98,7 +98,7 @@ Update: Update = {
 
 Select: Select = {
     SELECT
-        <items:Comma<SelectItem>>
+        <items:Comma<Expr>>
         <from:(FROM <SelectFrom>)?>
         <where_clause:WhereClause?>
     => Select {
@@ -106,11 +106,6 @@ Select: Select = {
         from: from,
         where_clause,
     },
-}
-
-SelectItem: SelectItem = {
-    <col:Ident> ":" <pattern:Pattern> => (SelectItem::Pattern(col, pattern)),
-    Expr => SelectItem::Expr(<>),
 }
 
 SelectFrom: SelectFrom = {
@@ -134,7 +129,14 @@ SelectFrom2: SelectFrom = {
 }
 
 WhereClause: WhereClause = {
-    WHERE <Expr> => WhereClause(<>),
+    WHERE <Comma<WhereItem>> => WhereClause{
+        items: <>,
+    },
+}
+
+WhereItem: WhereItem = {
+    <col:Ident> ":" <pattern:Pattern> => (WhereItem::Pattern(col, pattern)),
+    Expr => WhereItem::Expr(<>),
 }
 
 CreateTable: CreateTable = {
