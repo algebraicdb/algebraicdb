@@ -151,17 +151,21 @@ CreateTable: CreateTable = {
 Insert: Insert = {
     INSERT INTO <table:Ident>
         <columns:("(" <Comma<Ident>> ")")?>
-        <rows:InsertRows?>
+        <from:InsertFrom>
+
     => Insert {
         table,
         columns: columns.unwrap_or(vec![]),
-        rows: rows.unwrap_or(vec![]),
+        from,
     }
 }
 
-InsertRows: Vec<Vec<Expr>> = {
-    VALUES <Comma<("(" <Comma<Expr>> ")")>>,
+InsertFrom: InsertFrom = {
+    VALUES <Comma<("(" <Comma<Expr>> ")")>> => InsertFrom::Values(<>),
+    Select => InsertFrom::Select(<>)
 }
+
+
 
 JoinType: JoinType = {
     LEFT OUTER? JOIN => JoinType::LeftOuter,

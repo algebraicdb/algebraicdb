@@ -78,7 +78,13 @@ pub struct Drop {
 pub struct Insert {
     pub table: String,
     pub columns: Vec<String>,
-    pub rows: Vec<Vec<Expr>>,
+    pub from: InsertFrom,
+}
+
+#[derive(Debug)]
+pub enum InsertFrom {
+    Values(Vec<Vec<Expr>>),
+    Select(Select),
 }
 
 #[derive(Debug)]
@@ -117,7 +123,6 @@ fn ast_grammar() {
     let valid_examples = vec![
         r#"SELECT hello, ma, boi FROM feffe;"#,
         r#"SELECT hello, asdsad FROM adssad;"#,
-        r#"INSERT INTO empty;"#,
         r#"INSERT INTO empty () VALUES ();"#,
         r#"INSERT INTO empty () VALUES (), (), ();"#,
         r#"INSERT INTO empty VALUES ();"#,
@@ -157,7 +162,8 @@ fn ast_grammar() {
     let invalid_examples = vec![
         r#"SELECT hello, ma boi FROM feffe;"#,
         r#"SELECT hello FROM 3;"#,
-        r#"INSERT INTO empty"#,
+        r#"INSERT INTO withoutsemicolon"#,
+        r#"INSERT INTO empty;"#,
         r#"SELECT c FROM t1 INNER LEFT JOIN t2;"#,
         r#"SELECT c FROM t1 INNER OUTER JOIN t2;"#,
         r#"INSERT INTO empty (2) VALUES ();"#,
