@@ -17,14 +17,14 @@ InvalidType {
     actual: 3,
 }
 InvalidType {
-    expected: 4,
+    expected: 5,
     actual: 1,
 }
 UnrecognizedToken {
     token: (
         44,
         Token(
-            7,
+            8,
             ")",
         ),
         45,
@@ -37,7 +37,7 @@ UnrecognizedToken {
     token: (
         41,
         Token(
-            1,
+            2,
             "42",
         ),
         43,

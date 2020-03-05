@@ -240,6 +240,7 @@ Ass: Ass = {
 
 pub Pattern: Pattern = {
     "_" => Pattern::Ignore,
+    Char => Pattern::Char(<>),
     Integer => Pattern::Int(<>),
     Bool => Pattern::Bool(<>),
     Double => Pattern::Double(<>),
