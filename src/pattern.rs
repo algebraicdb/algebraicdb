@@ -6,6 +6,9 @@ use smallvec::SmallVec;
 
 #[derive(Debug)]
 pub enum Pattern {
+    /// Char literal
+    Char(char),
+
     /// Integer literal
     Int(i32),
 
@@ -47,6 +50,9 @@ impl CompiledPattern {
             bindings: &mut Vec<(usize, TypeId, String)>,
         ) {
             match pattern {
+                Pattern::Char(v) => {
+                    matches.push((byte_index, SmallVec::from_vec(serialize(v).unwrap())))
+                }
                 Pattern::Int(v) => {
                     matches.push((byte_index, SmallVec::from_vec(serialize(v).unwrap())))
                 }
