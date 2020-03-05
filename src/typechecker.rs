@@ -491,6 +491,7 @@ where
 
 pub fn type_of_value<'a>(value: &'a Value, types: &TypeMap) -> Result<DuckType<'a>, TypeError> {
     match value {
+        Value::Char(_) => Ok(types.get_base_id(BaseType::Char).into()),
         Value::Integer(_) => Ok(types.get_base_id(BaseType::Integer).into()),
         Value::Double(_) => Ok(types.get_base_id(BaseType::Double).into()),
         Value::Bool(_) => Ok(types.get_base_id(BaseType::Bool).into()),

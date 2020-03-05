@@ -24,7 +24,7 @@ impl<'tb, 'ts> Display for Cell<'tb, 'ts> {
         let t = &self.types[&self.type_id];
         let t_size = t.size_of(self.types);
         match t {
-            Type::Integer | Type::Double | Type::Bool => t
+            Type::Integer | Type::Double | Type::Char | Type::Bool => t
                 .from_bytes(&self.data[..t_size], self.types)
                 .unwrap()
                 .fmt(f),
@@ -72,6 +72,9 @@ impl PartialOrd for Cell<'_, '_> {
         debug_assert_eq!(self.type_id, other.type_id);
 
         match &self.types[&self.type_id] {
+            Type::Char => deserialize::<char>(self.data)
+                .unwrap()
+                .partial_cmp(&deserialize::<char>(other.data).unwrap()),
             Type::Integer => deserialize::<i32>(self.data)
                 .unwrap()
                 .partial_cmp(&deserialize(other.data).unwrap()),

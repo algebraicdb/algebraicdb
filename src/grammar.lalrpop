@@ -56,6 +56,7 @@ match {
     r"-?[0-9]+(\.[0-9]+)([eE]-?[0-9]+)?" => FLOAT,
     r"[A-z][A-z0-9_]*" => IDENT,
     r#""[^"]*""# => STR,
+    r#"'.'"# => CHAR,
 }
 
 // Main production
@@ -188,6 +189,7 @@ Namespace: String = {
 }
 
 Value: Value = {
+    Char => Value::Char(<>),
     Integer => Value::Integer(<>),
     Double => Value::Double(<>),
     Bool => Value::Bool(<>),
@@ -258,6 +260,10 @@ Ident: String = {
 
 Str: String = {
     STR => String::from(<>.strip_prefix('"').unwrap().strip_suffix('"').unwrap()),
+}
+
+Char: char = {
+    CHAR => <>.chars().nth(1).unwrap(),
 }
 
 Integer: i32 = {
