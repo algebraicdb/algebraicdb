@@ -1,0 +1,8 @@
+CREATE TABLE chara (a Char);
+
+INSERT INTO chara (a) VALUES ('a');
+INSERT INTO chara (a) VALUES ('ä');
+INSERT INTO chara (a) VALUES ('😂');
+
+SELECT a FROM chara;
+SELECT a FROM chara WHERE a: 'a';

@@ -191,6 +191,9 @@ fn check_pattern<T: TTable>(
 ) -> Result<(), TypeError> {
     let type_map = &ctx.globals.type_map;
     match pattern {
+        Pattern::Char(_) => {
+            assert_type_as(type_map.get_base_id(BaseType::Char), type_id, type_map)?;
+        }
         Pattern::Int(_) => {
             assert_type_as(type_map.get_base_id(BaseType::Integer), type_id, type_map)?;
         }
@@ -491,6 +494,7 @@ where
 
 pub fn type_of_value<'a>(value: &'a Value, types: &TypeMap) -> Result<DuckType<'a>, TypeError> {
     match value {
+        Value::Char(_) => Ok(types.get_base_id(BaseType::Char).into()),
         Value::Integer(_) => Ok(types.get_base_id(BaseType::Integer).into()),
         Value::Double(_) => Ok(types.get_base_id(BaseType::Double).into()),
         Value::Bool(_) => Ok(types.get_base_id(BaseType::Bool).into()),

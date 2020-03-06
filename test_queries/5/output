@@ -2,7 +2,7 @@ Type MaybeInt created
 Type MaybeMaybeInt created 
 Table created
 InvalidType {
-    expected: 4,
+    expected: 5,
     actual: 1,
 }
 NotASumType

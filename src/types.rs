@@ -1,4 +1,5 @@
 use bincode::{deserialize, serialize_into};
+use std::char;
 use std::cmp;
 use std::collections::HashMap;
 use std::fmt::{self, Display, Formatter};
@@ -17,12 +18,14 @@ pub struct TypeMap {
     bool_id: TypeId,
     integer_id: TypeId,
     double_id: TypeId,
+    char_id: TypeId,
 }
 
 pub enum BaseType {
     Bool,
     Integer,
     Double,
+    Char,
 }
 
 impl Index<&TypeId> for TypeMap {
@@ -43,11 +46,13 @@ impl TypeMap {
             integer_id: 0,
             double_id: 0,
             bool_id: 0,
+            char_id: 0,
         };
 
         map.integer_id = map.insert("Integer", Type::Integer);
         map.double_id = map.insert("Double", Type::Double);
         map.bool_id = map.insert("Bool", Type::Bool);
+        map.char_id = map.insert("Char", Type::Char);
         map
     }
 
@@ -74,6 +79,7 @@ impl TypeMap {
             BaseType::Bool => self.bool_id,
             BaseType::Integer => self.integer_id,
             BaseType::Double => self.double_id,
+            BaseType::Char => self.char_id,
         }
     }
 
@@ -115,11 +121,13 @@ pub enum Type {
     Integer,
     Double,
     Bool,
+    Char,
     Sum(Vec<(String, Vec<TypeId>)>),
 }
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum Value {
+    Char(char),
     Integer(i32),
     Double(f64),
     Bool(bool),
@@ -129,6 +137,7 @@ pub enum Value {
 impl Display for Value {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         match self {
+            Value::Char(v) => write!(f, "{}", v),
             Value::Integer(v) => write!(f, "{}", v),
             Value::Double(v) => write!(f, "{}", v),
             Value::Bool(v) => write!(f, "{}", v),
@@ -155,6 +164,7 @@ impl Value {
     pub fn to_bytes<W: Write>(&self, writer: &mut W, types: &TypeMap, t: &Type) {
         let size = t.size_of(types);
         match self {
+            Value::Char(val) => serialize_into(writer, &u32::from(*val)).unwrap(),
             Value::Integer(val) => serialize_into(writer, val).unwrap(),
             Value::Double(val) => serialize_into(writer, val).unwrap(),
             Value::Bool(val) => serialize_into(writer, val).unwrap(),
@@ -194,6 +204,7 @@ impl Value {
 impl Type {
     pub fn size_of(&self, types: &TypeMap) -> usize {
         match self {
+            Type::Char => size_of::<char>(),
             Type::Integer => size_of::<i32>(),
             Type::Double => size_of::<f64>(),
             Type::Bool => size_of::<bool>(),
@@ -211,6 +222,7 @@ impl Type {
         assert_eq!(self.size_of(types), bytes.len());
 
         match self {
+            Type::Char => deserialize(bytes).map(|v| Value::Char(char::from_u32(v).unwrap())),
             Type::Integer => deserialize(bytes).map(|v| Value::Integer(v)),
             Type::Bool => deserialize(bytes).map(|v| Value::Bool(v)),
             Type::Double => deserialize(bytes).map(|v| Value::Double(v)),
@@ -241,6 +253,7 @@ impl Type {
 
     pub fn random_value(&self, types: &TypeMap) -> Value {
         match self {
+            Type::Char => Value::Char(rand::random::<char>()),
             Type::Integer => Value::Integer(rand::random::<i32>()),
             Type::Bool => Value::Bool(rand::random::<bool>()),
             Type::Double => Value::Double(rand::random::<f64>()),
