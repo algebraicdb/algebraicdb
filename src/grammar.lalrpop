@@ -165,8 +165,6 @@ InsertFrom: InsertFrom = {
     Select => InsertFrom::Select(<>)
 }
 
-
-
 JoinType: JoinType = {
     LEFT OUTER? JOIN => JoinType::LeftOuter,
     RIGHT OUTER? JOIN => JoinType::RightOuter,

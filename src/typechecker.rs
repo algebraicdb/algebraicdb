@@ -131,7 +131,7 @@ fn check_select<'a, T: TTable>(
         check_where_clause(where_clause, ctx)?;
     }
 
-    //returns solved here via collect magic
+    // Collect a Result<Vec<_>> from an Iter<Result<_>>
     select
         .items
         .iter()
@@ -293,9 +293,6 @@ fn check_drop<T: TTable>(_drop: &Drop, _ctx: &mut Context<T>) -> Result<(), Type
     Ok(())
 }
 
-//Create Table(Int a, int b)
-//insert into table(a) Values(1, 3)
-
 fn check_insert<T: TTable>(insert: &Insert, ctx: &mut Context<T>) -> Result<(), TypeError> {
     let table = ctx.globals.read_table(&insert.table);
     let schema = table.get_schema();
@@ -305,7 +302,9 @@ fn check_insert<T: TTable>(insert: &Insert, ctx: &mut Context<T>) -> Result<(), 
     match &insert.from {
         InsertFrom::Values(rows) => {
             for row in rows.iter() {
-                // Make sure there is a value for every column
+                // Make sure there is a value for every specified column
+                // INSERT INTO t(a,b) VALUES (1,2);
+                // ┍╌╌╌╌╌╌╌╌╌╌╌╌╌┷╌┷╌╌┑    ┍╌╌┷╌┷╌╌┑
                 if insert.columns.len() != row.len() {
                     return Err(TypeError::InvalidCount {
                         expected: insert.columns.len(),
@@ -330,7 +329,7 @@ fn check_insert<T: TTable>(insert: &Insert, ctx: &mut Context<T>) -> Result<(), 
                 // Make sure all columns have a value
                 for (column, _) in &table.get_schema().columns {
                     if populated_columns.get(column).is_none() {
-                        // TODO: default values
+                        // TODO: Support for default values
                         return Err(TypeError::MissingColumn(column.clone()));
                     }
                 }
@@ -341,7 +340,7 @@ fn check_insert<T: TTable>(insert: &Insert, ctx: &mut Context<T>) -> Result<(), 
         InsertFrom::Select(select) => {
             let types = check_select(select, ctx)?;
 
-            //compare length of expected types and inserted types
+            // Make sure there is a value for every specified column
             if insert.columns.len() != types.len() {
                 return Err(TypeError::InvalidCount {
                     expected: insert.columns.len(),
@@ -366,7 +365,7 @@ fn check_insert<T: TTable>(insert: &Insert, ctx: &mut Context<T>) -> Result<(), 
             // Make sure all columns have a value
             for (column, _) in &table.get_schema().columns {
                 if populated_columns.get(column).is_none() {
-                    // TODO: default values
+                    // TODO: Support for default values
                     return Err(TypeError::MissingColumn(column.clone()));
                 }
             }
