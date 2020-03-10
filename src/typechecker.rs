@@ -100,7 +100,7 @@ pub fn check_stmt<T: TTable>(
     let mut ctx = Context::new(globals);
 
     match stmt {
-        Stmt::Select(select) => check_select(select, &mut ctx),
+        Stmt::Select(select) => check_select(select, &mut ctx).map(|_| ()),
         Stmt::Update(update) => check_update(update, &mut ctx),
         Stmt::Delete(delete) => check_delete(delete, &mut ctx),
         Stmt::Drop(drop) => check_drop(drop, &mut ctx),
@@ -119,7 +119,10 @@ fn import_table_columns<'a, T: TTable>(name: &str, ctx: &'a mut Context<'_, T>) 
     }
 }
 
-fn check_select<T: TTable>(select: &Select, ctx: &mut Context<T>) -> Result<(), TypeError> {
+fn check_select<'a, T: TTable>(
+    select: &'a Select,
+    ctx: &mut Context<T>,
+) -> Result<Vec<DuckType<'a>>, TypeError> {
     if let Some(from) = &select.from {
         check_select_from(from, ctx)?;
     }
@@ -128,11 +131,12 @@ fn check_select<T: TTable>(select: &Select, ctx: &mut Context<T>) -> Result<(), 
         check_where_clause(where_clause, ctx)?;
     }
 
-    for expr in &select.items {
-        check_expr(expr, ctx)?;
-    }
-
-    Ok(())
+    // Collect a Result<Vec<_>> from an Iter<Result<_>>
+    select
+        .items
+        .iter()
+        .map(|expr| check_expr(expr, ctx))
+        .collect()
 }
 
 fn check_select_from<T: TTable>(from: &SelectFrom, ctx: &mut Context<T>) -> Result<(), TypeError> {
@@ -298,37 +302,78 @@ fn check_insert<T: TTable>(insert: &Insert, ctx: &mut Context<T>) -> Result<(), 
 
     let mut populated_columns = HashSet::new();
 
-    for row in insert.rows.iter() {
-        // Make sure there is a value for every column
-        if insert.columns.len() != row.len() {
-            return Err(TypeError::InvalidCount {
-                expected: insert.columns.len(),
-                actual: row.len(),
-            });
-        }
+    match &insert.from {
+        InsertFrom::Values(rows) => {
+            for row in rows.iter() {
+                // Make sure there is a value for every specified column
+                // INSERT INTO t(a,b) VALUES (1,2);
+                // ┍╌╌╌╌╌╌╌╌╌╌╌╌╌┷╌┷╌╌┑    ┍╌╌┷╌┷╌╌┑
+                if insert.columns.len() != row.len() {
+                    return Err(TypeError::InvalidCount {
+                        expected: insert.columns.len(),
+                        actual: row.len(),
+                    });
+                }
 
-        for (column, expr) in insert.columns.iter().zip(row.iter()) {
-            // Make sure the types of the values match the types of the columns
-            let expected_type = schema
-                .column(column)
-                .ok_or_else(|| TypeError::Undefined(column.clone()))?;
-            let actual_type = check_expr(expr, ctx)?;
-            assert_type_as(actual_type, expected_type, &ctx.globals.type_map)?;
+                for (column, expr) in insert.columns.iter().zip(row.iter()) {
+                    // Make sure the types of the values match the types of the columns
+                    let expected_type = schema
+                        .column(column)
+                        .ok_or_else(|| TypeError::Undefined(column.clone()))?;
+                    let actual_type = check_expr(expr, ctx)?;
+                    assert_type_as(actual_type, expected_type, &ctx.globals.type_map)?;
 
-            // Make sure the user doesn't assign to the same column twice
-            if !populated_columns.insert(column) {
-                return Err(TypeError::AlreadyDefined);
+                    // Make sure the user doesn't assign to the same column twice
+                    if !populated_columns.insert(column) {
+                        return Err(TypeError::AlreadyDefined);
+                    }
+                }
+
+                // Make sure all columns have a value
+                for (column, _) in &table.get_schema().columns {
+                    if populated_columns.get(column).is_none() {
+                        // TODO: Support for default values
+                        return Err(TypeError::MissingColumn(column.clone()));
+                    }
+                }
+                populated_columns.clear();
             }
         }
 
-        // Make sure all columns have a value
-        for (column, _) in &table.get_schema().columns {
-            if populated_columns.get(column).is_none() {
-                // TODO: default values
-                return Err(TypeError::MissingColumn(column.clone()));
+        InsertFrom::Select(select) => {
+            let types = check_select(select, ctx)?;
+
+            // Make sure there is a value for every specified column
+            if insert.columns.len() != types.len() {
+                return Err(TypeError::InvalidCount {
+                    expected: insert.columns.len(),
+                    actual: types.len(),
+                });
             }
+
+            for (column, actual_type) in insert.columns.iter().zip(types.into_iter()) {
+                // Make sure the types of the values match the types of the columns
+                let expected_type = schema
+                    .column(column)
+                    .ok_or_else(|| TypeError::Undefined(column.clone()))?;
+
+                assert_type_as(actual_type, expected_type, &ctx.globals.type_map)?;
+
+                // Make sure the user doesn't assign to the same column twice
+                if !populated_columns.insert(column) {
+                    return Err(TypeError::AlreadyDefined);
+                }
+            }
+
+            // Make sure all columns have a value
+            for (column, _) in &table.get_schema().columns {
+                if populated_columns.get(column).is_none() {
+                    // TODO: Support for default values
+                    return Err(TypeError::MissingColumn(column.clone()));
+                }
+            }
+            populated_columns.clear();
         }
-        populated_columns.clear();
     }
 
     Ok(())

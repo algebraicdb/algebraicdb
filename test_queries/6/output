@@ -66,6 +66,7 @@ UnrecognizedToken {
         "ON",
         "OR",
         "RIGHT",
+        "SELECT",
         "SET",
         "VALUES",
         "WHERE",

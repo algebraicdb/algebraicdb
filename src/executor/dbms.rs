@@ -197,17 +197,23 @@ async fn execute_insert(
 ) -> Result<(), Box<dyn Error>> {
     let (table, types) = resources.write_table(&insert.table);
 
-    let row_count = insert.rows.len();
-    for row in insert.rows.into_iter() {
-        let values: Vec<_> = row
-            .into_iter()
-            .map(|expr| execute_expr(expr))
-            .collect();
-        table.push_row(&values, &types);
+    match insert.from {
+        // case !query
+        InsertFrom::Values(rows) => {
+            let row_count = rows.len();
+            for row in rows.into_iter() {
+                let values: Vec<_> = row.into_iter().map(execute_expr).collect();
+                table.push_row(&values, &types);
+            }
+
+            w.write_all(format!("{} row(s) inserted\n", row_count).as_bytes())
+                .await?;
+        }
+
+        //case query
+        InsertFrom::Select(_) => unimplemented!("Inserting from a select-statement"),
     }
 
-    w.write_all(format!("{} row(s) inserted\n", row_count).as_bytes())
-        .await?;
     Ok(())
 }
 

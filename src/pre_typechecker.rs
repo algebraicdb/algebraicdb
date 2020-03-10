@@ -22,10 +22,27 @@ fn get_table_resource_requests(stmt: &Stmt) -> Vec<TableRequest> {
             table: upd.table.clone(),
             rw: RW::Write,
         }],
-        Stmt::Insert(ins) => vec![TableRequest {
-            table: ins.table.clone(),
-            rw: RW::Write,
-        }],
+        Stmt::Insert(ins) => {
+            let mut req = match &ins.from {
+                InsertFrom::Values(_) => vec![],
+
+                InsertFrom::Select(select) => get_option_select(&select.from),
+            };
+
+            req.sort();
+            match req.binary_search_by(|r| r.table.cmp(&ins.table)) {
+                Ok(i) => req[i].rw = RW::Write,
+                Err(i) => req.insert(
+                    i,
+                    TableRequest {
+                        table: ins.table.clone(),
+                        rw: RW::Write,
+                    },
+                ),
+            }
+
+            req
+        }
         Stmt::Delete(del) => vec![TableRequest {
             table: del.table.clone(),
             rw: RW::Write,
@@ -46,7 +63,7 @@ fn get_option_select<'a>(sel: &'a Option<SelectFrom>) -> Vec<TableRequest> {
     }
 }
 
-fn get_select<'a>(sel: &'a SelectFrom) -> Vec<TableRequest> {
+fn get_select(sel: &SelectFrom) -> Vec<TableRequest> {
     match &sel {
         SelectFrom::Select(nsel) => get_option_select(&nsel.from),
         SelectFrom::Table(tab) => vec![TableRequest {
