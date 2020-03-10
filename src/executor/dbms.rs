@@ -199,10 +199,7 @@ async fn execute_insert(
 
     let row_count = insert.rows.len();
     for row in insert.rows.into_iter() {
-        let values: Vec<_> = row
-            .into_iter()
-            .map(|expr| execute_expr(expr))
-            .collect();
+        let values: Vec<_> = row.into_iter().map(|expr| execute_expr(expr)).collect();
         table.push_row(&values, &types);
     }
 

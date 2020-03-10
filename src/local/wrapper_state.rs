@@ -90,7 +90,6 @@ async fn resource_manager(mut requests: RequestReceiver, client: Arc<Client>) {
     let mut tables: HashMap<String, Arc<RwLock<Schema>>> = HashMap::new();
     let type_map: Arc<RwLock<TypeMap>> = Arc::new(RwLock::new(TypeMap::new()));
 
-
     loop {
         let (request, response_ch) = match requests.recv().await {
             Some(r) => r,

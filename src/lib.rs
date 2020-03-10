@@ -3,6 +3,7 @@
 #![feature(box_syntax)]
 #![feature(async_closure)]
 #![allow(dead_code)]
+#![feature(type_ascription)]
 
 mod api;
 mod ast;

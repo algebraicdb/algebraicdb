@@ -2,12 +2,13 @@ use crate::ast::*;
 use crate::local::{DbState, ResourcesGuard, WrapperState};
 use crate::pattern::CompiledPattern;
 use crate::pre_typechecker;
+use crate::psqlwrapper::translator::*;
 use crate::table::Schema;
 use crate::typechecker;
 use crate::types::{Type, TypeId, Value};
 use std::error::Error;
 use tokio::io::{AsyncWrite, AsyncWriteExt};
-use crate::psqlwrapper::translator::*;
+use tokio_postgres::{SimpleQueryMessage, SimpleQueryRow};
 struct Context {
     // TODO
 }
@@ -72,17 +73,32 @@ async fn execute_stmt(
         }
         Stmt::CreateType(create_type) => execute_create_type(create_type, resources, w).await,
         Stmt::Insert(insert) => execute_insert(insert, resources, w, &s).await,
-        Stmt::Select(select) => execute_select(select, resources, w).await,
+        Stmt::Select(select) => execute_select(select, &s, resources, w).await,
         _ => unimplemented!("Not implemented: {:?}", ast),
     }
 }
 
 async fn execute_select(
     select: Select,
+    s: &WrapperState,
     resources: ResourcesGuard<'_, Schema>,
     w: &mut (dyn AsyncWrite + Send + Unpin),
 ) -> Result<(), Box<dyn Error>> {
-    unimplemented!()
+    let rows: Vec<SimpleQueryMessage> = s
+        .client
+        .simple_query(translate_select(&select).as_str())
+        .await
+        .unwrap();
+
+    w.write_all(
+        rows.iter().fold(String::new(),|a, b| format!("{}\n{}", a, match b {
+            SimpleQueryMessage::Row(r) => String::from((0..r.len()).map(|c| match r.get(c){Some(st) => st, None => ""}).collect::<Vec<&str>>().join(",")),
+            SimpleQueryMessage::CommandComplete(r) => {dbg!(r); String::new()},
+            _ => unreachable!(),
+        })).as_bytes()
+    )
+    .await?;
+    Ok(())
 }
 
 async fn execute_create_table(
@@ -105,6 +121,7 @@ async fn execute_create_table(
 
     let schema = Schema::new(columns);
     s.create_table(create_table.table, schema).await.unwrap();
+    w.write_all("created table\n".as_bytes()).await?;
     Ok(())
 }
 
@@ -147,7 +164,10 @@ async fn execute_insert(
     let (table, types) = resources.write_table(&insert.table);
     let row_count = insert.rows.len();
 
-    s.client.execute(translate_insert(&insert).as_str(), &[]).await.unwrap();
+    s.client
+        .execute(translate_insert(&insert).as_str(), &[])
+        .await
+        .unwrap();
 
     w.write_all(format!("{} row(s) inserted\n", row_count).as_bytes())
         .await?;
