@@ -22,9 +22,9 @@ pub struct Column {
 
 #[derive(Debug)]
 pub struct Table {
-    schema: Schema,
-    data: Vec<u8>,
-    row_size: usize,
+    pub schema: Schema,
+    pub data: Vec<u8>,
+    pub row_size: usize,
 }
 
 impl TTable for Table {
