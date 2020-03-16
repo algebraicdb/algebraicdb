@@ -57,6 +57,8 @@ match {
     r"[A-z][A-z0-9_]*" => IDENT,
     r#""[^"]*""# => STR,
     r#"'.'"# => CHAR,
+    r"\s*" => { },
+    r"--[^\n\r]*[\n\r]*" => {}, // `-- comment`
 }
 
 // Main production
