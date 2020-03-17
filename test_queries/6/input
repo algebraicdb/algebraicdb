@@ -1,3 +1,5 @@
+-- Test type-errors involving inner primitives of sum-types
+
 CREATE TYPE MaybeInt AS VARIANT {
 	Just(Integer),
 	Nothing(),
@@ -5,20 +7,26 @@ CREATE TYPE MaybeInt AS VARIANT {
 
 CREATE TABLE t(m MaybeInt);
 
+-- Test invalid inner type
 INSERT INTO t(m) VALUES (MaybeInt::Just(42.42));
 INSERT INTO t(m) VALUES (MaybeInt::Just(true));
 INSERT INTO t(m) VALUES (          Just(42.42));
 INSERT INTO t(m) VALUES (          Just(true));
+
+-- Test omitting constructor
 INSERT INTO t(m) VALUES (42);
 
+-- Test omitting parentheses
 INSERT INTO t(m) VALUES (MaybeInt::Nothing);
 INSERT INTO t(m) VALUES (MaybeInt::Just 42);
 
+-- Test valid values while *not* specifying type
 INSERT INTO t(m) VALUES (Just(42));
 INSERT INTO t(m) VALUES (Nothing());
 
 SELECT m FROM t;
 
+-- Test valid values while specifying type
 INSERT INTO t(m) VALUES
 	(MaybeInt::Nothing()),
 	(MaybeInt::Just(42));

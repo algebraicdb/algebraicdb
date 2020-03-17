@@ -1,3 +1,5 @@
+-- Test having multiple sum-types with the same constructor name
+
 CREATE TYPE MaybeInt AS VARIANT {
     Just(Integer),
     Nothing(),

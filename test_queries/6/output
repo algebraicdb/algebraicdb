@@ -22,12 +22,12 @@ InvalidType {
 }
 UnrecognizedToken {
     token: (
-        44,
+        73,
         Token(
-            8,
+            10,
             ")",
         ),
-        45,
+        74,
     ),
     expected: [
         "\"(\"",
@@ -37,7 +37,7 @@ UnrecognizedToken {
     token: (
         41,
         Token(
-            2,
+            3,
             "42",
         ),
         43,

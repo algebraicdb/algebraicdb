@@ -1,3 +1,5 @@
+-- Test type-checking invalid primitives
+
 CREATE TABLE ints(int Integer);
 
 INSERT INTO ints(int) VALUES (true), (false);
