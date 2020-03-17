@@ -28,7 +28,3 @@ prettydiff = "0.3.1"
 
 [build-dependencies]
 lalrpop = "0.17.2"
-
-[features]
-default = []
-wrapper = []
