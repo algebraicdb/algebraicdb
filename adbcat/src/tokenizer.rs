@@ -2,32 +2,9 @@ use lazy_static::lazy_static;
 use regex::Regex;
 
 static KEYWORDS: &[&str] = &[
-    "SELECT",
-    "FROM",
-    "WHERE",
-    "INSERT",
-    "INTO",
-    "VALUES",
-    "DELETE",
-    "DROP",
-    "UPDATE",
-    "JOIN",
-    "LEFT",
-    "RIGHT",
-    "INNER",
-    "OUTER",
-    "FULL",
-    "SET",
-    "ON",
-    "AND",
-    "OR",
-    "CREATE",
-    "TABLE",
-    "TYPE",
-    "AS",
-    "VARIANT",
-    "true",
-    "false",
+    "SELECT", "FROM", "WHERE", "INSERT", "INTO", "VALUES", "DELETE", "DROP", "UPDATE", "JOIN",
+    "LEFT", "RIGHT", "INNER", "OUTER", "FULL", "SET", "ON", "AND", "OR", "CREATE", "TABLE", "TYPE",
+    "AS", "VARIANT", "true", "false",
 ];
 
 lazy_static! {
@@ -91,7 +68,7 @@ impl<'a> Iterator for Tokenizer<'a> {
                             result = &self.s[..m.end()];
                             self.s = &self.s[m.end()..];
                         }
-                        _  => {
+                        _ => {
                             result = self.s;
                             self.s = "";
                         }
@@ -118,7 +95,6 @@ impl<'a> Iterator for Tokenizer<'a> {
                     Some((result, tt))
                 }
             }
-
         }
     }
 }

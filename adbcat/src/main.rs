@@ -1,24 +1,24 @@
-#![recursion_limit="1024"]
+#![recursion_limit = "1024"]
 
 mod tokenizer;
 
-use termion::raw::IntoRawMode;
+use crate::tokenizer::{TokenType, Tokenizer};
+use futures::executor::block_on;
+use futures::{select, FutureExt};
+use std::error::Error;
+use std::io::{stdin, stdout};
+use std::thread;
+use structopt::StructOpt;
+use termion::event::Key;
 use termion::input::TermRead;
+use termion::raw::IntoRawMode;
+use tokio::prelude::*;
+use tokio::sync::mpsc;
 use tui::backend::TermionBackend;
 use tui::layout::{Constraint, Direction, Layout};
 use tui::style::{Color, Style};
 use tui::widgets::{Block, Borders, Paragraph, Text, Widget};
 use tui::Terminal;
-use tokio::prelude::*;
-use std::io::{stdout, stdin};
-use tokio::sync::mpsc;
-use futures::{select, FutureExt};
-use termion::event::Key;
-use std::error::Error;
-use futures::executor::block_on;
-use std::thread;
-use crate::tokenizer::{Tokenizer, TokenType};
-use structopt::StructOpt;
 
 #[derive(StructOpt, Debug)]
 #[structopt(name = "basic")]
@@ -44,16 +44,14 @@ fn input_handler(mut sender: mpsc::Sender<Key>) -> Result<(), Box<dyn Error>> {
 }
 
 fn highlight_syntax<'a>(input: &'a str) -> impl Iterator<Item = Text<'static>> + 'a {
-    Tokenizer::from(input)
-        .map(|(word, tt)| match tt {
-            TokenType::Keyword => Text::styled(word.to_owned(), Style::default().fg(Color::Blue)),
-            TokenType::Number => Text::styled(word.to_owned(), Style::default().fg(Color::Red)),
-            TokenType::Symbol => Text::styled(word.to_owned(), Style::default().fg(Color::Yellow)),
-            TokenType::String => Text::styled(word.to_owned(), Style::default().fg(Color::Red)),
-            TokenType::Word | TokenType::Whitespace => Text::raw(word.to_owned()),
-        })
+    Tokenizer::from(input).map(|(word, tt)| match tt {
+        TokenType::Keyword => Text::styled(word.to_owned(), Style::default().fg(Color::Blue)),
+        TokenType::Number => Text::styled(word.to_owned(), Style::default().fg(Color::Red)),
+        TokenType::Symbol => Text::styled(word.to_owned(), Style::default().fg(Color::Yellow)),
+        TokenType::String => Text::styled(word.to_owned(), Style::default().fg(Color::Red)),
+        TokenType::Word | TokenType::Whitespace => Text::raw(word.to_owned()),
+    })
 }
-
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
@@ -85,11 +83,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     let (sender, mut inputs) = mpsc::channel(255);
 
-    thread::spawn(move || {
-        match input_handler(sender) {
-            Err(e) => eprintln!("{}", e),
-            Ok(()) => {}
-        }
+    thread::spawn(move || match input_handler(sender) {
+        Err(e) => eprintln!("{}", e),
+        Ok(()) => {}
     });
 
     loop {
@@ -97,7 +93,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
             let line_count = line.split(&line_breaks).count();
             let mut output: Vec<_> = vec![Text::raw("> ")];
             highlight_syntax(&line).for_each(|word| output.push(word));
-            output.push(Text::styled(" ", Style::default().bg(Color::Rgb(255, 255, 255))));
+            output.push(Text::styled(
+                " ",
+                Style::default().bg(Color::Rgb(255, 255, 255)),
+            ));
 
             let chunks = Layout::default()
                 .direction(Direction::Vertical)
@@ -113,7 +112,11 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
             Paragraph::new(console.iter())
                 .wrap(true)
-                .block(Block::default().title(&format!("Connected to {}:{}", opt.host, opt.port)).borders(Borders::ALL))
+                .block(
+                    Block::default()
+                        .title(&format!("Connected to {}:{}", opt.host, opt.port))
+                        .borders(Borders::ALL),
+                )
                 .scroll({
                     let maxh = chunks[0].height;
                     let h = console_len + 2;
@@ -211,6 +214,5 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 }
             },
         }
-
     }
 }
