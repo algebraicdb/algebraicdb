@@ -44,39 +44,47 @@ fn input_handler(mut sender: mpsc::Sender<Key>) -> Result<(), Box<dyn Error>> {
 }
 
 fn highlight_syntax<'a>(input: &'a str) -> impl Iterator<Item = Text<'static>> + 'a {
-    Tokenizer::from(input).map(|(word, tt)| match tt {
-        TokenType::Keyword => Text::styled(word.to_owned(), Style::default().fg(Color::Blue)),
-        TokenType::Number => Text::styled(word.to_owned(), Style::default().fg(Color::Red)),
-        TokenType::Symbol => Text::styled(word.to_owned(), Style::default().fg(Color::Yellow)),
-        TokenType::String => Text::styled(word.to_owned(), Style::default().fg(Color::Red)),
-        TokenType::Word | TokenType::Whitespace => Text::raw(word.to_owned()),
+    Tokenizer::from(input).map(|(word, tt)| {
+        let style = match tt {
+            TokenType::Keyword => Style::default().fg(Color::Blue),
+            TokenType::Number => Style::default().fg(Color::Red),
+            TokenType::Symbol => Style::default().fg(Color::Yellow),
+            TokenType::String => Style::default().fg(Color::Red),
+            TokenType::Word | TokenType::Whitespace => Style::default(),
+        };
+        Text::styled(word.to_owned(), style)
     })
 }
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
+    // Command-line arguments
     let opt = Opt::from_args();
 
-    let mut stream = tokio::net::TcpStream::connect((opt.host.as_str(), opt.port)).await?;
-
+    // Terminal output
     let stdout = stdout().into_raw_mode()?;
     let backend = TermionBackend::new(stdout);
     let mut terminal = Terminal::new(backend)?;
 
-    let mut stream_buf = [0; 4096];
+    // Network stream
+    let mut stream = tokio::net::TcpStream::connect((opt.host.as_str(), opt.port)).await?;
+    let mut stream_buf = [0u8; 4096];
 
+    // The current input line
     let mut line = String::new();
 
-    let default_style: Style = Default::default();
-    let response_style = default_style.fg(Color::Green);
-
+    // The history of previously entered commands
     let mut history: Vec<String> = vec![];
+
+    // If the user has Up and is browsing the history, this will be Some(i) for history[i]
     let mut in_history: Option<usize> = None;
 
+    // The stream of commands & db responses
     let mut console: Vec<Text> = vec![];
-    let mut console_len = 0;
 
-    let line_breaks = |c| ['\n', '\r'].contains(&c);
+    // The number of actual entries in console; the number of commands enters + the number of lines
+    // read from the network stream.
+    let mut console_len = 0;
 
     terminal.hide_cursor()?;
     terminal.clear()?;
@@ -84,13 +92,12 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let (sender, mut inputs) = mpsc::channel(255);
 
     thread::spawn(move || match input_handler(sender) {
-        Err(e) => eprintln!("{}", e),
+        Err(e) => panic!("{}", e),
         Ok(()) => {}
     });
 
     loop {
         terminal.draw(|mut f| {
-            let line_count = line.split(&line_breaks).count();
             let mut output: Vec<_> = vec![Text::raw("> ")];
             highlight_syntax(&line).for_each(|word| output.push(word));
             output.push(Text::styled(
@@ -101,22 +108,18 @@ async fn main() -> Result<(), Box<dyn Error>> {
             let chunks = Layout::default()
                 .direction(Direction::Vertical)
                 .margin(1)
-                .constraints(
-                    [
-                        Constraint::Min(0),
-                        Constraint::Length(line_count as u16 + 2),
-                    ]
-                    .as_ref(),
-                )
+                .constraints([Constraint::Min(0), Constraint::Length(3)].as_ref())
                 .split(f.size());
 
             Paragraph::new(console.iter())
-                .wrap(true)
+                .wrap(false) // FIXME: wrapping doesn't work with the scrollback logic
                 .block(
                     Block::default()
                         .title(&format!("Connected to {}:{}", opt.host, opt.port))
                         .borders(Borders::ALL),
                 )
+                // When the console screen fills up, we scroll to the bottom so that the latest
+                // entries are always visible.
                 .scroll({
                     let maxh = chunks[0].height;
                     let h = console_len + 2;
@@ -128,14 +131,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 })
                 .render(&mut f, chunks[0]);
 
+            // FIXME: this buffer should expand if the input line gets large enough.
             Paragraph::new(output.iter())
                 .wrap(true)
-                //.raw(true)
-                .block(
-                    Block::default()
-                        //.title("Block 2")
-                        .borders(Borders::ALL & !Borders::TOP),
-                )
+                .block(Block::default().borders(Borders::ALL & !Borders::TOP))
                 .render(&mut f, chunks[1])
         })?;
 
@@ -196,7 +195,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
                         line.pop();
                     }
                     Some(unknown_key) => {
-                        //console.push(Text::styled(format!("? {:?}\n", unknown_key), Style::default().fg(Color::Red)));
+                        //console.push(Text::styled(
+                        //        format!("? {:?}\n", unknown_key),
+                        //        Style::default().fg(Color::Red)
+                        //));
                         //console_len += 1;
                     }
                 }
@@ -205,7 +207,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 let n = n?;
                 let s = std::str::from_utf8(&stream_buf[..n]).unwrap();
                 for l in s.lines() {
-                    console.push(Text::styled("< ", response_style));
+                    console.push(Text::styled("< ", Style::default().fg(Color::Green)));
                     for word in highlight_syntax(l) {
                         console.push(word);
                     }

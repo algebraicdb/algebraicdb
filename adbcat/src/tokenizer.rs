@@ -11,17 +11,30 @@ lazy_static! {
     static ref STR_REGEX: Regex = Regex::new(r#""((\\.)|[^\\"])*""#).unwrap();
 }
 
+/// Iterate over slices of a string, split by the type of token.
 pub(crate) struct Tokenizer<'a> {
     s: &'a str,
 }
 
+/// Different categorizations of strings. Used by Tokenizer.
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(crate) enum TokenType {
-    Keyword,
+    /// Any valid identifier
     Word,
+
+    /// Any word that is a keyword
+    Keyword,
+
+    /// Any string consisting of numeric characters
     Number,
+
+    /// A string bounded by non-escaped quotes
     String,
+
+    /// Any ascii punctuation
     Symbol,
+
+    /// Any whitespace
     Whitespace,
 }
 
