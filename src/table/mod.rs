@@ -47,7 +47,7 @@ impl Table {
         }
     }
 
-    pub fn get_schema(&self) -> &Schema {
+    pub fn schema(&self) -> &Schema {
         &self.schema
     }
 
@@ -91,6 +91,11 @@ impl Table {
 
     fn row_start(&self, row: usize) -> usize {
         row * self.row_size
+    }
+
+    pub fn push_row_bytes(&mut self, row: &[u8]) {
+        assert_eq!(row.len(), self.row_size);
+        self.data.extend_from_slice(row);
     }
 
     pub fn push_row(&mut self, cells: &[Value], types: &TypeMap) {

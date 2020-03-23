@@ -2,7 +2,6 @@ mod iter;
 
 use crate::ast::*;
 use crate::local::{DbState, DbmsState, ResourcesGuard};
-use crate::pattern::CompiledPattern;
 use crate::pre_typechecker;
 use crate::table::{Schema, Table};
 use crate::typechecker;
@@ -10,6 +9,7 @@ use crate::types::{TypeMap, Type, TypeId, Value};
 use std::error::Error;
 use std::fmt::Write;
 use tokio::io::{AsyncWrite, AsyncWriteExt};
+use std::sync::Arc;
 
 use self::iter::*;
 
@@ -69,8 +69,9 @@ async fn execute_stmt(
         Stmt::CreateType(create_type) => execute_create_type(create_type, resources, w).await,
         Stmt::Insert(insert) => execute_insert(insert, resources, w).await,
         Stmt::Select(select) => {
+            let type_map = &resources.type_map;
             let table = execute_select(&select, &resources);
-            print_table(table, w).await
+            print_table(table.iter(type_map), w).await
 
         },
         _ => unimplemented!("Not implemented: {:?}", ast),
@@ -107,7 +108,7 @@ async fn print_table(
 
 fn full_table_scan<'a>(table: &'a Table, type_map: &'a TypeMap) -> RowIter<'a> {
     let mut offset = 0;
-    let bindings = table.get_schema().columns.iter()
+    let bindings = table.schema().columns.iter()
         .map(|(name, type_id)| {
             let t = type_map.get_by_id(*type_id);
             let size = t.size_of(type_map);
@@ -128,27 +129,83 @@ fn full_table_scan<'a>(table: &'a Table, type_map: &'a TypeMap) -> RowIter<'a> {
 
     RowIter {
         bindings,
-        matches: vec![],
+        matches: Arc::new([]),
         type_map,
         row: Some(0),
+    }
+}
+
+fn execute_select_from<'a>(
+    from: &'a SelectFrom,
+    resources: &'a ResourcesGuard<'a, Table>,
+) -> Rows<'a> {
+    let type_map = &resources.type_map;
+    match from {
+        SelectFrom::Table(table_name) => {
+            let table = resources.read_table(&table_name);
+            full_table_scan(table, type_map).into()
+        }
+        SelectFrom::Select(select) => {
+            execute_select(select, resources).into()
+        }
+        SelectFrom::Join(join) => {
+
+            match join.join_type {
+                JoinType::Inner => {/* This is the only one supported for now...*/},
+                JoinType::LeftOuter => unimplemented!("Left Outer Join"),
+                JoinType::RightOuter => unimplemented!("Right Outer Join"),
+                JoinType::FullOuter => unimplemented!("Full Outer Join"),
+            }
+
+            let table_a = execute_select_from(&join.table_a, resources);
+            let table_b = execute_select_from(&join.table_b, resources);
+
+            let mut table_out = Table::new(table_a.schema().union(&table_b.schema()), type_map);
+
+            let on_expr = join.on_clause.as_ref().unwrap_or(&Expr::Value(Value::Bool(true)));
+
+            let mut row_buf: Vec<u8> = vec![];
+
+            // The join algorithm is currently a basic n² loop.
+            // We probably want to implement a more efficient one.
+
+            let table_b = table_b.iter(type_map);
+            for row_a in table_a.iter(type_map) {
+                for row_b in table_b.clone() {
+                    let matches = match execute_expr(on_expr) {
+                        Value::Bool(b) => b,
+                        v => panic!("Tried joining on something other than a bool: {:?}", v),
+                    };
+
+                    if matches {
+                        let row_a = row_a.clone();
+
+                        for cell in row_a.chain(row_b) {
+                            row_buf.extend_from_slice(cell.data);
+                        }
+                        table_out.push_row_bytes(&row_buf);
+                        row_buf.clear();
+                    }
+                }
+            }
+
+            Rows::from(table_out)
+        }
     }
 }
 
 fn execute_select<'a>(
     select: &'a Select,
     resources: &'a ResourcesGuard<'a, Table>,
-) -> RowIter<'a> {
+) -> Rows<'a> {
     let type_map = &resources.type_map;
-    let mut scan = match &select.from {
-        Some(SelectFrom::Table(table_name)) => {
-            let table = resources.read_table(&table_name);
-            full_table_scan(table, type_map)
-        }
-        Some(SelectFrom::Select(select)) => {
-            execute_select(select, resources)
-        }
-        select_from => unimplemented!("Not implemented: {:?}", select_from),
+
+    let rows = match &select.from {
+        Some(from) => execute_select_from(from, resources,),
+        None => unimplemented!("Selecting from nothing"),
     };
+
+    let mut scan = rows;
 
     let where_items = select.where_clause.as_ref().map(|wc| &wc.items[..]).unwrap_or(&[]);
     scan.apply_pattern(where_items, type_map);
@@ -227,9 +284,11 @@ async fn execute_insert(
         // case !query
         InsertFrom::Values(rows) => {
             let row_count = rows.len();
+            let mut values = vec![];
             for row in rows.into_iter() {
-                let values: Vec<_> = row.into_iter().map(execute_expr).collect();
+                row.iter().map(execute_expr).for_each(|v| values.push(v));
                 table.push_row(&values, &types);
+                values.clear();
             }
 
             w.write_all(format!("{} row(s) inserted\n", row_count).as_bytes())
@@ -243,9 +302,9 @@ async fn execute_insert(
     Ok(())
 }
 
-fn execute_expr(expr: Expr) -> Value {
+fn execute_expr(expr: &Expr) -> Value {
     match expr {
-        Expr::Value(v) => v,
+        Expr::Value(v) => v.clone(),
         _ => unimplemented!("Non-value exprs"),
     }
 }

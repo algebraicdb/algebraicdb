@@ -1,4 +1,4 @@
-use crate::table::Cell;
+use crate::table::{Table, Schema, Cell};
 use crate::types::{Type, TypeMap, EnumTag, TypeId};
 use crate::pattern::Pattern;
 use std::cmp::Ordering;
@@ -6,13 +6,91 @@ use bincode::serialize;
 use std::sync::Arc;
 use crate::ast::{WhereItem, Expr};
 
+pub enum ModIter<'a> {
+    Select(&'a [Expr]),
+    Where(&'a [WhereItem]),
+}
+
+pub enum Rows<'a> {
+    Iter(RowIter<'a>),
+    Owned {
+        table: Table,
+        mods: Vec<ModIter<'a>>,
+    },
+}
+
+impl<'a> From<RowIter<'a>> for Rows<'a> {
+    fn from(iter: RowIter<'a>) -> Self {
+        Rows::Iter(iter)
+    }
+}
+
+impl From<Table> for Rows<'static> {
+    fn from(table: Table) -> Self {
+        Rows::Owned {
+            table,
+            mods: vec![],
+        }
+    }
+}
+
+impl<'a> Rows<'a> {
+    pub fn schema(&self) -> Schema {
+        // TODO: refactor this into something more efficient
+        match self {
+            Rows::Iter(iter) => Schema::new(iter.bindings.iter().map(|cr| (cr.name.to_owned(), cr.type_id)).collect()),
+            Rows::Owned { table, .. } => table.schema().clone(),
+        }
+    }
+
+    pub fn iter<'b>(&'b self, type_map: &'b TypeMap) -> RowIter<'b> {
+        match self {
+            Rows::Iter(iter) => iter.clone(),
+            Rows::Owned {
+                table,
+                mods,
+            } => {
+                use super::full_table_scan;
+                let mut scan = full_table_scan(&table, type_map);
+                for m in mods {
+                    match m {
+                        ModIter::Select(selects) => {
+                            scan.select(&selects);
+                        }
+                        ModIter::Where(clauses) => {
+                            scan.apply_pattern(&clauses, type_map);
+                        }
+                    }
+                }
+                scan
+            }
+        }
+    }
+
+    pub fn select(&mut self, items: &'a [Expr]) {
+        match self {
+            Rows::Iter(iter) => iter.select(items),
+            Rows::Owned { mods, .. } => mods.push(ModIter::Select(items)),
+        }
+    }
+
+    pub fn apply_pattern(&mut self, patterns: &'a [WhereItem], type_map: &TypeMap) {
+        match self {
+            Rows::Iter(iter) => iter.apply_pattern(patterns, type_map),
+            Rows::Owned { mods, .. } => mods.push(ModIter::Where(patterns)),
+        }
+    }
+}
+
+#[derive(Clone)]
 pub struct RowIter<'a> {
+    // FIXME: Avoid using Arc:s
+
     /// The actual data cells iterated over
-    // TODO: Avoid having an Arc here
     pub bindings: Arc<[CellRef<'a>]>,
 
     /// Filter rows
-    pub matches: Vec<RowCmp<'a>>,
+    pub matches: Arc<[CellFilter<'a>]>,
 
     pub type_map: &'a TypeMap,
 
@@ -30,26 +108,47 @@ pub struct CellIter<'a> {
 
 #[derive(Clone, Copy)]
 pub struct CellRef<'a> {
+    /// Source of the data (e.g. a slice of an entire table)
     pub source: &'a [u8],
+
+    /// The variable name bound to this cell
     pub name: &'a str,
+
+    /// The data type of this cell
     pub type_id: TypeId,
-    pub offset: usize,
-    pub size: usize,
+
+    /// The size of a row in the source
     pub row_size: usize,
+
+    /// The byte count offset from the start of the row, e.g. index of the start of a column.
+    pub offset: usize,
+
+    /// The size of the cell in bytes
+    pub size: usize,
 }
 
-pub struct RowCmp<'a> {
+#[derive(Clone)]
+pub struct CellFilter<'a> {
     /// Source of the data (e.g. a slice of an entire table)
     source: &'a [u8],
 
-    /// The size of a row in the data
+    /// The size of a row in the source
     row_size: usize,
 
     /// The byte count offset from the start of the row, e.g. index of the start of a column.
     offset: usize,
 
     /// The value to equal the and:ed row
-    value: Vec<u8>,
+    value: Arc<[u8]>,
+}
+
+struct JoinIter {
+    result: Table,
+}
+
+enum SelectIter<'a> {
+    FromTable(RowIter<'a>),
+    FromJoin(JoinIter),
 }
 
 impl<'a> Iterator for RowIter<'a> {
@@ -57,22 +156,20 @@ impl<'a> Iterator for RowIter<'a> {
 
     fn next(&mut self) -> Option<Self::Item> {
         if let Some(row) = self.row.as_mut() {
-            'outer: loop {
+            'rows: loop {
                 for source in self.bindings.iter() {
                     // Check if any "table" is out-of-bounds
                     if *row * source.row_size >= source.source.len() {
                         self.row = None;
                         return None;
                     }
-
-
                 }
 
                 // Check that all rows matches the filters
                 for m in self.matches.iter() {
                     if m.check(*row) != Ordering::Equal {
                         *row += 1;
-                        continue 'outer;
+                        continue 'rows;
                     }
                 }
 
@@ -145,39 +242,39 @@ impl<'a> RowIter<'a> {
             data: &'a [u8],
             row_size: usize,
             bindings: &mut Vec<CellRef<'a>>,
-            matches: &mut Vec<RowCmp<'a>>,
+            matches: &mut Vec<CellFilter<'a>>,
         ) {
             match pattern {
                 Pattern::Char(v) => {
-                    matches.push(RowCmp {
+                    matches.push(CellFilter {
                         source: data,
                         row_size,
                         offset: byte_index,
-                        value: serialize(v).unwrap(),
+                        value: serialize(v).unwrap().into(),
                     });
                 }
                 Pattern::Int(v) => {
-                    matches.push(RowCmp {
+                    matches.push(CellFilter {
                         source: data,
                         row_size,
                         offset: byte_index,
-                        value: serialize(v).unwrap(),
+                        value: serialize(v).unwrap().into(),
                     });
                 }
                 Pattern::Bool(v) => {
-                    matches.push(RowCmp {
+                    matches.push(CellFilter {
                         source: data,
                         row_size,
                         offset: byte_index,
-                        value: serialize(v).unwrap(),
+                        value: serialize(v).unwrap().into(),
                     });
                 }
                 Pattern::Double(v) => {
-                    matches.push(RowCmp {
+                    matches.push(CellFilter {
                         source: data,
                         row_size,
                         offset: byte_index,
-                        value: serialize(v).unwrap(),
+                        value: serialize(v).unwrap().into(),
                     });
                 }
                 Pattern::Ignore => {}
@@ -204,11 +301,11 @@ impl<'a> RowIter<'a> {
                             .find(|(_, (variant, _))| variant == name)
                             .unwrap();
 
-                        matches.push(RowCmp {
+                        matches.push(CellFilter {
                             source: data,
                             row_size,
                             offset: byte_index,
-                            value: serialize(&i).unwrap(),
+                            value: serialize(&i).unwrap().into(),
                         });
 
                         byte_index += std::mem::size_of::<EnumTag>();
@@ -224,8 +321,8 @@ impl<'a> RowIter<'a> {
             }
         }
 
-        let mut bindings = vec![];
-        //let mut matches = vec![];
+        let mut bindings: Vec<CellRef> = vec![];
+        let mut matches: Vec<CellFilter> = vec![];
 
         for select_item in patterns {
             match select_item {
@@ -245,7 +342,7 @@ impl<'a> RowIter<'a> {
                                           data,
                                           row_size,
                                           &mut bindings,
-                                          &mut self.matches,
+                                          &mut matches,
                                           );
                         }
                     }
@@ -253,14 +350,21 @@ impl<'a> RowIter<'a> {
             }
         }
 
-        bindings.extend(self.bindings.iter());
-        self.bindings = bindings.into();
+        if bindings.len() > 0 {
+            bindings.extend(self.bindings.into_iter());
+            self.bindings = bindings.into();
+        }
+
+        if matches.len() > 0 {
+            matches.extend_from_slice(&self.matches);
+            self.matches = matches.into();
+        }
     }
 }
 
-impl RowCmp<'_> {
+impl CellFilter<'_> {
     pub fn check(&self, row: usize) -> Ordering {
-        let RowCmp { source, row_size, offset, value } = self;
+        let CellFilter { source, row_size, offset, value } = self;
 
         let start = row * row_size + offset;
         let end = start + value.len();

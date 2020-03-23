@@ -153,7 +153,7 @@ fn check_select_from<T: TTable>(from: &SelectFrom, ctx: &mut Context<T>) -> Resu
             let scope = ctx.pop_locals_scope();
 
             ctx.push_locals_scope();
-            check_select_from(&join.table_a, ctx)?;
+            check_select_from(&join.table_b, ctx)?;
 
             ctx.merge_scope(scope);
 
