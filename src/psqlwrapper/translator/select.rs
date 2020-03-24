@@ -49,9 +49,8 @@ fn translate_expr(expr: &Expr) -> String {
 }
 
 fn translate_where(clause: &WhereClause) -> String {
-    clause.items.iter().fold(String::from("WHERE "), |a, b| {
-        format!("{}, {}", a, translate_where_item(b))
-    })
+    let items_string: Vec<String> = clause.items.iter().map(|x| translate_where_item(x)).collect();
+    format!("WHERE {}", items_string.join(","))
 }
 
 fn translate_where_item(witem: &WhereItem) -> String {

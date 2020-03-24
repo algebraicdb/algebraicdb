@@ -8,6 +8,7 @@ pub async fn create_tcp_server(address: &str) -> Result<!, Box<dyn Error>> {
     let state = State::new().await?;
 
     let mut listener = TcpListener::bind(address).await?;
+    println!("Listening to {}", address);
 
     loop {
         match listener.accept().await {
