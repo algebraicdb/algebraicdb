@@ -27,6 +27,12 @@ async-trait = "0.1.24"
 
 [dev-dependencies]
 prettydiff = "0.3.1"
+criterion = "0.3"
+
+[[bench]]
+name = "parsing_benchmark"
+harness = false
+
 
 [build-dependencies]
 lalrpop = "0.17.2"

@@ -8,7 +8,7 @@ mod api;
 mod ast;
 mod client;
 mod executor;
-mod grammar;
+pub mod grammar;
 mod local;
 mod pattern;
 mod pre_typechecker;
