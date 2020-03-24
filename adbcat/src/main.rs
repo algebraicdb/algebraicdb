@@ -1,4 +1,4 @@
-#![recursion_limit = "1024"]
+#![recursion_limit = "4096"]
 
 mod tokenizer;
 
@@ -191,15 +191,16 @@ async fn main() -> Result<(), Box<dyn Error>> {
                             None => line.clear(),
                         }
                     }
-                    Some(Key::Backspace) => {
+                    Some(Key::Ctrl('h')) | Some(Key::Backspace) => {
                         line.pop();
                     }
-                    Some(unknown_key) => {
-                        //console.push(Text::styled(
-                        //        format!("? {:?}\n", unknown_key),
-                        //        Style::default().fg(Color::Red)
-                        //));
-                        //console_len += 1;
+                    Some(unknown_key) => {/*
+                        console.push(Text::styled(
+                                format!("? {:?}\n", unknown_key),
+                                Style::default().fg(Color::Red)
+                        ));
+                        console_len += 1;
+                        */
                     }
                 }
             },
