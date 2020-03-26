@@ -26,7 +26,7 @@ fn translate_row(row: &Vec<Expr>) -> String {
 
 fn translate_exp(exp: &Expr) -> String {
     match exp {
-        Expr::Value(val @ Value::Sum(_, _, _)) => format!(r#"'{}'"#, translate_value(val)),
+        Expr::Value(val @ Value::Sum(_, _, _)) => format!(r#"'[{}]'"#, translate_value(val)),
         Expr::Value(val) => translate_value(val),
         _ => panic!("Can't insert non-values"),
     }
