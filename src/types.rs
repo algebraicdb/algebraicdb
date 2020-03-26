@@ -6,6 +6,7 @@ use std::fmt::{self, Display, Formatter};
 use std::io::Write;
 use std::mem::size_of;
 use std::ops::Index;
+use std::cmp::Ordering;
 
 pub type EnumTag = usize;
 pub type TypeId = usize;
@@ -197,6 +198,19 @@ impl Value {
                     );
                 }
             }
+        }
+    }
+}
+
+impl PartialOrd for Value {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        match (self, other) {
+            (Value::Char(v1), Value::Char(v2)) => Some(v1.cmp(v2)),
+            (Value::Integer(v1), Value::Integer(v2)) => Some(v1.cmp(v2)),
+            (Value::Double(v1), Value::Double(v2)) => Some(v1.partial_cmp(v2).unwrap_or(Ordering::Greater)),
+            (Value::Bool(v1), Value::Bool(v2)) => Some(v1.cmp(v2)),
+            (Value::Sum(_, _, _), Value::Sum(_, _, _)) => unimplemented!("Ord for sum-types"),
+            (_, _) => None
         }
     }
 }

@@ -3,13 +3,14 @@ mod iter;
 use crate::ast::*;
 use crate::local::{DbState, DbmsState, ResourcesGuard};
 use crate::pre_typechecker;
-use crate::table::{Schema, Table};
+use crate::table::{Schema, Table, Cell};
 use crate::typechecker;
 use crate::types::{TypeMap, Type, TypeId, Value};
 use std::error::Error;
 use std::fmt::Write;
 use tokio::io::{AsyncWrite, AsyncWriteExt};
 use std::sync::Arc;
+use std::iter::empty;
 
 use self::iter::*;
 
@@ -48,11 +49,7 @@ pub(crate) async fn execute_query(
         Err(e) => return Ok(w.write_all(format!("{:#?}\n", e).as_bytes()).await?),
     }
 
-    // TODO:
-    // 5. Maybe convert ast to some internal representation of a query
-    // (See EXPLAIN in postgres/mysql)
-
-    // 6. Execute query
+    // 5. Execute query
     execute_stmt(ast, s, resources, w).await
 }
 
@@ -90,7 +87,7 @@ async fn print_table(
         w.write_all(b"[").await?;
         let mut first = true;
 
-        for cell in row {
+        for (_, cell) in row {
             if !first {
                 w.write_all(b", ").await?;
             }
@@ -172,7 +169,8 @@ fn execute_select_from<'a>(
             let table_b = table_b.iter(type_map);
             for row_a in table_a.iter(type_map) {
                 for row_b in table_b.clone() {
-                    let matches = match execute_expr(on_expr) {
+                    let bindings = row_a.clone().chain(row_b.clone());
+                    let matches = match execute_expr(on_expr, bindings) {
                         Value::Bool(b) => b,
                         v => panic!("Tried joining on something other than a bool: {:?}", v),
                     };
@@ -180,7 +178,7 @@ fn execute_select_from<'a>(
                     if matches {
                         let row_a = row_a.clone();
 
-                        for cell in row_a.chain(row_b) {
+                        for (_, cell) in row_a.chain(row_b) {
                             row_buf.extend_from_slice(cell.data);
                         }
                         table_out.push_row_bytes(&row_buf);
@@ -201,7 +199,7 @@ fn execute_select<'a>(
     let type_map = &resources.type_map;
 
     let rows = match &select.from {
-        Some(from) => execute_select_from(from, resources,),
+        Some(from) => execute_select_from(from, resources),
         None => unimplemented!("Selecting from nothing"),
     };
 
@@ -278,16 +276,15 @@ async fn execute_insert(
     mut resources: ResourcesGuard<'_, Table>,
     w: &mut (dyn AsyncWrite + Send + Unpin),
 ) -> Result<(), Box<dyn Error>> {
-    let (table, types) = resources.write_table(&insert.table);
-
     match insert.from {
         // case !query
         InsertFrom::Values(rows) => {
+            let (table, type_map) = resources.write_table(&insert.table);
             let row_count = rows.len();
             let mut values = vec![];
             for row in rows.into_iter() {
-                row.iter().map(execute_expr).for_each(|v| values.push(v));
-                table.push_row(&values, &types);
+                row.iter().map(|e| execute_expr(e, empty())).for_each(|v| values.push(v));
+                table.push_row(&values, &type_map);
                 values.clear();
             }
 
@@ -296,15 +293,69 @@ async fn execute_insert(
         }
 
         //case query
-        InsertFrom::Select(_) => unimplemented!("Inserting from a select-statement"),
+        InsertFrom::Select(select) => {
+            let mut data = vec![];
+            let mut row_count = 0;
+            for row in execute_select(&select, &resources).iter(&resources.type_map) {
+                row_count += 1;
+                for (_, cell) in row {
+                    data.extend_from_slice(&cell.data);
+                }
+            }
+
+            let (table, _) = resources.write_table(&insert.table);
+            table.data.extend_from_slice(&data);
+
+            w.write_all(format!("{} row(s) inserted\n", row_count).as_bytes())
+                .await?;
+        }
     }
 
     Ok(())
 }
 
-fn execute_expr(expr: &Expr) -> Value {
+fn execute_expr<'a, I>(expr: &Expr, mut bs: I) -> Value
+where I: Iterator<Item = (&'a str, Cell<'a, 'a>)> + Clone,
+{
+    fn cmp<'a, I, F>(e1: &Expr, e2: &Expr, bs: I, f: F) -> Value
+    where F: FnOnce(&Value, &Value) -> bool,
+          I: Iterator<Item = (&'a str, Cell<'a, 'a>)> + Clone,
+    {
+        let v1 = execute_expr(e1, bs.clone());
+        let v2 = execute_expr(e2, bs);
+        Value::Bool(f(&v1, &v2))
+    }
+
     match expr {
         Expr::Value(v) => v.clone(),
-        _ => unimplemented!("Non-value exprs"),
+        Expr::Equals(e1, e2) => cmp(e1, e2, bs, PartialEq::eq),
+        Expr::NotEquals(e1, e2) => cmp(e1, e2, bs, PartialEq::ne),
+        Expr::LessEquals(e1, e2) => cmp(e1, e2, bs, |v1, v2| v1 <= v2),
+        Expr::LessThan(e1, e2) => cmp(e1, e2, bs, |v1, v2| v1 < v2),
+        Expr::GreaterThan(e1, e2) => cmp(e1, e2, bs, |v1, v2| v1 > v2),
+        Expr::GreaterEquals(e1, e2) => cmp(e1, e2, bs, |v1, v2| v1 >= v2),
+        Expr::And(e1, e2) => {
+            match execute_expr(e1, bs.clone()) {
+                Value::Bool(true) => execute_expr(e2, bs),
+                Value::Bool(false) => Value::Bool(false),
+                v => unreachable!("Non-boolean expression in Expr::And: {:?}", v),
+            }
+        }
+        Expr::Or(e1, e2) => {
+            match execute_expr(e1, bs.clone()) {
+                Value::Bool(true) => Value::Bool(true),
+                Value::Bool(false) => execute_expr(e2, bs),
+                v => unreachable!("Non-boolean expression in Expr::And: {:?}", v),
+            }
+        }
+        Expr::Ident(ident) => {
+            let (_, cell) = bs.find(|(name, _)| name == ident)
+                .unwrap_or_else(|| unreachable!("Ident did not exist"));
+
+            let t: &Type = cell.type_map.get_by_id(cell.type_id());
+
+            t.from_bytes(&cell.data, cell.type_map)
+                .expect("Deserializing cell failed")
+        }
     }
 }
