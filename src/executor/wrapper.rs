@@ -91,11 +91,30 @@ async fn execute_select(
         .unwrap();
 
     w.write_all(
-        rows.iter().fold(String::new(),|a, b| format!("{}\n{}", a, match b {
-            SimpleQueryMessage::Row(r) => String::from((0..r.len()).map(|c| match r.get(c){Some(st) => st, None => ""}).collect::<Vec<&str>>().join(",")),
-            SimpleQueryMessage::CommandComplete(r) => {dbg!(r); String::new()},
-            _ => unreachable!(),
-        })).as_bytes()
+        rows.iter()
+            .fold(String::new(), |a, b| {
+                format!(
+                    "{}\n{}",
+                    a,
+                    match b {
+                        SimpleQueryMessage::Row(r) => String::from(
+                            (0..r.len())
+                                .map(|c| match r.get(c) {
+                                    Some(st) => st,
+                                    None => "",
+                                })
+                                .collect::<Vec<&str>>()
+                                .join(",")
+                        ),
+                        SimpleQueryMessage::CommandComplete(r) => {
+                            dbg!(r);
+                            String::new()
+                        }
+                        _ => unreachable!(),
+                    }
+                )
+            })
+            .as_bytes(),
     )
     .await?;
     Ok(())
