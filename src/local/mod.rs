@@ -21,4 +21,3 @@ where
     async fn acquire_resources(&self, acquire: Acquire) -> Result<Resources<T>, String>;
     async fn create_table(&self, name: String, table: T) -> Result<(), ()>;
 }
-

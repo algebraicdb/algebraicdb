@@ -7,7 +7,7 @@
 mod api;
 mod ast;
 mod client;
-mod executor;
+pub mod executor;
 pub mod grammar;
 mod local;
 mod pattern;

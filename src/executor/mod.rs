@@ -1,3 +1,3 @@
-mod dbms;
+pub mod dbms;
 
 pub(crate) use dbms::*;
