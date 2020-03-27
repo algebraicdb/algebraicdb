@@ -21,5 +21,9 @@ INSERT INTO tab2 (may, val) VALUES (None(), 2);
 INSERT INTO tab2 (may, val) VALUES (Some(Some(2), 3), 3);
 INSERT INTO tab2 (may, val) VALUES (Some(None(), 4), 4);
 
+SELECT may FROM tab2 WHERE may: Some(_, _);
+SELECT may FROM tab2 WHERE may: Some(Some(_), _);
+SELECT may FROM tab2 WHERE may: Some(_, _), val = 1;
+
 
 

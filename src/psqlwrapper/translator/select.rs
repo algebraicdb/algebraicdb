@@ -62,7 +62,7 @@ fn translate_pattern(path: &String, pattern: &Pattern) -> String {
         } => sub_patterns
             .iter()
             .enumerate()
-            .map(|(n, pat)| translate_pattern(&format!("{} -> {} -> '{}'", path, n, name), pat))
+            .map(|(n, pat)| translate_pattern(&format!("{} -> '{}' -> {}'", path, name, n), pat))
             .collect::<Vec<String>>()
             .join(" AND "),
         _ => unimplemented!(),
