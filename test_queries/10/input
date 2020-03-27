@@ -9,7 +9,7 @@ INSERT INTO tab (may, val) VALUES (Some(2), 4);
 
 SELECT may FROM tab WHERE val = 1;
 SELECT may FROM tab WHERE may: Some(_);
-SELECT may FROM tab WHERE may: Some(_);
+SELECT may FROM tab WHERE may: Some(1);
 SELECT may FROM tab WHERE may: Some(_), val = 1;
 
 CREATE TYPE MaybeMaybe AS VARIANT{ Some(Maybe, Integer), None()};

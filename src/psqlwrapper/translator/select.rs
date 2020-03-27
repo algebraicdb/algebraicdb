@@ -52,9 +52,19 @@ fn translate_expr(expr: &Expr) -> String {
     }
 }
 
+fn new_path(path: &String, n: usize, name: &String, pattern: &Pattern) -> String {
+    match pattern {
+        Pattern::Variant { .. } => format!("{} -> '{}' -> {}", path, name, n),
+        _ => format!("{} -> '{}' ->> {}", path, name, n),
+    }
+}
+
 fn translate_pattern(path: &String, pattern: &Pattern) -> String {
     match pattern {
         Pattern::Ignore => format!("{} IS NOT NULL", path),
+        Pattern::Int(val) => format!("{} = '{}'", path, val),
+        Pattern::Bool(val) => format!("{} = '{}'", path, val),
+        Pattern::Double(val) => format!("{} = '{}'", path, val),
         Pattern::Variant {
             name,
             namespace: _,
@@ -62,7 +72,7 @@ fn translate_pattern(path: &String, pattern: &Pattern) -> String {
         } => sub_patterns
             .iter()
             .enumerate()
-            .map(|(n, pat)| translate_pattern(&format!("{} -> '{}' -> {}'", path, name, n), pat))
+            .map(|(n, pat)| translate_pattern(&new_path(path, n, name, pat), pat))
             .collect::<Vec<String>>()
             .join(" AND "),
         _ => unimplemented!(),
