@@ -22,10 +22,17 @@ where
     let mut writer = BufWriter::new(writer);
     let mut buf = vec![];
 
-    // This regex matches the entire string from the start to the first non-quoted semi-colon.
-    // It also properly handles escaped quotes
-    // valid string: SELECT "this is a quote -> \", this is a semicolon -> ;.";
-    let r = Regex::new(r#"^(("((\\.)|[^"])*")|[^";])*;"#).expect("Invalid regex");
+    // This regex tokenizes the input string, and lets
+    // us find the first non-quoted non-commented semicolon
+    let r = Regex::new(
+        r#"(?mx)
+          (?P<string>    "([^"]|(\\.))*"?)
+        | (?P<comment>   --.*$)
+        | (?P<semicolon> ;)
+        | (?P<other>     .)
+    "#,
+    )
+    .expect("Invalid regex");
 
     loop {
         let _n: usize = match reader.read_buf(&mut buf).await? {
@@ -53,12 +60,19 @@ where
                 }
             };
 
-            // Match string against regex
-            let (input, end) = match r.find(input) {
-                Some(matches) => (matches.as_str(), matches.end()),
-                None => break,
+            // Find the first semicolon, and take the entire string up to that character.
+            let end = if let Some(semicolon) = r
+                .captures_iter(input)
+                .flat_map(|c| c.name("semicolon"))
+                .next()
+            {
+                semicolon.end()
+            } else {
+                break;
             };
+            let input = &input[..end];
 
+            // Exectue the (semicolon-terminated) string as a query
             execute_query(input, &state, &mut writer).await?;
             writer.flush().await?;
 

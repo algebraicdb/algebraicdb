@@ -185,7 +185,6 @@ fn ast_grammar() {
         -- (a)
         -- VALUES (2)
         ;"#,
-
     ];
 
     for ex in valid_examples {
