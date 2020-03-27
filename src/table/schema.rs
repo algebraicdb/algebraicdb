@@ -24,4 +24,10 @@ impl Schema {
     pub fn len(&self) -> usize {
         self.columns.len()
     }
+
+    pub fn union(&self, other: &Schema) -> Schema {
+        let mut columns = self.columns.clone();
+        columns.extend_from_slice(&other.columns);
+        Schema::new(columns)
+    }
 }

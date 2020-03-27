@@ -1,9 +1,17 @@
--- Only comments
--- Nothing but comments
--- But wait! There is a gap!
+CREATE TABLE t1(a Integer);
+CREATE TABLE t2(b Integer);
+CREATE TABLE t3(c Integer);
+CREATE TABLE t4(d Integer);
 
--- And yet, still, more comments...
--- Here we have some semi-colons: ;
--- And some quotes: "
--- Yet all is still comments...
--- ;";";;;;;";;";";;"";;";";;";;
+INSERT INTO t1(a) VALUES ( 1), ( 2), ( 3);
+INSERT INTO t2(b) VALUES ( 4), ( 5), ( 6);
+INSERT INTO t3(c) VALUES ( 7), ( 8), ( 9);
+INSERT INTO t4(d) VALUES (10), (11), (12);
+
+SELECT a, b FROM t1 INNER JOIN t2 ON true;
+
+SELECT d, c, b, a FROM t1
+            INNER JOIN t2 ON true
+            INNER JOIN t3 ON true
+            INNER JOIN t4 ON true;
+
