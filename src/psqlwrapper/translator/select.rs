@@ -1,6 +1,25 @@
 use crate::ast::{Expr, Select, SelectFrom, WhereClause, WhereItem};
-use crate::pattern::Pattern;
-use crate::types::Value;
+use crate::{pattern::Pattern, types::Value};
+use serde_json::Value::{Array, Bool, Null, Number, Object, String as jString};
+
+pub fn translate_select_result(item: &serde_json::Value) -> String {
+    match item {
+        Object(map) => map
+            .iter()
+            .map(|(k, v)| format!("{}({})", k, translate_select_result(v)))
+            .collect::<Vec<String>>()
+            .join("WTF"),
+        Array(arr) => arr
+            .iter()
+            .map(|v| translate_select_result(v))
+            .collect::<Vec<String>>()
+            .join(","),
+        Bool(v) => format!("{:?}", v),
+        jString(v) => format!("{:?}", v),
+        Number(v) => format!("{:?}", v),
+        Null { .. } => "".to_string(),
+    }
+}
 
 pub fn translate_select(select: &Select) -> String {
     format!(

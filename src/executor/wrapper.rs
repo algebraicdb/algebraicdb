@@ -1,14 +1,14 @@
 use crate::ast::*;
 use crate::local::{DbState, ResourcesGuard, WrapperState};
-use crate::pattern::CompiledPattern;
 use crate::pre_typechecker;
 use crate::psqlwrapper::translator::*;
 use crate::table::Schema;
 use crate::typechecker;
 use crate::types::{Type, TypeId, Value};
+use serde_json;
 use std::error::Error;
 use tokio::io::{AsyncWrite, AsyncWriteExt};
-use tokio_postgres::{SimpleQueryMessage, SimpleQueryRow};
+use tokio_postgres::types::Type as PostgresType;
 struct Context {
     // TODO
 }
@@ -84,9 +84,9 @@ async fn execute_select(
     resources: ResourcesGuard<'_, Schema>,
     w: &mut (dyn AsyncWrite + Send + Unpin),
 ) -> Result<(), Box<dyn Error>> {
-    let rows: Vec<SimpleQueryMessage> = s
+    let rows = s
         .client
-        .simple_query(translate_select(&select).as_str())
+        .query(translate_select(&select).as_str(), &[])
         .await
         .unwrap();
 
@@ -94,24 +94,32 @@ async fn execute_select(
         rows.iter()
             .fold(String::new(), |a, b| {
                 format!(
-                    "{}\n{}",
+                    "{}{}\n",
                     a,
-                    match b {
-                        SimpleQueryMessage::Row(r) => String::from(
-                            (0..r.len())
-                                .map(|c| match r.get(c) {
-                                    Some(st) => st,
-                                    None => "",
-                                })
-                                .collect::<Vec<&str>>()
-                                .join(",")
-                        ),
-                        SimpleQueryMessage::CommandComplete(r) => {
-                            dbg!(r);
-                            String::new()
-                        }
-                        _ => unreachable!(),
-                    }
+                    String::from(
+                        (0..b.len())
+                            .zip(b.columns())
+                            .map(|(c, typ)| {
+                                // If the return type is JSON the emulated type is a variant type
+                                let is_variant = typ.type_() == &PostgresType::JSON;
+
+                                if is_variant {
+                                    let val: Option<serde_json::Value> = b.get(c);
+                                    match val {
+                                        Some(st) => translate_select_result(&st),
+                                        None => "".to_string(),
+                                    }
+                                } else {
+                                    let val: Option<String> = b.get(c);
+                                    match val {
+                                        Some(st) => st,
+                                        None => "".to_string(),
+                                    }
+                                }
+                            })
+                            .collect::<Vec<String>>()
+                            .join(",")
+                    )
                 )
             })
             .as_bytes(),
