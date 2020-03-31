@@ -1,3 +1,5 @@
+-- Test basic JOINs
+
 CREATE TABLE t1(a Integer);
 CREATE TABLE t2(b Integer);
 CREATE TABLE t3(c Integer);

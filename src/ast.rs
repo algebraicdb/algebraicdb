@@ -157,6 +157,11 @@ fn ast_grammar() {
             Var1(newCoolType, alsoCoolType),
         };"#,
         r#"DROP TABLE bananas ;"#,
+        r#"CREATE TYPE newCoolType AS VARIANT {
+            Var1(),
+            -- Var1(Bool), yeah, this is a comment line whatcha gonna do bout it
+            Var1(newCoolType, alsoCoolType),
+        };"#,
     ];
 
     let invalid_examples = vec![
@@ -176,6 +181,10 @@ fn ast_grammar() {
         r#"DELETE FROM now, with, commas ;"#,
         r#"UPDATE SET xxsxsxsxsxsxsxs=2 ;"#,
         r#"DROP ;"#,
+        r#"INSERT INTO empty 
+        -- (a)
+        -- VALUES (2)
+        ;"#,
     ];
 
     for ex in valid_examples {
