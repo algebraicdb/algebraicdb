@@ -5,16 +5,16 @@
 #![allow(dead_code)]
 
 mod api;
-mod ast;
+pub mod ast;
 mod client;
-mod executor;
-mod grammar;
-mod local;
+pub mod executor;
+pub mod grammar;
+pub mod local;
 mod pattern;
 mod pre_typechecker;
-mod table;
+pub mod table;
 mod typechecker;
-mod types;
+pub mod types;
 
 pub use api::custom::create_with_writers;
 pub use api::tcp_api::create_tcp_server;

@@ -10,6 +10,7 @@ use std::ops::Index;
 pub type EnumTag = usize;
 pub type TypeId = usize;
 
+#[derive(Clone)]
 pub struct TypeMap {
     types: HashMap<TypeId, Type>,
     identifiers: HashMap<String, TypeId>,

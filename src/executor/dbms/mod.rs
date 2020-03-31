@@ -5,11 +5,11 @@ use crate::local::{DbState, DbmsState, ResourcesGuard};
 use crate::pre_typechecker;
 use crate::table::{Schema, Table};
 use crate::typechecker;
-use crate::types::{TypeMap, Type, TypeId, Value};
+use crate::types::{Type, TypeId, TypeMap, Value};
 use std::error::Error;
 use std::fmt::Write;
-use tokio::io::{AsyncWrite, AsyncWriteExt};
 use std::sync::Arc;
+use tokio::io::{AsyncWrite, AsyncWriteExt};
 
 use self::iter::*;
 
@@ -72,8 +72,7 @@ async fn execute_stmt(
             let type_map = &resources.type_map;
             let table = execute_select(&select, &resources);
             print_table(table.iter(type_map), w).await
-
-        },
+        }
         _ => unimplemented!("Not implemented: {:?}", ast),
     }
 }
@@ -108,7 +107,10 @@ async fn print_table(
 
 fn full_table_scan<'a>(table: &'a Table, type_map: &'a TypeMap) -> RowIter<'a> {
     let mut offset = 0;
-    let bindings = table.schema().columns.iter()
+    let bindings = table
+        .schema()
+        .columns
+        .iter()
         .map(|(name, type_id)| {
             let t = type_map.get_by_id(*type_id);
             let size = t.size_of(type_map);
@@ -135,7 +137,7 @@ fn full_table_scan<'a>(table: &'a Table, type_map: &'a TypeMap) -> RowIter<'a> {
     }
 }
 
-fn execute_select_from<'a>(
+pub fn execute_select_from<'a>(
     from: &'a SelectFrom,
     resources: &'a ResourcesGuard<'a, Table>,
 ) -> Rows<'a> {
@@ -145,13 +147,10 @@ fn execute_select_from<'a>(
             let table = resources.read_table(&table_name);
             full_table_scan(table, type_map).into()
         }
-        SelectFrom::Select(select) => {
-            execute_select(select, resources).into()
-        }
+        SelectFrom::Select(select) => execute_select(select, resources).into(),
         SelectFrom::Join(join) => {
-
             match join.join_type {
-                JoinType::Inner => {/* This is the only one supported for now...*/},
+                JoinType::Inner => { /* This is the only one supported for now...*/ }
                 JoinType::LeftOuter => unimplemented!("Left Outer Join"),
                 JoinType::RightOuter => unimplemented!("Right Outer Join"),
                 JoinType::FullOuter => unimplemented!("Full Outer Join"),
@@ -162,7 +161,10 @@ fn execute_select_from<'a>(
 
             let mut table_out = Table::new(table_a.schema().union(&table_b.schema()), type_map);
 
-            let on_expr = join.on_clause.as_ref().unwrap_or(&Expr::Value(Value::Bool(true)));
+            let on_expr = join
+                .on_clause
+                .as_ref()
+                .unwrap_or(&Expr::Value(Value::Bool(true)));
 
             let mut row_buf: Vec<u8> = vec![];
 
@@ -194,20 +196,21 @@ fn execute_select_from<'a>(
     }
 }
 
-fn execute_select<'a>(
-    select: &'a Select,
-    resources: &'a ResourcesGuard<'a, Table>,
-) -> Rows<'a> {
+fn execute_select<'a>(select: &'a Select, resources: &'a ResourcesGuard<'a, Table>) -> Rows<'a> {
     let type_map = &resources.type_map;
 
     let rows = match &select.from {
-        Some(from) => execute_select_from(from, resources,),
+        Some(from) => execute_select_from(from, resources),
         None => unimplemented!("Selecting from nothing"),
     };
 
     let mut scan = rows;
 
-    let where_items = select.where_clause.as_ref().map(|wc| &wc.items[..]).unwrap_or(&[]);
+    let where_items = select
+        .where_clause
+        .as_ref()
+        .map(|wc| &wc.items[..])
+        .unwrap_or(&[]);
     scan.apply_pattern(where_items, type_map);
 
     scan.select(&select.items);

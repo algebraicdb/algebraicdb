@@ -1,10 +1,10 @@
-use crate::table::{Table, Schema, Cell};
-use crate::types::{Type, TypeMap, EnumTag, TypeId};
+use crate::ast::{Expr, WhereItem};
 use crate::pattern::Pattern;
-use std::cmp::Ordering;
+use crate::table::{Cell, Schema, Table};
+use crate::types::{EnumTag, Type, TypeId, TypeMap};
 use bincode::serialize;
+use std::cmp::Ordering;
 use std::sync::Arc;
-use crate::ast::{WhereItem, Expr};
 
 pub enum ModIter<'a> {
     Select(&'a [Expr]),
@@ -38,7 +38,12 @@ impl<'a> Rows<'a> {
     pub fn schema(&self) -> Schema {
         // TODO: refactor this into something more efficient
         match self {
-            Rows::Iter(iter) => Schema::new(iter.bindings.iter().map(|cr| (cr.name.to_owned(), cr.type_id)).collect()),
+            Rows::Iter(iter) => Schema::new(
+                iter.bindings
+                    .iter()
+                    .map(|cr| (cr.name.to_owned(), cr.type_id))
+                    .collect(),
+            ),
             Rows::Owned { table, .. } => table.schema().clone(),
         }
     }
@@ -46,10 +51,7 @@ impl<'a> Rows<'a> {
     pub fn iter<'b>(&'b self, type_map: &'b TypeMap) -> RowIter<'b> {
         match self {
             Rows::Iter(iter) => iter.clone(),
-            Rows::Owned {
-                table,
-                mods,
-            } => {
+            Rows::Owned { table, mods } => {
                 use super::full_table_scan;
                 let mut scan = full_table_scan(&table, type_map);
                 for m in mods {
@@ -85,7 +87,6 @@ impl<'a> Rows<'a> {
 #[derive(Clone)]
 pub struct RowIter<'a> {
     // FIXME: Avoid using Arc:s
-
     /// The actual data cells iterated over
     pub bindings: Arc<[CellRef<'a>]>,
 
@@ -201,11 +202,7 @@ impl<'a> Iterator for CellIter<'a> {
 
             self.cell += 1;
 
-            Some(Cell::new(
-                cell.type_id,
-                data,
-                self.type_map,
-            ))
+            Some(Cell::new(cell.type_id, data, self.type_map))
         } else {
             None
         }
@@ -311,7 +308,10 @@ impl<'a> RowIter<'a> {
                         byte_index += std::mem::size_of::<EnumTag>();
                         for (type_id, pattern) in sub_types.iter().zip(sub_patterns.iter()) {
                             let t = &type_map[type_id];
-                            build_pattern(pattern, byte_index, type_map, *type_id, data, row_size, bindings, matches);
+                            build_pattern(
+                                pattern, byte_index, type_map, *type_id, data, row_size, bindings,
+                                matches,
+                            );
                             byte_index += t.size_of(type_map);
                         }
                     } else {
@@ -335,15 +335,16 @@ impl<'a> RowIter<'a> {
                             let data = cell_ref.source;
                             let row_size = cell_ref.row_size;
 
-                            build_pattern(pattern,
-                                          byte_index,
-                                          type_map,
-                                          type_id,
-                                          data,
-                                          row_size,
-                                          &mut bindings,
-                                          &mut matches,
-                                          );
+                            build_pattern(
+                                pattern,
+                                byte_index,
+                                type_map,
+                                type_id,
+                                data,
+                                row_size,
+                                &mut bindings,
+                                &mut matches,
+                            );
                         }
                     }
                 }
@@ -364,7 +365,12 @@ impl<'a> RowIter<'a> {
 
 impl CellFilter<'_> {
     pub fn check(&self, row: usize) -> Ordering {
-        let CellFilter { source, row_size, offset, value } = self;
+        let CellFilter {
+            source,
+            row_size,
+            offset,
+            value,
+        } = self;
 
         let start = row * row_size + offset;
         let end = start + value.len();
