@@ -1,5 +1,5 @@
 mod dbms_state;
-mod types;
+pub mod types;
 
 #[cfg(test)]
 mod tests;
