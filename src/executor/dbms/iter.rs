@@ -192,7 +192,7 @@ impl<'a> Iterator for RowIter<'a> {
 }
 
 impl<'a> Iterator for CellIter<'a> {
-    type Item = Cell<'a, 'a>;
+    type Item = (&'a str, Cell<'a, 'a>);
 
     fn next(&mut self) -> Option<Self::Item> {
         if let Some(cell) = self.bindings.get(self.cell) {
@@ -202,7 +202,7 @@ impl<'a> Iterator for CellIter<'a> {
 
             self.cell += 1;
 
-            Some(Cell::new(cell.type_id, data, self.type_map))
+            Some((cell.name, Cell::new(cell.type_id, data, self.type_map)))
         } else {
             None
         }

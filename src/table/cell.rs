@@ -5,27 +5,31 @@ use std::fmt::{self, Display, Formatter};
 
 pub struct Cell<'tb, 'ts> {
     type_id: TypeId,
-    types: &'ts TypeMap,
+    pub type_map: &'ts TypeMap,
     pub data: &'tb [u8],
 }
 
 impl<'tb, 'ts> Cell<'tb, 'ts> {
-    pub fn new(type_id: TypeId, data: &'tb [u8], types: &'ts TypeMap) -> Self {
+    pub fn new(type_id: TypeId, data: &'tb [u8], type_map: &'ts TypeMap) -> Self {
         Cell {
             type_id,
-            types,
+            type_map,
             data,
         }
+    }
+
+    pub fn type_id(&self) -> TypeId {
+        self.type_id
     }
 }
 
 impl<'tb, 'ts> Display for Cell<'tb, 'ts> {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
-        let t = &self.types[&self.type_id];
-        let t_size = t.size_of(self.types);
+        let t = &self.type_map[&self.type_id];
+        let t_size = t.size_of(self.type_map);
         match t {
             Type::Integer | Type::Double | Type::Char | Type::Bool => t
-                .from_bytes(&self.data[..t_size], self.types)
+                .from_bytes(&self.data[..t_size], self.type_map)
                 .unwrap()
                 .fmt(f),
             Type::Sum(variants) => {
@@ -46,10 +50,10 @@ impl<'tb, 'ts> Display for Cell<'tb, 'ts> {
                         write!(f, ", ")?;
                     }
                     first = false;
-                    let t = &self.types[t_id];
-                    let t_size = t.size_of(self.types);
+                    let t = &self.type_map[t_id];
+                    let t_size = t.size_of(self.type_map);
                     let end = cursor + t_size;
-                    let cell = Cell::new(*t_id, &self.data[cursor..end], self.types);
+                    let cell = Cell::new(*t_id, &self.data[cursor..end], self.type_map);
                     write!(f, "{}", cell)?;
                     cursor += t_size;
                 }
@@ -71,7 +75,7 @@ impl PartialOrd for Cell<'_, '_> {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         debug_assert_eq!(self.type_id, other.type_id);
 
-        match &self.types[&self.type_id] {
+        match &self.type_map[&self.type_id] {
             Type::Char => deserialize::<char>(self.data)
                 .unwrap()
                 .partial_cmp(&deserialize::<char>(other.data).unwrap()),
@@ -99,15 +103,15 @@ impl PartialOrd for Cell<'_, '_> {
                     Ordering::Equal => {
                         let (_name, members) = &variants[tag1];
                         for &type_id in members {
-                            let t = &self.types[&type_id];
-                            let t_size = t.size_of(self.types);
+                            let t = &self.type_map[&type_id];
+                            let t_size = t.size_of(self.type_map);
                             let member_cell1 = Cell {
-                                types: self.types,
+                                type_map: self.type_map,
                                 type_id,
                                 data: &data1[..t_size],
                             };
                             let member_cell2 = Cell {
-                                types: self.types,
+                                type_map: self.type_map,
                                 type_id,
                                 data: &data2[..t_size],
                             };
