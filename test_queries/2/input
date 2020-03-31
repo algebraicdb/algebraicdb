@@ -1,3 +1,5 @@
+-- Test nested sum-types
+
 CREATE TYPE MaybeInt AS VARIANT {
     Just(Integer),
     Nothing(),

@@ -1,3 +1,5 @@
+-- Test basic JOINs
+
 CREATE TABLE t1(a Integer);
 CREATE TABLE t2(b Integer);
 CREATE TABLE t3(c Integer);
@@ -14,4 +16,3 @@ SELECT d, c, b, a FROM t1
             INNER JOIN t2 ON true
             INNER JOIN t3 ON true
             INNER JOIN t4 ON true;
-

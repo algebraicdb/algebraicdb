@@ -3,14 +3,14 @@ mod iter;
 use crate::ast::*;
 use crate::local::{DbState, DbmsState, ResourcesGuard};
 use crate::pre_typechecker;
-use crate::table::{Schema, Table, Cell};
+use crate::table::{Cell, Schema, Table};
 use crate::typechecker;
-use crate::types::{TypeMap, Type, TypeId, Value};
+use crate::types::{Type, TypeId, TypeMap, Value};
 use std::error::Error;
 use std::fmt::Write;
-use tokio::io::{AsyncWrite, AsyncWriteExt};
-use std::sync::Arc;
 use std::iter::empty;
+use std::sync::Arc;
+use tokio::io::{AsyncWrite, AsyncWriteExt};
 
 use self::iter::*;
 
@@ -69,8 +69,7 @@ async fn execute_stmt(
             let type_map = &resources.type_map;
             let table = execute_select(&select, &resources);
             print_table(table.iter(type_map), w).await
-
-        },
+        }
         _ => unimplemented!("Not implemented: {:?}", ast),
     }
 }
@@ -105,7 +104,10 @@ async fn print_table(
 
 fn full_table_scan<'a>(table: &'a Table, type_map: &'a TypeMap) -> RowIter<'a> {
     let mut offset = 0;
-    let bindings = table.schema().columns.iter()
+    let bindings = table
+        .schema()
+        .columns
+        .iter()
         .map(|(name, type_id)| {
             let t = type_map.get_by_id(*type_id);
             let size = t.size_of(type_map);
@@ -132,7 +134,7 @@ fn full_table_scan<'a>(table: &'a Table, type_map: &'a TypeMap) -> RowIter<'a> {
     }
 }
 
-fn execute_select_from<'a>(
+pub fn execute_select_from<'a>(
     from: &'a SelectFrom,
     resources: &'a ResourcesGuard<'a, Table>,
 ) -> Rows<'a> {
@@ -142,13 +144,10 @@ fn execute_select_from<'a>(
             let table = resources.read_table(&table_name);
             full_table_scan(table, type_map).into()
         }
-        SelectFrom::Select(select) => {
-            execute_select(select, resources).into()
-        }
+        SelectFrom::Select(select) => execute_select(select, resources).into(),
         SelectFrom::Join(join) => {
-
             match join.join_type {
-                JoinType::Inner => {/* This is the only one supported for now...*/},
+                JoinType::Inner => { /* This is the only one supported for now...*/ }
                 JoinType::LeftOuter => unimplemented!("Left Outer Join"),
                 JoinType::RightOuter => unimplemented!("Right Outer Join"),
                 JoinType::FullOuter => unimplemented!("Full Outer Join"),
@@ -159,7 +158,10 @@ fn execute_select_from<'a>(
 
             let mut table_out = Table::new(table_a.schema().union(&table_b.schema()), type_map);
 
-            let on_expr = join.on_clause.as_ref().unwrap_or(&Expr::Value(Value::Bool(true)));
+            let on_expr = join
+                .on_clause
+                .as_ref()
+                .unwrap_or(&Expr::Value(Value::Bool(true)));
 
             let mut row_buf: Vec<u8> = vec![];
 
@@ -192,10 +194,7 @@ fn execute_select_from<'a>(
     }
 }
 
-fn execute_select<'a>(
-    select: &'a Select,
-    resources: &'a ResourcesGuard<'a, Table>,
-) -> Rows<'a> {
+fn execute_select<'a>(select: &'a Select, resources: &'a ResourcesGuard<'a, Table>) -> Rows<'a> {
     let type_map = &resources.type_map;
 
     let rows = match &select.from {
@@ -205,7 +204,11 @@ fn execute_select<'a>(
 
     let mut scan = rows;
 
-    let where_items = select.where_clause.as_ref().map(|wc| &wc.items[..]).unwrap_or(&[]);
+    let where_items = select
+        .where_clause
+        .as_ref()
+        .map(|wc| &wc.items[..])
+        .unwrap_or(&[]);
     scan.apply_pattern(where_items, type_map);
 
     scan.select(&select.items);
@@ -283,7 +286,9 @@ async fn execute_insert(
             let row_count = rows.len();
             let mut values = vec![];
             for row in rows.into_iter() {
-                row.iter().map(|e| execute_expr(e, empty())).for_each(|v| values.push(v));
+                row.iter()
+                    .map(|e| execute_expr(e, empty()))
+                    .for_each(|v| values.push(v));
                 table.push_row(&values, &type_map);
                 values.clear();
             }
@@ -315,11 +320,13 @@ async fn execute_insert(
 }
 
 fn execute_expr<'a, I>(expr: &Expr, mut bs: I) -> Value
-where I: Iterator<Item = (&'a str, Cell<'a, 'a>)> + Clone,
+where
+    I: Iterator<Item = (&'a str, Cell<'a, 'a>)> + Clone,
 {
     fn cmp<'a, I, F>(e1: &Expr, e2: &Expr, bs: I, f: F) -> Value
-    where F: FnOnce(&Value, &Value) -> bool,
-          I: Iterator<Item = (&'a str, Cell<'a, 'a>)> + Clone,
+    where
+        F: FnOnce(&Value, &Value) -> bool,
+        I: Iterator<Item = (&'a str, Cell<'a, 'a>)> + Clone,
     {
         let v1 = execute_expr(e1, bs.clone());
         let v2 = execute_expr(e2, bs);
@@ -334,22 +341,19 @@ where I: Iterator<Item = (&'a str, Cell<'a, 'a>)> + Clone,
         Expr::LessThan(e1, e2) => cmp(e1, e2, bs, |v1, v2| v1 < v2),
         Expr::GreaterThan(e1, e2) => cmp(e1, e2, bs, |v1, v2| v1 > v2),
         Expr::GreaterEquals(e1, e2) => cmp(e1, e2, bs, |v1, v2| v1 >= v2),
-        Expr::And(e1, e2) => {
-            match execute_expr(e1, bs.clone()) {
-                Value::Bool(true) => execute_expr(e2, bs),
-                Value::Bool(false) => Value::Bool(false),
-                v => unreachable!("Non-boolean expression in Expr::And: {:?}", v),
-            }
-        }
-        Expr::Or(e1, e2) => {
-            match execute_expr(e1, bs.clone()) {
-                Value::Bool(true) => Value::Bool(true),
-                Value::Bool(false) => execute_expr(e2, bs),
-                v => unreachable!("Non-boolean expression in Expr::And: {:?}", v),
-            }
-        }
+        Expr::And(e1, e2) => match execute_expr(e1, bs.clone()) {
+            Value::Bool(true) => execute_expr(e2, bs),
+            Value::Bool(false) => Value::Bool(false),
+            v => unreachable!("Non-boolean expression in Expr::And: {:?}", v),
+        },
+        Expr::Or(e1, e2) => match execute_expr(e1, bs.clone()) {
+            Value::Bool(true) => Value::Bool(true),
+            Value::Bool(false) => execute_expr(e2, bs),
+            v => unreachable!("Non-boolean expression in Expr::And: {:?}", v),
+        },
         Expr::Ident(ident) => {
-            let (_, cell) = bs.find(|(name, _)| name == ident)
+            let (_, cell) = bs
+                .find(|(name, _)| name == ident)
                 .unwrap_or_else(|| unreachable!("Ident did not exist"));
 
             let t: &Type = cell.type_map.get_by_id(cell.type_id());

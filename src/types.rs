@@ -1,16 +1,17 @@
 use bincode::{deserialize, serialize_into};
 use std::char;
 use std::cmp;
+use std::cmp::Ordering;
 use std::collections::HashMap;
 use std::fmt::{self, Display, Formatter};
 use std::io::Write;
 use std::mem::size_of;
 use std::ops::Index;
-use std::cmp::Ordering;
 
 pub type EnumTag = usize;
 pub type TypeId = usize;
 
+#[derive(Clone)]
 pub struct TypeMap {
     types: HashMap<TypeId, Type>,
     identifiers: HashMap<String, TypeId>,
@@ -207,10 +208,12 @@ impl PartialOrd for Value {
         match (self, other) {
             (Value::Char(v1), Value::Char(v2)) => Some(v1.cmp(v2)),
             (Value::Integer(v1), Value::Integer(v2)) => Some(v1.cmp(v2)),
-            (Value::Double(v1), Value::Double(v2)) => Some(v1.partial_cmp(v2).unwrap_or(Ordering::Greater)),
+            (Value::Double(v1), Value::Double(v2)) => {
+                Some(v1.partial_cmp(v2).unwrap_or(Ordering::Greater))
+            }
             (Value::Bool(v1), Value::Bool(v2)) => Some(v1.cmp(v2)),
             (Value::Sum(_, _, _), Value::Sum(_, _, _)) => unimplemented!("Ord for sum-types"),
-            (_, _) => None
+            (_, _) => None,
         }
     }
 }

@@ -3,21 +3,42 @@ name: Rust
 on: [push]
 
 jobs:
-  test:
-    name: Test Suite
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout sources
-        uses: actions/checkout@v2
+    test:
+      name: Test suite
+      runs-on: ${{ matrix.os }}
+      strategy:
+        matrix:
+          rust: [nightly-2020-02-20] 
+          os: [ubuntu-latest]
 
-      - name: Install nightly toolchain
-        uses: actions-rs/toolchain@v1
-        with:
-          profile: minimal
-          toolchain: nightly-2020-02-20
-          override: true
+      steps:
+        - name: Checkout sources
+          uses: actions/checkout@v2
 
-      - name: Run cargo test
-        uses: actions-rs/cargo@v1
-        with:
-          command: test
+        - name: Cache target
+          uses: actions/cache@v1
+          env:
+            cache-name: target
+          with:
+            path: ./target
+            key: ${{ matrix.os }}-test-target-${{ matrix.rust }}
+
+        - name: Cache toolchain
+          uses: actions/cache@v1
+          env:
+            cache-name: toolchain
+          with:
+            path: /usr/share/rust
+            key: ${{ matrix.os }}-toolchain-${{ matrix.rust }}
+
+        - name: Install toolchain
+          uses: actions-rs/toolchain@v1
+          with:
+            profile: minimal
+            toolchain: ${{ matrix.rust }}
+            override: true
+
+        - name: Run `cargo test`
+          uses: actions-rs/cargo@v1
+          with:
+            command: test
