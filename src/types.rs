@@ -1,4 +1,5 @@
 use bincode::{deserialize, serialize_into};
+use std::borrow::Cow;
 use std::char;
 use std::cmp;
 use std::cmp::Ordering;
@@ -7,7 +8,6 @@ use std::fmt::{self, Display, Formatter};
 use std::io::Write;
 use std::mem::size_of;
 use std::ops::Index;
-use std::borrow::Cow;
 
 pub type EnumTag = usize;
 pub type TypeId = usize;
@@ -293,10 +293,13 @@ impl Value<'_> {
     pub fn deep_clone(&self) -> Value<'static> {
         match self {
             Value::Sum(namespace, name, inner_values) => {
-                let inner_values: Vec<Value<'static>> = inner_values.iter().map(|v| v.deep_clone()).collect();
+                let inner_values: Vec<Value<'static>> =
+                    inner_values.iter().map(|v| v.deep_clone()).collect();
 
                 Value::Sum(
-                    namespace.as_ref().map(|ns| Cow::Owned(ns.clone().into_owned())),
+                    namespace
+                        .as_ref()
+                        .map(|ns| Cow::Owned(ns.clone().into_owned())),
                     Cow::Owned(name.clone().into_owned()),
                     inner_values,
                 )

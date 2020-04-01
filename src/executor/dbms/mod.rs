@@ -1,6 +1,7 @@
 mod iter;
 
 use crate::ast::*;
+use crate::error_message::ErrorMessage;
 use crate::local::{DbState, DbmsState, ResourcesGuard};
 use crate::pre_typechecker;
 use crate::table::{Cell, Schema, Table};
@@ -46,7 +47,11 @@ pub(crate) async fn execute_query(
     // 4. typecheck
     match typechecker::check_stmt(&ast, &resources) {
         Ok(()) => {}
-        Err(e) => return Ok(w.write_all(format!("{:#?}\n", e).as_bytes()).await?),
+        Err(e) => {
+            let msg = e.display(input);
+            w.write_all(msg.as_bytes()).await?;
+            return Ok(());
+        }
     }
 
     // 5. Execute query
@@ -194,7 +199,10 @@ pub fn execute_select_from<'a>(
     }
 }
 
-fn execute_select<'a>(select: &'a Select<'a>, resources: &'a ResourcesGuard<'a, Table>) -> Rows<'a> {
+fn execute_select<'a>(
+    select: &'a Select<'a>,
+    resources: &'a ResourcesGuard<'a, Table>,
+) -> Rows<'a> {
     let type_map = &resources.type_map;
 
     let rows = match &select.from {

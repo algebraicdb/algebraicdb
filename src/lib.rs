@@ -7,6 +7,7 @@
 mod api;
 pub mod ast;
 mod client;
+mod error_message;
 pub mod executor;
 pub mod grammar;
 pub mod local;
@@ -15,6 +16,7 @@ mod pre_typechecker;
 pub mod table;
 mod typechecker;
 pub mod types;
+mod util;
 
 pub use api::custom::create_with_writers;
 pub use api::tcp_api::create_tcp_server;
