@@ -1,13 +1,10 @@
-use crate::executor::execute_query;
+use crate::executor::wrapper::execute_query;
 use crate::local;
 use regex::Regex;
 use std::error::Error;
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, BufWriter};
 
-#[cfg(not(feature = "wrapper"))]
-pub type State = local::DbmsState;
 
-#[cfg(feature = "wrapper")]
 pub type State = local::WrapperState;
 
 pub(crate) async fn client<R, W>(

@@ -38,11 +38,7 @@ fn translate_value(val: &Value) -> String {
         Value::Bool(b) => format!("{}", b),
         Value::Double(d) => format!("{}", d),
         Value::Sum(ns, var, vals) => format!(
-            r#"{{"{}{}":[{}]}}"#,
-            match ns {
-                Some(s) => format!("{}::", s),
-                None => String::new(),
-            },
+            r#"{{"{}":[{}]}}"#,
             var,
             vals.iter()
                 .map(|x| translate_value(x))

@@ -9,5 +9,5 @@ where
     W: AsyncWrite + Unpin + Send,
 {
     let state = State::new();
-    client(reader, writer, state.await?).await
+    client(reader, writer, state.await).await
 }

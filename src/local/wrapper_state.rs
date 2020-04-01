@@ -55,7 +55,7 @@ impl DbState<Schema> for WrapperState {
 }
 
 impl WrapperState {
-    pub async fn new() -> Result<Self, Box<dyn Error>> {
+    pub async fn new() -> Self {
         use tokio_postgres::config::SslMode;
         let mut config = Config::new();
 
@@ -78,10 +78,10 @@ impl WrapperState {
 
         let (requests_in, requests_out) = mpsc::unbounded_channel();
         tokio::spawn(resource_manager(requests_out, refcli.clone()));
-        Ok(Self {
+        Self {
             channel: requests_in,
             client: refcli,
-        })
+        }
     }
 }
 

@@ -1,5 +1,5 @@
 use algebraicdb::create_with_writers;
-use algebraicdb::executor::dbms::execute_select_from;
+use algebraicdb::executor::wrapper::execute_query;
 use algebraicdb::grammar::StmtParser;
 
 use criterion::{black_box, criterion_group, criterion_main, Criterion};

@@ -19,7 +19,7 @@ impl Context {
     }
 }
 
-pub(crate) async fn execute_query(
+pub async fn execute_query(
     input: &str,
     s: &WrapperState,
     w: &mut (dyn AsyncWrite + Send + Unpin),

@@ -5,7 +5,7 @@ use tokio::net::TcpListener;
 
 /// Start an instance of the dbms which binds itself to a tcp socket
 pub async fn create_tcp_server(address: &str) -> Result<!, Box<dyn Error>> {
-    let state = State::new().await?;
+    let state = State::new().await;
 
     let mut listener = TcpListener::bind(address).await?;
     println!("Listening to {}", address);
