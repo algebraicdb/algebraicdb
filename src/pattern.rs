@@ -5,7 +5,7 @@ use bincode::serialize;
 use smallvec::SmallVec;
 
 #[derive(Debug)]
-pub enum Pattern {
+pub enum Pattern<'a> {
     /// Char literal
     Char(char),
 
@@ -20,16 +20,16 @@ pub enum Pattern {
 
     /// Actual pattern matching
     Variant {
-        namespace: Option<String>,
-        name: String,
-        sub_patterns: Vec<Pattern>,
+        namespace: Option<&'a str>,
+        name: &'a str,
+        sub_patterns: Vec<Pattern<'a>>,
     },
 
     /// _
     Ignore,
 
     /// Binding a value to a new identifier
-    Binding(String),
+    Binding(&'a str),
 }
 
 #[derive(Debug)]
@@ -63,7 +63,7 @@ impl CompiledPattern {
                     matches.push((byte_index, SmallVec::from_vec(serialize(v).unwrap())))
                 }
                 Pattern::Ignore => {}
-                Pattern::Binding(ident) => bindings.push((byte_index, type_id, ident.into())),
+                Pattern::Binding(ident) => bindings.push((byte_index, type_id, ident.to_string())),
                 Pattern::Variant {
                     namespace: _namespace,
                     name,

@@ -113,6 +113,7 @@ impl Table {
 pub mod tests {
     use super::*;
     use crate::types::{BaseType, Type, TypeMap, Value};
+    use std::borrow::Cow;
 
     pub struct TestTypeIds {
         int_id: TypeId,
@@ -278,7 +279,7 @@ pub mod tests {
         use crate::ast::*;
         use crate::grammar::StmtParser;
 
-        let tname = Some(String::from("MaybeInt"));
+        let tname = Some(Cow::Borrowed("MaybeInt"));
         let (ids, types) = create_type_map();
 
         let schema = Schema::new(vec![
