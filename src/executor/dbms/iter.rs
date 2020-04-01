@@ -12,8 +12,8 @@ pub enum ModIter<'a> {
 }
 
 pub enum Rows<'a> {
-    Iter(RowIter<'a>),
-    Owned {
+    Scan(RowIter<'a>),
+    Materialized {
         table: Table,
         mods: Vec<ModIter<'a>>,
     },
@@ -21,13 +21,13 @@ pub enum Rows<'a> {
 
 impl<'a> From<RowIter<'a>> for Rows<'a> {
     fn from(iter: RowIter<'a>) -> Self {
-        Rows::Iter(iter)
+        Rows::Scan(iter)
     }
 }
 
 impl From<Table> for Rows<'static> {
     fn from(table: Table) -> Self {
-        Rows::Owned {
+        Rows::Materialized {
             table,
             mods: vec![],
         }
@@ -38,15 +38,15 @@ impl<'a> Rows<'a> {
     pub fn schema(&self) -> Schema {
         // TODO: refactor this into something more efficient
         match self {
-            Rows::Iter(iter) => Schema::new(iter.bindings.iter().map(|cr| (cr.name.to_owned(), cr.type_id)).collect()),
-            Rows::Owned { table, .. } => table.schema().clone(),
+            Rows::Scan(iter) => Schema::new(iter.bindings.iter().map(|cr| (cr.name.to_owned(), cr.type_id)).collect()),
+            Rows::Materialized { table, .. } => table.schema().clone(),
         }
     }
 
     pub fn iter<'b>(&'b self, type_map: &'b TypeMap) -> RowIter<'b> {
         match self {
-            Rows::Iter(iter) => iter.clone(),
-            Rows::Owned {
+            Rows::Scan(iter) => iter.clone(),
+            Rows::Materialized {
                 table,
                 mods,
             } => {
@@ -69,15 +69,15 @@ impl<'a> Rows<'a> {
 
     pub fn select(&mut self, items: &'a [Expr]) {
         match self {
-            Rows::Iter(iter) => iter.select(items),
-            Rows::Owned { mods, .. } => mods.push(ModIter::Select(items)),
+            Rows::Scan(iter) => iter.select(items),
+            Rows::Materialized { mods, .. } => mods.push(ModIter::Select(items)),
         }
     }
 
     pub fn apply_pattern(&mut self, patterns: &'a [WhereItem], type_map: &TypeMap) {
         match self {
-            Rows::Iter(iter) => iter.apply_pattern(patterns, type_map),
-            Rows::Owned { mods, .. } => mods.push(ModIter::Where(patterns)),
+            Rows::Scan(iter) => iter.apply_pattern(patterns, type_map),
+            Rows::Materialized { mods, .. } => mods.push(ModIter::Where(patterns)),
         }
     }
 }

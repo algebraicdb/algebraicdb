@@ -35,6 +35,7 @@ dependencies = [
  "prettydiff",
  "rand 0.7.3",
  "regex",
+ "serde",
  "smallvec",
  "tokio",
  "tokio-util",

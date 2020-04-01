@@ -1,4 +1,5 @@
 use bincode::{deserialize, serialize_into};
+use serde::{Serialize, Deserialize};
 use std::char;
 use std::cmp;
 use std::collections::HashMap;
@@ -126,7 +127,7 @@ pub enum Type {
     Sum(Vec<(String, Vec<TypeId>)>),
 }
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
 pub enum Value {
     Char(char),
     Integer(i32),

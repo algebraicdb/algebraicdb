@@ -2,6 +2,7 @@ use super::types::*;
 use super::*;
 use crate::table::Table;
 use crate::types::TypeMap;
+use crate::wal::WriteAheadLog;
 use async_trait::async_trait;
 use futures::executor::block_on;
 use std::collections::HashMap;
@@ -16,6 +17,7 @@ type RequestReceiver = mpsc::UnboundedReceiver<(Request<Table>, oneshot::Sender<
 #[derive(Clone)]
 pub struct DbmsState {
     channel: RequestSender,
+    wal: WriteAheadLog,
 }
 
 impl DbmsState {
@@ -56,7 +58,12 @@ impl DbmsState {
 
         Self {
             channel: requests_in,
+            wal: WriteAheadLog::new(),
         }
+    }
+
+    pub fn wal(&mut self) -> &mut WriteAheadLog {
+        &mut self.wal
     }
 }
 

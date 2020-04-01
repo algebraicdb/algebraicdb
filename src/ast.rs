@@ -1,7 +1,8 @@
 use crate::pattern::Pattern;
 use crate::types::Value;
+use serde::{Serialize, Deserialize};
 
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize)]
 pub enum Expr {
     Ident(String),
     Value(Value),
@@ -15,33 +16,33 @@ pub enum Expr {
     Or(Box<Expr>, Box<Expr>),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct Ass {
     pub col: String,
     pub expr: Expr,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct Select {
     pub items: Vec<Expr>,
     pub from: Option<SelectFrom>,
     pub where_clause: Option<WhereClause>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize)]
 pub enum WhereItem {
     Expr(Expr),
     Pattern(String, Pattern),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize)]
 pub enum SelectFrom {
     Table(String),
     Select(Box<Select>),
     Join(Box<Join>),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct Join {
     pub table_a: SelectFrom,
     pub table_b: SelectFrom,
@@ -49,7 +50,7 @@ pub struct Join {
     pub on_clause: Option<Expr>,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Serialize, Deserialize, Clone, Copy)]
 pub enum JoinType {
     Inner,
     LeftOuter,
@@ -57,43 +58,43 @@ pub enum JoinType {
     FullOuter,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct WhereClause {
     pub items: Vec<WhereItem>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct Delete {
     pub table: String,
     pub where_clause: Option<WhereClause>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct Drop {
     pub table: String,
     //  pub drop_clause: Option<DropClause>, // should be cascade or restrict
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct Insert {
     pub table: String,
     pub columns: Vec<String>,
     pub from: InsertFrom,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize)]
 pub enum InsertFrom {
     Values(Vec<Vec<Expr>>),
     Select(Select),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct CreateTable {
     pub table: String,
     pub columns: Vec<(String, String)>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize)]
 pub enum Stmt {
     Select(Select),
     Insert(Insert),
@@ -104,14 +105,14 @@ pub enum Stmt {
     Drop(Drop),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct Update {
     pub table: String,
     pub ass: Vec<Ass>,
     pub where_clause: Option<WhereClause>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize)]
 pub enum CreateType {
     Variant(String, Vec<(String, Vec<String>)>),
 }

@@ -16,7 +16,7 @@ use self::iter::*;
 
 pub(crate) async fn execute_query(
     input: &str,
-    s: &DbmsState,
+    s: &mut DbmsState,
     w: &mut (dyn AsyncWrite + Send + Unpin),
 ) -> Result<(), Box<dyn Error>> {
     // 1. parse
@@ -55,10 +55,21 @@ pub(crate) async fn execute_query(
 
 async fn execute_stmt(
     ast: Stmt,
-    s: &DbmsState,
+    s: &mut DbmsState,
     resources: ResourcesGuard<'_, Table>,
     w: &mut (dyn AsyncWrite + Send + Unpin),
 ) -> Result<(), Box<dyn Error>> {
+    match &ast {
+        Stmt::CreateTable(_) |
+        Stmt::CreateType(_) |
+        Stmt::Delete(_) |
+        Stmt::Update(_) |
+        Stmt::Drop(_) |
+        Stmt::Insert(_) => {
+            s.wal().write(&ast).await;
+        }
+        Stmt::Select(_) => {/* We're only reading, so no logging required*/}
+    }
     match ast {
         Stmt::CreateTable(create_table) => {
             execute_create_table(create_table, s, resources, w).await
