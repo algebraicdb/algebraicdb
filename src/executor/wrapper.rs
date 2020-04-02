@@ -7,6 +7,7 @@ use crate::typechecker;
 use crate::types::{Type, TypeId, Value};
 use serde_json;
 use std::error::Error;
+use std::fmt::Display;
 use tokio::io::{AsyncWrite, AsyncWriteExt};
 use tokio_postgres::types::Type as PostgresType;
 struct Context {
@@ -86,7 +87,7 @@ async fn execute_select(
 ) -> Result<(), Box<dyn Error>> {
     let rows = s
         .client
-        .query(translate_select(&select).as_str(), &[])
+        .query(dbg!(translate_select(&select).as_str()), &[])
         .await
         .unwrap();
 
@@ -94,7 +95,7 @@ async fn execute_select(
         rows.iter()
             .fold(String::new(), |a, b| {
                 format!(
-                    "{}{}\n",
+                    "{}[{}]\n",
                     a,
                     String::from(
                         (0..b.len())
@@ -110,15 +111,34 @@ async fn execute_select(
                                         None => "".to_string(),
                                     }
                                 } else {
-                                    let val: Option<String> = b.get(c);
-                                    match val {
-                                        Some(st) => st,
-                                        None => "".to_string(),
+                                    dbg!(typ.type_());
+                                    match typ.type_() {
+                                        &PostgresType::TEXT => {
+                                            let x: Option<String> = b.get(c);
+                                            x.unwrap_or_else(|| "".to_string())
+                                        }
+                                        &PostgresType::FLOAT8 => {
+                                            let x: Option<f64> = b.get(c);
+                                            x.unwrap_or_else(|| 0.0).to_string()
+                                        }
+                                        &PostgresType::INT4 => {
+                                            let x: Option<i32> = b.get(c);
+                                            x.unwrap_or_else(|| 0).to_string()
+                                        }
+                                        &PostgresType::BOOL => {
+                                            let x: Option<bool> = b.get(c);
+                                            x.unwrap_or_else(|| false).to_string()
+                                        }
+                                        &PostgresType::CHAR => {
+                                            let x: Option<i8> = b.get(c);
+                                            x.unwrap_or_else(|| 0).to_string()
+                                        }
+                                        _ => "".to_string(),
                                     }
                                 }
                             })
                             .collect::<Vec<String>>()
-                            .join(",")
+                            .join(", ")
                     )
                 )
             })
@@ -148,7 +168,7 @@ async fn execute_create_table(
 
     let schema = Schema::new(columns);
     s.create_table(create_table.table, schema).await.unwrap();
-    w.write_all("created table\n".as_bytes()).await?;
+    w.write_all("Table created\n".as_bytes()).await?;
     Ok(())
 }
 
