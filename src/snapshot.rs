@@ -25,10 +25,10 @@ const TRANSACTION_NUMBER_FILE_NAME: &str = "transaction_number";
 const TYPE_MAP_FILE_NAME: &str = "type_map";
 
 pub fn spawn_snapshotter(dbms: DbmsState) {
-    
-    let transactionnumber = 
+
+    let transactionnumber =
         std::fs::read_to_string("./data_tmp/transaction_number").unwrap_or("0".into()).as_str().parse::<u64>().unwrap_or(0);
-    
+
     tokio::task::spawn(async move {
         manager(dbms, transactionnumber).await
     });
@@ -38,7 +38,7 @@ async fn manager(mut dbms: DbmsState, startup_id: TransactionNumber) {
     let mut last_snapshotted: TransactionNumber = startup_id;
     loop {
         delay_for(Duration::new(30, 0)).await;
-        
+
         // check tip of WAL, and tip of current snapshot
         let current = TRANSACTION_NUMBER.load(Ordering::Relaxed);
         eprintln!("Checking snapshot {} vs current: {}", last_snapshotted, current);
@@ -48,9 +48,7 @@ async fn manager(mut dbms: DbmsState, startup_id: TransactionNumber) {
                 last_snapshotted
             });
         }
-        
     }
-
 }
 
 /// Write the current database state to a temporary folder, and then atomically replace the active data folder

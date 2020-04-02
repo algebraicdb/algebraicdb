@@ -58,14 +58,14 @@ impl DbState<Table> for DbmsState {
 }
 
 impl DbmsState {
-    pub fn new() -> Self {
+    pub async fn new() -> Self {
         let (requests_in, requests_out) = mpsc::unbounded_channel();
 
         std::thread::spawn(move || resource_manager(requests_out));
 
         let state = Self {
             channel: requests_in,
-            wal: WriteAheadLog::new(),
+            wal: WriteAheadLog::new().await,
         };
 
         crate::snapshot::spawn_snapshotter(state.clone());

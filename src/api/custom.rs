@@ -8,6 +8,6 @@ where
     R: AsyncRead + Unpin + Send,
     W: AsyncWrite + Unpin + Send,
 {
-    let state = State::new();
+    let state = State::new().await;
     client(reader, writer, state).await
 }

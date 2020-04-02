@@ -42,11 +42,15 @@ struct EntryEnd {
 }
 
 impl WriteAheadLog {
-    pub fn new() -> Self {
+    pub async fn new() -> Self {
         let (requests_in, requests_out) = mpsc::channel(256);
 
-        task::spawn(async {
-            wal_writer(requests_out).await.expect("WAL crashed");
+        let (entries, file) = load_wal().await.expect("Loading WAL failed");
+
+        let transaction_number = entries.last().map(|(n, _)| *n).unwrap_or(0);
+
+        task::spawn(async move {
+            wal_writer(file, transaction_number, requests_out).await.expect("WAL crashed");
         });
 
         WriteAheadLog {
@@ -77,7 +81,7 @@ fn checksum(data: &[u8]) -> u64 {
     seahash::hash(data)
 }
 
-pub async fn wal_writer(mut channel: RequestReceiver) -> io::Result<()> {
+pub async fn load_wal() -> io::Result<(Vec<(TransactionNumber, Stmt)>, File)> {
     let mut file: File = OpenOptions::new()
         .write(true)
         .read(true)
@@ -86,9 +90,11 @@ pub async fn wal_writer(mut channel: RequestReceiver) -> io::Result<()> {
         .await?;
 
     let size_of_entry_begin = bincode::serialized_size(&EntryBegin::default()).unwrap() as usize;
-    let size_of_entry_end = bincode::serialized_size(&EntryEnd ::default()).unwrap() as usize;
+    let size_of_entry_end = bincode::serialized_size(&EntryEnd::default()).unwrap() as usize;
 
     let mut transaction_number: TransactionNumber = 0;
+
+    let mut entries = Vec::new();
 
     { // Read existing WAL
         let mut data = Vec::new();
@@ -118,7 +124,7 @@ pub async fn wal_writer(mut channel: RequestReceiver) -> io::Result<()> {
 
             data = &data[size_of_entry_begin..];
 
-            let msg: Stmt = match bincode::deserialize(&data[..start.entry_size]) {
+            let query: Stmt = match bincode::deserialize(&data[..start.entry_size]) {
                 Ok(stmt) => stmt,
                 Err(_) => panic!("Corrupt WAL"),
             };
@@ -138,12 +144,22 @@ pub async fn wal_writer(mut channel: RequestReceiver) -> io::Result<()> {
 
             eprintln!("Read the following from the WAL:");
             eprintln!("start: {:?}", start);
-            eprintln!("msg:   {:?}", msg);
+            eprintln!("msg:   {:?}", query);
             eprintln!("end:   {:?}", end);
             eprintln!();
+
+            entries.push((transaction_number, query));
         }
     }
 
+    Ok((entries, file))
+}
+
+pub async fn wal_writer(
+    mut file: File,
+    mut transaction_number: TransactionNumber,
+    mut channel: RequestReceiver
+) -> io::Result<()> {
     TRANSACTION_NUMBER.store(transaction_number, Ordering::Relaxed);
 
     while let Some((msg, out)) = channel.recv().await {
