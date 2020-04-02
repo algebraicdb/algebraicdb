@@ -86,7 +86,7 @@ async fn execute_select(
 ) -> Result<(), Box<dyn Error>> {
     let rows = s
         .client
-        .query(dbg!(translate_select(&select).as_str()), &[])
+        .query(translate_select(&select).as_str(), &[])
         .await
         .unwrap();
 
@@ -110,7 +110,7 @@ async fn execute_select(
                                         None => "".to_string(),
                                     }
                                 } else {
-                                    dbg!(typ.type_());
+                                    typ.type_();
                                     match typ.type_() {
                                         &PostgresType::TEXT => {
                                             let x: Option<String> = b.get(c);
@@ -225,4 +225,17 @@ fn execute_expr(expr: Expr, _ctx: &Context) -> Value {
         Expr::Value(v) => v,
         _ => unimplemented!("Non-value exprs"),
     }
+}
+
+pub async fn drop_all_tables(s: &WrapperState) -> Result<(), Box<dyn Error>> {
+    s.client
+        .query(format!("drop schema public cascade;").as_str(), &[])
+        .await
+        .unwrap();
+    s.client
+        .query(format!("create schema public;").as_str(), &[])
+        .await
+        .unwrap();
+    // Also do something with resource manager in wrapper state
+    Ok(())
 }

@@ -1,9 +1,8 @@
-use crate::executor::wrapper::execute_query;
+use crate::executor::wrapper::{drop_all_tables, execute_query};
 use crate::local;
 use regex::Regex;
 use std::error::Error;
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, BufWriter};
-
 
 pub type State = local::WrapperState;
 
@@ -24,10 +23,14 @@ where
     // valid string: SELECT "this is a quote -> \", this is a semicolon -> ;.";
     let r = Regex::new(r#"^(("((\\.)|[^"])*")|[^";])*;"#).expect("Invalid regex");
 
+    drop_all_tables(&state).await.unwrap();
+
     loop {
         let _n: usize = match reader.read_buf(&mut buf).await? {
             // No bytes read means EOF was reached
-            0 => return Ok(()),
+            0 => {
+                return Ok(());
+            }
             // Read n bytes
             n => n,
         };
