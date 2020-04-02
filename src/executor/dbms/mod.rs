@@ -11,7 +11,7 @@ use std::fmt::Write;
 use tokio::io::{AsyncWrite, AsyncWriteExt};
 use std::sync::Arc;
 use std::iter::empty;
-
+use crate::wal::WriteToWal;
 use self::iter::*;
 
 pub(crate) async fn execute_query(
@@ -50,25 +50,53 @@ pub(crate) async fn execute_query(
     }
 
     // 5. Execute query
-    execute_stmt(ast, s, resources, w).await
+    execute_stmt(ast, s, resources, WriteToWal::Yes, w).await
+}
+
+pub(crate) async fn execute_replay_query(
+    ast: Stmt,
+    s: &mut DbmsState,
+    w: &mut (dyn AsyncWrite + Send + Unpin),
+) -> Result<(), Box<dyn Error>> {
+    // 2. determine resources
+    let request = pre_typechecker::get_resource_request(&ast);
+
+    // 3. acquire resources
+    let response = s.acquire_resources(request).await;
+    let mut resources = match response {
+        Ok(resources) => resources,
+        Err(name) => {
+            return Ok(w
+                .write_all(format!("No such table: {}\n", name).as_bytes())
+                .await?)
+        }
+    };
+    let resources = resources.take().await;
+
+    // 5. Execute query
+    // TODO: Error checking
+    execute_stmt(ast, s, resources, WriteToWal::No, w).await
 }
 
 async fn execute_stmt(
     ast: Stmt,
     s: &mut DbmsState,
     resources: ResourcesGuard<'_, Table>,
+    write_to_wal: WriteToWal,
     w: &mut (dyn AsyncWrite + Send + Unpin),
 ) -> Result<(), Box<dyn Error>> {
-    match &ast {
-        Stmt::CreateTable(_) |
-        Stmt::CreateType(_) |
-        Stmt::Delete(_) |
-        Stmt::Update(_) |
-        Stmt::Drop(_) |
-        Stmt::Insert(_) => {
-            s.wal().write(&ast).await;
+    if let WriteToWal::Yes = write_to_wal {
+        match &ast {
+            Stmt::CreateTable(_) |
+            Stmt::CreateType(_) |
+            Stmt::Delete(_) |
+            Stmt::Update(_) |
+            Stmt::Drop(_) |
+            Stmt::Insert(_) => {
+                s.wal().write(&ast).await;
+            }
+            Stmt::Select(_) => {/* We're only reading, so no logging required*/}
         }
-        Stmt::Select(_) => {/* We're only reading, so no logging required*/}
     }
     match ast {
         Stmt::CreateTable(create_table) => {

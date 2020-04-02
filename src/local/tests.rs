@@ -10,7 +10,7 @@ use rand::Rng;
 /// Make sure there are not deadlocks when multiple threads are requesting resources.
 #[tokio::test]
 async fn global_resources_contention() {
-    let state = DbmsState::new();
+    let state = DbmsState::new().await;
     let state = &state;
 
     let table_ids: Vec<usize> = (0..20).collect();

@@ -3,6 +3,8 @@ use super::*;
 use crate::table::Table;
 use crate::types::TypeMap;
 use crate::wal::WriteAheadLog;
+use crate::snapshot::{self, spawn_snapshotter, DbData};
+use crate::executor::execute_replay_query;
 use async_trait::async_trait;
 use futures::executor::block_on;
 use std::collections::HashMap;
@@ -59,16 +61,34 @@ impl DbState<Table> for DbmsState {
 
 impl DbmsState {
     pub async fn new() -> Self {
-        let (requests_in, requests_out) = mpsc::unbounded_channel();
+        let (wal, wal_entries) = WriteAheadLog::new().await;
+        //let transaction_number: u64 = wal_entries.last().map(|(n, _)| *n).unwrap_or(0);
 
-        std::thread::spawn(move || resource_manager(requests_out));
-
-        let state = Self {
-            channel: requests_in,
-            wal: WriteAheadLog::new().await,
+        let read_state = match snapshot::read().await {
+            Ok(state) => state,
+            Err(e) => {
+                eprintln!("Error reading data from disk, falling back to default. {}", e);
+                DbData::default()
+            }
         };
+        let transaction_number = read_state.transaction_number;
 
-        crate::snapshot::spawn_snapshotter(state.clone());
+        let (requests_in, requests_out) = mpsc::unbounded_channel();
+        std::thread::spawn(move || resource_manager(requests_out, read_state));
+
+        let mut state = Self {
+            channel: requests_in,
+            wal,
+        };
+        // TODO: This can probably be optimized
+        for (entry_tn, entry) in wal_entries {
+            if entry_tn > transaction_number {
+                eprintln!("Replaying transaction {}", entry_tn);
+                execute_replay_query(entry, &mut state, &mut Vec::<u8>::new()).await.unwrap();
+            }
+        }
+
+        spawn_snapshotter(state.clone(), transaction_number);
 
         state
     }
@@ -78,12 +98,14 @@ impl DbmsState {
     }
 }
 
-fn resource_manager(mut requests: RequestReceiver) {
+fn resource_manager(mut requests: RequestReceiver, data: DbData) {
     // NOTE: When locking a set of tables, make sure to lock the tables
     // in order, sorted by their name. If not, we will have deadlocks.
-    let mut tables: HashMap<String, Arc<RwLock<Table>>> = HashMap::new();
 
-    let type_map: Arc<RwLock<TypeMap>> = Arc::new(RwLock::new(TypeMap::new()));
+    let mut tables = data.tables;
+    let type_map = data.type_map;
+    //let mut tables: HashMap<String, Arc<RwLock<Table>>> = HashMap::new();
+    //let type_map: Arc<RwLock<TypeMap>> = Arc::new(RwLock::new(TypeMap::new()));
 
     loop {
         let (request, response_ch) = match block_on(requests.recv()) {

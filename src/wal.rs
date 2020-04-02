@@ -21,6 +21,11 @@ type WalMsg = (LogRequest, oneshot::Sender<LogResponse>);
 type RequestSender = mpsc::Sender<WalMsg>;
 type RequestReceiver = mpsc::Receiver<WalMsg>;
 
+pub enum WriteToWal {
+    Yes,
+    No,
+}
+
 #[derive(Clone)]
 pub struct WriteAheadLog {
     channel: RequestSender,
@@ -42,7 +47,7 @@ struct EntryEnd {
 }
 
 impl WriteAheadLog {
-    pub async fn new() -> Self {
+    pub async fn new() -> (Self, Vec<(TransactionNumber, Stmt)>) {
         let (requests_in, requests_out) = mpsc::channel(256);
 
         let (entries, file) = load_wal().await.expect("Loading WAL failed");
@@ -53,9 +58,11 @@ impl WriteAheadLog {
             wal_writer(file, transaction_number, requests_out).await.expect("WAL crashed");
         });
 
-        WriteAheadLog {
+        let wal = WriteAheadLog {
             channel: requests_in,
-        }
+        };
+
+        (wal, entries)
     }
 
     pub async fn write(&mut self, stmt: &Stmt) {
@@ -197,6 +204,9 @@ pub async fn wal_writer(
 
     Ok(())
 }
+
+
+
 
 impl From<bincode::Error> for WalError {
     fn from(_error: bincode::Error) -> Self {
