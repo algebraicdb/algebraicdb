@@ -28,7 +28,7 @@ pub enum TypeError {
 #[derive(Clone, Copy, Debug)]
 pub enum DuckType<'a> {
     Concrete(TypeId),
-    Variant(&'a str, &'a [Value]),
+    Variant(&'a str, &'a [Value<'a>]),
 }
 
 impl From<TypeId> for DuckType<'static> {
@@ -208,7 +208,7 @@ fn check_pattern<T: TTable>(
             assert_type_as(type_map.get_base_id(BaseType::Double), type_id, type_map)?;
         }
         Pattern::Ignore => {}
-        Pattern::Binding(name) => ctx.push_local(name.to_owned(), type_id),
+        Pattern::Binding(name) => ctx.push_local(name.to_string(), type_id),
         Pattern::Variant {
             namespace,
             name,
@@ -218,7 +218,7 @@ fn check_pattern<T: TTable>(
             if let Some(namespace) = namespace {
                 let actual_type_id = types
                     .get_id(namespace)
-                    .ok_or_else(|| TypeError::Undefined(namespace.clone()))?;
+                    .ok_or_else(|| TypeError::Undefined(namespace.to_string()))?;
                 if actual_type_id != type_id {
                     return Err(TypeError::InvalidType {
                         expected: type_id,
@@ -231,7 +231,7 @@ fn check_pattern<T: TTable>(
                 let (_, sub_types) = variants
                     .iter()
                     .find(|(variant, _)| variant == name)
-                    .ok_or_else(|| TypeError::Undefined(name.clone()))?;
+                    .ok_or_else(|| TypeError::Undefined(name.to_string()))?;
 
                 if sub_types.len() != sub_patterns.len() {
                     return Err(TypeError::InvalidCount {
@@ -246,7 +246,7 @@ fn check_pattern<T: TTable>(
             } else if let Some(namespace) = namespace {
                 let actual_type_id = types
                     .get_id(namespace)
-                    .ok_or_else(|| TypeError::Undefined(name.clone()))?;
+                    .ok_or_else(|| TypeError::Undefined(name.to_string()))?;
                 return Err(TypeError::InvalidType {
                     expected: type_id,
                     actual: actual_type_id,
@@ -267,9 +267,9 @@ fn check_update<T: TTable>(update: &Update, ctx: &mut Context<T>) -> Result<(), 
 
     for assignment in &update.ass {
         match schema.column(&assignment.col) {
-            None => return Err(TypeError::Undefined(assignment.col.clone())),
+            None => return Err(TypeError::Undefined(assignment.col.to_string())),
             Some(expected_type_id) => {
-                ctx.push_local(assignment.col.clone(), expected_type_id);
+                ctx.push_local(assignment.col.to_string(), expected_type_id);
                 let expr_type = check_expr(&assignment.expr, ctx)?;
 
                 assert_type_as(expr_type, expected_type_id, &ctx.globals.type_map)?;
@@ -300,7 +300,7 @@ fn check_insert<T: TTable>(insert: &Insert, ctx: &mut Context<T>) -> Result<(), 
     let table = ctx.globals.read_table(&insert.table);
     let schema = table.get_schema();
 
-    let mut populated_columns = HashSet::new();
+    let mut populated_columns: HashSet<&str> = HashSet::new();
 
     match &insert.from {
         InsertFrom::Values(rows) => {
@@ -319,7 +319,7 @@ fn check_insert<T: TTable>(insert: &Insert, ctx: &mut Context<T>) -> Result<(), 
                     // Make sure the types of the values match the types of the columns
                     let expected_type = schema
                         .column(column)
-                        .ok_or_else(|| TypeError::Undefined(column.clone()))?;
+                        .ok_or_else(|| TypeError::Undefined(column.to_string()))?;
                     let actual_type = check_expr(expr, ctx)?;
                     assert_type_as(actual_type, expected_type, &ctx.globals.type_map)?;
 
@@ -331,7 +331,7 @@ fn check_insert<T: TTable>(insert: &Insert, ctx: &mut Context<T>) -> Result<(), 
 
                 // Make sure all columns have a value
                 for (column, _) in &table.get_schema().columns {
-                    if populated_columns.get(column).is_none() {
+                    if populated_columns.get(column.as_str()).is_none() {
                         // TODO: Support for default values
                         return Err(TypeError::MissingColumn(column.clone()));
                     }
@@ -355,7 +355,7 @@ fn check_insert<T: TTable>(insert: &Insert, ctx: &mut Context<T>) -> Result<(), 
                 // Make sure the types of the values match the types of the columns
                 let expected_type = schema
                     .column(column)
-                    .ok_or_else(|| TypeError::Undefined(column.clone()))?;
+                    .ok_or_else(|| TypeError::Undefined(column.to_string()))?;
 
                 assert_type_as(actual_type, expected_type, &ctx.globals.type_map)?;
 
@@ -367,7 +367,7 @@ fn check_insert<T: TTable>(insert: &Insert, ctx: &mut Context<T>) -> Result<(), 
 
             // Make sure all columns have a value
             for (column, _) in &table.get_schema().columns {
-                if populated_columns.get(column).is_none() {
+                if populated_columns.get(column.as_str()).is_none() {
                     // TODO: Support for default values
                     return Err(TypeError::MissingColumn(column.clone()));
                 }
@@ -390,7 +390,7 @@ fn check_create_table<T: TTable>(
     let columns = &create_table.columns;
     for (_, column_type) in columns {
         if ctx.globals.type_map.get(column_type).is_none() {
-            return Err(TypeError::Undefined(column_type.clone()));
+            return Err(TypeError::Undefined(column_type.to_string()));
         }
     }
 
@@ -423,7 +423,7 @@ fn check_create_type<T: TTable>(
             for (_variant, types) in variants {
                 for t_name in types {
                     if ctx.globals.type_map.get_id(t_name).is_none() {
-                        return Err(TypeError::Undefined(t_name.clone()));
+                        return Err(TypeError::Undefined(t_name.to_string()));
                     }
                 }
             }
@@ -515,7 +515,7 @@ where
                 let (_, sub_types) = variants
                     .iter()
                     .find(|(name, _)| name == variant_name)
-                    .ok_or_else(|| TypeError::Undefined(variant_name.to_owned()))?;
+                    .ok_or_else(|| TypeError::Undefined(variant_name.to_string()))?;
 
                 if sub_types.len() != sub_values.len() {
                     return Err(TypeError::InvalidCount {
@@ -547,7 +547,7 @@ pub fn type_of_value<'a>(value: &'a Value, types: &TypeMap) -> Result<DuckType<'
             if let Some(namespace) = namespace {
                 let type_id = types
                     .get_id(namespace)
-                    .ok_or_else(|| TypeError::Undefined(namespace.clone()))?;
+                    .ok_or_else(|| TypeError::Undefined(namespace.clone().into_owned()))?;
 
                 assert_type_as(DuckType::Variant(variant_name, sub_values), type_id, types)?;
 

@@ -2,51 +2,51 @@ use crate::pattern::Pattern;
 use crate::types::Value;
 
 #[derive(Debug)]
-pub enum Expr {
-    Ident(String),
-    Value(Value),
-    Equals(Box<Expr>, Box<Expr>),
-    NotEquals(Box<Expr>, Box<Expr>),
-    LessEquals(Box<Expr>, Box<Expr>),
-    LessThan(Box<Expr>, Box<Expr>),
-    GreaterThan(Box<Expr>, Box<Expr>),
-    GreaterEquals(Box<Expr>, Box<Expr>),
-    And(Box<Expr>, Box<Expr>),
-    Or(Box<Expr>, Box<Expr>),
+pub enum Expr<'a> {
+    Ident(&'a str),
+    Value(Value<'a>),
+    Equals(Box<Expr<'a>>, Box<Expr<'a>>),
+    NotEquals(Box<Expr<'a>>, Box<Expr<'a>>),
+    LessEquals(Box<Expr<'a>>, Box<Expr<'a>>),
+    LessThan(Box<Expr<'a>>, Box<Expr<'a>>),
+    GreaterThan(Box<Expr<'a>>, Box<Expr<'a>>),
+    GreaterEquals(Box<Expr<'a>>, Box<Expr<'a>>),
+    And(Box<Expr<'a>>, Box<Expr<'a>>),
+    Or(Box<Expr<'a>>, Box<Expr<'a>>),
 }
 
 #[derive(Debug)]
-pub struct Ass {
-    pub col: String,
-    pub expr: Expr,
+pub struct Ass<'a> {
+    pub col: &'a str,
+    pub expr: Expr<'a>,
 }
 
 #[derive(Debug)]
-pub struct Select {
-    pub items: Vec<Expr>,
-    pub from: Option<SelectFrom>,
-    pub where_clause: Option<WhereClause>,
+pub struct Select<'a> {
+    pub items: Vec<Expr<'a>>,
+    pub from: Option<SelectFrom<'a>>,
+    pub where_clause: Option<WhereClause<'a>>,
 }
 
 #[derive(Debug)]
-pub enum WhereItem {
-    Expr(Expr),
-    Pattern(String, Pattern),
+pub enum WhereItem<'a> {
+    Expr(Expr<'a>),
+    Pattern(&'a str, Pattern<'a>),
 }
 
 #[derive(Debug)]
-pub enum SelectFrom {
-    Table(String),
-    Select(Box<Select>),
-    Join(Box<Join>),
+pub enum SelectFrom<'a> {
+    Table(&'a str),
+    Select(Box<Select<'a>>),
+    Join(Box<Join<'a>>),
 }
 
 #[derive(Debug)]
-pub struct Join {
-    pub table_a: SelectFrom,
-    pub table_b: SelectFrom,
+pub struct Join<'a> {
+    pub table_a: SelectFrom<'a>,
+    pub table_b: SelectFrom<'a>,
     pub join_type: JoinType,
-    pub on_clause: Option<Expr>,
+    pub on_clause: Option<Expr<'a>>,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -58,62 +58,62 @@ pub enum JoinType {
 }
 
 #[derive(Debug)]
-pub struct WhereClause {
-    pub items: Vec<WhereItem>,
+pub struct WhereClause<'a> {
+    pub items: Vec<WhereItem<'a>>,
 }
 
 #[derive(Debug)]
-pub struct Delete {
-    pub table: String,
-    pub where_clause: Option<WhereClause>,
+pub struct Delete<'a> {
+    pub table: &'a str,
+    pub where_clause: Option<WhereClause<'a>>,
 }
 
 #[derive(Debug)]
-pub struct Drop {
-    pub table: String,
+pub struct Drop<'a> {
+    pub table: &'a str,
     //  pub drop_clause: Option<DropClause>, // should be cascade or restrict
 }
 
 #[derive(Debug)]
-pub struct Insert {
-    pub table: String,
-    pub columns: Vec<String>,
-    pub from: InsertFrom,
+pub struct Insert<'a> {
+    pub table: &'a str,
+    pub columns: Vec<&'a str>,
+    pub from: InsertFrom<'a>,
 }
 
 #[derive(Debug)]
-pub enum InsertFrom {
-    Values(Vec<Vec<Expr>>),
-    Select(Select),
+pub enum InsertFrom<'a> {
+    Values(Vec<Vec<Expr<'a>>>),
+    Select(Select<'a>),
 }
 
 #[derive(Debug)]
-pub struct CreateTable {
-    pub table: String,
-    pub columns: Vec<(String, String)>,
+pub struct CreateTable<'a> {
+    pub table: &'a str,
+    pub columns: Vec<(&'a str, &'a str)>,
 }
 
 #[derive(Debug)]
-pub enum Stmt {
-    Select(Select),
-    Insert(Insert),
-    Delete(Delete),
-    Update(Update),
-    CreateTable(CreateTable),
-    CreateType(CreateType),
-    Drop(Drop),
+pub enum Stmt<'a> {
+    Select(Select<'a>),
+    Insert(Insert<'a>),
+    Delete(Delete<'a>),
+    Update(Update<'a>),
+    CreateTable(CreateTable<'a>),
+    CreateType(CreateType<'a>),
+    Drop(Drop<'a>),
 }
 
 #[derive(Debug)]
-pub struct Update {
-    pub table: String,
-    pub ass: Vec<Ass>,
-    pub where_clause: Option<WhereClause>,
+pub struct Update<'a> {
+    pub table: &'a str,
+    pub ass: Vec<Ass<'a>>,
+    pub where_clause: Option<WhereClause<'a>>,
 }
 
 #[derive(Debug)]
-pub enum CreateType {
-    Variant(String, Vec<(String, Vec<String>)>),
+pub enum CreateType<'a> {
+    Variant(&'a str, Vec<(&'a str, Vec<&'a str>)>),
 }
 
 #[test]

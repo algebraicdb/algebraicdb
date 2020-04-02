@@ -7,6 +7,7 @@ use std::fmt::{self, Display, Formatter};
 use std::io::Write;
 use std::mem::size_of;
 use std::ops::Index;
+use std::borrow::Cow;
 
 pub type EnumTag = usize;
 pub type TypeId = usize;
@@ -128,15 +129,15 @@ pub enum Type {
 }
 
 #[derive(Debug, PartialEq, Clone)]
-pub enum Value {
+pub enum Value<'a> {
     Char(char),
     Integer(i32),
     Double(f64),
     Bool(bool),
-    Sum(Option<String>, String, Vec<Value>),
+    Sum(Option<Cow<'a, str>>, Cow<'a, str>, Vec<Value<'a>>),
 }
 
-impl Display for Value {
+impl Display for Value<'_> {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         match self {
             Value::Char(v) => write!(f, "{}", v),
@@ -162,7 +163,7 @@ impl Display for Value {
     }
 }
 
-impl Value {
+impl Value<'_> {
     pub fn to_bytes<W: Write>(&self, writer: &mut W, types: &TypeMap, t: &Type) {
         let size = t.size_of(types);
         match self {
@@ -203,7 +204,7 @@ impl Value {
     }
 }
 
-impl PartialOrd for Value {
+impl PartialOrd for Value<'_> {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         match (self, other) {
             (Value::Char(v1), Value::Char(v2)) => Some(v1.cmp(v2)),
@@ -235,7 +236,7 @@ impl Type {
         }
     }
 
-    pub fn from_bytes(&self, mut bytes: &[u8], types: &TypeMap) -> bincode::Result<Value> {
+    pub fn from_bytes(&self, mut bytes: &[u8], types: &TypeMap) -> bincode::Result<Value<'static>> {
         assert_eq!(self.size_of(types), bytes.len());
 
         match self {
@@ -263,12 +264,12 @@ impl Type {
                     .collect::<Result<_, _>>()?;
 
                 // TODO: Type name
-                Ok(Value::Sum(None, name.clone(), values))
+                Ok(Value::Sum(None, Cow::Owned(name.clone()), values))
             }
         }
     }
 
-    pub fn random_value(&self, types: &TypeMap) -> Value {
+    pub fn random_value(&self, types: &TypeMap) -> Value<'static> {
         match self {
             Type::Char => Value::Char(rand::random::<char>()),
             Type::Integer => Value::Integer(rand::random::<i32>()),
@@ -282,8 +283,28 @@ impl Type {
                     .map(|t_id| types[t_id].random_value(types))
                     .collect();
                 // TODO: Type name
-                Value::Sum(None, variant.clone(), values)
+                Value::Sum(None, Cow::Owned(variant.clone()), values)
             }
+        }
+    }
+}
+
+impl Value<'_> {
+    pub fn deep_clone(&self) -> Value<'static> {
+        match self {
+            Value::Sum(namespace, name, inner_values) => {
+                let inner_values: Vec<Value<'static>> = inner_values.iter().map(|v| v.deep_clone()).collect();
+
+                Value::Sum(
+                    namespace.as_ref().map(|ns| Cow::Owned(ns.clone().into_owned())),
+                    Cow::Owned(name.clone().into_owned()),
+                    inner_values,
+                )
+            }
+            Value::Integer(v) => Value::Integer(*v),
+            Value::Double(v) => Value::Double(*v),
+            Value::Char(v) => Value::Char(*v),
+            Value::Bool(v) => Value::Bool(*v),
         }
     }
 }

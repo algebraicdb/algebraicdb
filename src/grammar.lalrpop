@@ -62,7 +62,7 @@ match {
 }
 
 // Main production
-pub Stmt: Stmt = {
+pub Stmt: Stmt<'input> = {
     <Select> ";" => Stmt::Select(<>),
     <Insert> ";" => Stmt::Insert(<>),
     <Delete> ";" => Stmt::Delete(<>),
@@ -72,14 +72,14 @@ pub Stmt: Stmt = {
     <Drop> ";" => Stmt::Drop(<>),
 }
 
-Delete: Delete = {
+Delete: Delete<'input> = {
     DELETE FROM <table:Ident> <where_clause:(WhereClause?)> => Delete {
         table,
         where_clause,
     },
 }
 
-Drop: Drop = {
+Drop: Drop<'input> = {
     DROP TABLE
     <table:Ident> => Drop {
         table,
@@ -87,7 +87,7 @@ Drop: Drop = {
     },
 }
 
-Update: Update = {
+Update: Update<'input> = {
     UPDATE
     <table:Ident> SET
     <ass:Comma<Ass>>
@@ -99,7 +99,7 @@ Update: Update = {
     },
 }
 
-Select: Select = {
+Select: Select<'input> = {
     SELECT
         <items:Comma<Expr>>
         <from:(FROM <SelectFrom>)?>
@@ -111,7 +111,7 @@ Select: Select = {
     },
 }
 
-SelectFrom: SelectFrom = {
+SelectFrom: SelectFrom<'input> = {
     <table_a:SelectFrom>
         <join_type:JoinType>
         <table_b:SelectFrom2>
@@ -125,24 +125,24 @@ SelectFrom: SelectFrom = {
     SelectFrom2,
 }
 
-SelectFrom2: SelectFrom = {
+SelectFrom2: SelectFrom<'input> = {
     "(" <Select> ")" => SelectFrom::Select(box <>),
     Ident => SelectFrom::Table(<>),
     "(" <SelectFrom> ")",
 }
 
-WhereClause: WhereClause = {
+WhereClause: WhereClause<'input> = {
     WHERE <Comma<WhereItem>> => WhereClause{
         items: <>,
     },
 }
 
-WhereItem: WhereItem = {
+WhereItem: WhereItem<'input> = {
     <col:Ident> ":" <pattern:Pattern> => (WhereItem::Pattern(col, pattern)),
     Expr => WhereItem::Expr(<>),
 }
 
-CreateTable: CreateTable = {
+CreateTable: CreateTable<'input> = {
     CREATE TABLE <table:Ident>
         <columns:("(" <Comma<(Ident Ident)>> ")")>
     => CreateTable {
@@ -151,7 +151,7 @@ CreateTable: CreateTable = {
     }
 }
 
-Insert: Insert = {
+Insert: Insert<'input> = {
     INSERT INTO <table:Ident>
         <columns:("(" <Comma<Ident>> ")")?>
         <from:InsertFrom>
@@ -163,7 +163,7 @@ Insert: Insert = {
     }
 }
 
-InsertFrom: InsertFrom = {
+InsertFrom: InsertFrom<'input> = {
     VALUES <Comma<("(" <Comma<Expr>> ")")>> => InsertFrom::Values(<>),
     Select => InsertFrom::Select(<>)
 }
@@ -175,12 +175,12 @@ JoinType: JoinType = {
     INNER? JOIN => JoinType::Inner,
 }
 
-VarDef: (String, Vec<String>) = {
+VarDef: (&'input str, Vec<&'input str>) = {
     <name:Ident> "(" <variants:Comma<Ident>> ")"
         => (name, variants),
 }
 
-CreateType: CreateType = {
+CreateType: CreateType<'input> = {
     CREATE TYPE
         <name:Ident>
         AS VARIANT
@@ -188,11 +188,11 @@ CreateType: CreateType = {
         => CreateType::Variant(name, variants),
 }
 
-Namespace: String = {
-    <Ident> "::" => <>.to_string(),
+Namespace: &'input str = {
+    <Ident> "::",
 }
 
-Value: Value = {
+Value: Value<'input> = {
     Char => Value::Char(<>),
     Integer => Value::Integer(<>),
     Double => Value::Double(<>),
@@ -203,19 +203,19 @@ Value: Value = {
         <variant:Ident> "("
         <values:Comma<Value>> ")"
     => Value::Sum(
-        namespace,
-        variant.to_string(),
+        namespace.map(|s| s.into()),
+        variant.into(),
         values,
     ),
 }
 
-Expr3: Expr = {
+Expr3: Expr<'input> = {
     Ident => Expr::Ident(<>),
     Value => Expr::Value(<>),
     "(" <Expr> ")",
 }
 
-Expr2: Expr = {
+Expr2: Expr<'input> = {
     <e1:Expr2> "="  <e2:Expr3> => Expr::Equals(box e1, box e2),
     <e1:Expr2> "!=" <e2:Expr3> => Expr::NotEquals(box e1, box e2),
     <e1:Expr2> "<=" <e2:Expr3> => Expr::LessEquals(box e1, box e2),
@@ -225,24 +225,24 @@ Expr2: Expr = {
     Expr3,
 }
 
-Expr1: Expr = {
+Expr1: Expr<'input> = {
     <e1:Expr1> AND <e2:Expr2> => Expr::And(box e1, box e2),
     Expr2
 }
 
-Expr: Expr = {
+Expr: Expr<'input> = {
     <e1:Expr> OR <e2:Expr1> => Expr::Or(box e1, box e2),
     Expr1,
 }
 
-Ass: Ass = {
+Ass: Ass<'input> = {
     <col:Ident> "=" <expr:Expr> => Ass {
         col,
         expr,
     }
 }
 
-pub Pattern: Pattern = {
+pub Pattern: Pattern<'input> = {
     "_" => Pattern::Ignore,
     Char => Pattern::Char(<>),
     Integer => Pattern::Int(<>),
@@ -259,12 +259,14 @@ pub Pattern: Pattern = {
     },
 }
 
-Ident: String = {
-    IDENT => String::from(<>),
+Ident: &'input str = {
+    //IDENT => String::from(<>),
+    IDENT,
 }
 
-Str: String = {
-    STR => String::from(<>.strip_prefix('"').unwrap().strip_suffix('"').unwrap()),
+Str: &'input str = {
+    //STR => String::from(<>.strip_prefix('"').unwrap().strip_suffix('"').unwrap()),
+    STR => <>.strip_prefix('"').unwrap().strip_suffix('"').unwrap(),
 }
 
 Char: char = {
