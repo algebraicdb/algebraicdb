@@ -12,6 +12,7 @@ use std::cmp::Ordering;
 pub type EnumTag = usize;
 pub type TypeId = usize;
 
+#[derive(Serialize, Deserialize)]
 pub struct TypeMap {
     types: HashMap<TypeId, Type>,
     identifiers: HashMap<String, TypeId>,
@@ -118,7 +119,7 @@ impl TypeMap {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum Type {
     Integer,
     Double,

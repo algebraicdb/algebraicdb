@@ -10,6 +10,7 @@ pub use self::schema::Schema;
 
 use crate::local::TTable;
 use crate::types::{TypeId, TypeMap, Value};
+use serde::{Serialize, Deserialize};
 
 #[derive(Debug, Clone)]
 pub struct Column {
@@ -17,7 +18,7 @@ pub struct Column {
     name: String,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct Table {
     pub schema: Schema,
     pub data: Vec<u8>,

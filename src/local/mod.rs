@@ -1,5 +1,5 @@
-mod dbms_state;
-mod types;
+pub mod dbms_state;
+pub mod types;
 
 #[cfg(test)]
 mod tests;
@@ -19,6 +19,7 @@ where
     T: TTable,
 {
     async fn acquire_resources(&self, acquire: Acquire) -> Result<Resources<T>, String>;
+    async fn acquire_all_resources(&self) -> Resources<T>;
     async fn create_table(&self, name: String, table: T) -> Result<(), ()>;
 }
 

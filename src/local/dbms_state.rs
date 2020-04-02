@@ -42,6 +42,13 @@ impl DbState<Table> for DbmsState {
         }
     }
 
+    async fn acquire_all_resources(&self) -> Resources<Table> {
+        match self.send_request(Request::AcquireAll()).await {
+            Response::AcquiredResources(resources) => resources,
+            _ => unreachable!(),
+        }
+    }
+
     async fn create_table(&self, name: String, table: Table) -> Result<(), ()> {
         match self.send_request(Request::CreateTable(name, table)).await {
             Response::CreateTable(resp) => resp,
@@ -56,10 +63,14 @@ impl DbmsState {
 
         std::thread::spawn(move || resource_manager(requests_out));
 
-        Self {
+        let state = Self {
             channel: requests_in,
             wal: WriteAheadLog::new(),
-        }
+        };
+
+        crate::snapshot::spawn_snapshotter(state.clone());
+
+        state
     }
 
     pub fn wal(&mut self) -> &mut WriteAheadLog {
@@ -68,7 +79,10 @@ impl DbmsState {
 }
 
 fn resource_manager(mut requests: RequestReceiver) {
+    // NOTE: When locking a set of tables, make sure to lock the tables
+    // in order, sorted by their name. If not, we will have deadlocks.
     let mut tables: HashMap<String, Arc<RwLock<Table>>> = HashMap::new();
+
     let type_map: Arc<RwLock<TypeMap>> = Arc::new(RwLock::new(TypeMap::new()));
 
     loop {
@@ -78,6 +92,20 @@ fn resource_manager(mut requests: RequestReceiver) {
         };
 
         match request {
+            Request::AcquireAll() => {
+                let type_map = type_map.clone();
+
+                // TODO: avoid string cloning
+                let mut tables: Vec<(RW, String, _)> = tables
+                    .iter()
+                    .map(|(name, table_lock)| (RW::Read, name.clone(), table_lock.clone()))
+                    .collect();
+
+                tables.sort_by(|(_, name_a, _), (_, name_b, _)| name_a.cmp(name_b));
+
+                response_ch.send(Response::AcquiredResources(Resources::new(type_map, RW::Read, tables)))
+                    .unwrap_or_else(|_| eprintln!("global::manager: response channel closed."));
+            }
             Request::Acquire(Acquire {
                 table_reqs,
                 type_map_perms,

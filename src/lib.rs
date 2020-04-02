@@ -15,7 +15,8 @@ mod pre_typechecker;
 mod table;
 mod typechecker;
 mod types;
-mod wal;
+pub(crate) mod wal;
+mod snapshot;
 
 pub use api::custom::create_with_writers;
 pub use api::tcp_api::create_tcp_server;
