@@ -66,4 +66,3 @@ async fn run_example_query(input: String, expected_output: String) -> io::Result
         Ok(Err(()))
     }
 }
-

@@ -1,4 +1,4 @@
-use crate::executor::wrapper::{drop_all_tables, execute_query};
+use crate::executor::wrapper::execute_query;
 use crate::local;
 use regex::Regex;
 use std::error::Error;
@@ -22,8 +22,6 @@ where
     // It also properly handles escaped quotes
     // valid string: SELECT "this is a quote -> \", this is a semicolon -> ;.";
     let r = Regex::new(r#"^(("((\\.)|[^"])*")|[^";])*;"#).expect("Invalid regex");
-
-    drop_all_tables(&state).await.unwrap();
 
     loop {
         let _n: usize = match reader.read_buf(&mut buf).await? {

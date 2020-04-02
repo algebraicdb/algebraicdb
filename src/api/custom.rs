@@ -1,4 +1,5 @@
 use crate::client::{client, State};
+use crate::executor::wrapper::drop_all_tables;
 use std::error::Error;
 use tokio::io::{AsyncRead, AsyncWrite};
 
@@ -8,6 +9,8 @@ where
     R: AsyncRead + Unpin + Send,
     W: AsyncWrite + Unpin + Send,
 {
-    let state = State::new();
-    client(reader, writer, state.await).await
+    let state = State::new().await;
+    drop_all_tables(&state).await.unwrap();
+
+    client(reader, writer, state).await
 }
