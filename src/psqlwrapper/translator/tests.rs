@@ -1,9 +1,8 @@
-use crate::ast::*;
-
-use super::*;
-use crate::grammar::StmtParser;
 #[test]
 pub fn test_translate_pattern() {
+    use super::*;
+    use crate::ast::*;
+    use crate::grammar::StmtParser;
     let parser = StmtParser::new();
     let input = vec![
         r#"INSERT INTO table (col1,col2) VALUES (5,8);"#,
@@ -31,6 +30,9 @@ pub fn test_translate_pattern() {
 
 #[test]
 pub fn test_translate_select() {
+    use super::*;
+    use crate::ast::*;
+    use crate::grammar::StmtParser;
     let parser = StmtParser::new();
     let input = vec![
         r#"SELECT b FROM a;"#,

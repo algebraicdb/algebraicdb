@@ -48,13 +48,5 @@ wrapper = []
 # Benchmarks
 
 [[bench]]
-name = "parsing_benchmark"
-harness = false
-
-[[bench]]
-name = "executor_benchmark"
-harness = false
-
-[[bench]]
 name = "integration_tests_benchmark"
 harness = false

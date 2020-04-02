@@ -7,7 +7,6 @@ use crate::typechecker;
 use crate::types::{Type, TypeId, Value};
 use serde_json;
 use std::error::Error;
-use std::fmt::Display;
 use tokio::io::{AsyncWrite, AsyncWriteExt};
 use tokio_postgres::types::Type as PostgresType;
 struct Context {
@@ -82,7 +81,7 @@ async fn execute_stmt(
 async fn execute_select(
     select: Select,
     s: &WrapperState,
-    resources: ResourcesGuard<'_, Schema>,
+    _resources: ResourcesGuard<'_, Schema>,
     w: &mut (dyn AsyncWrite + Send + Unpin),
 ) -> Result<(), Box<dyn Error>> {
     let rows = s
@@ -208,7 +207,7 @@ async fn execute_insert(
     w: &mut (dyn AsyncWrite + Send + Unpin),
     s: &WrapperState,
 ) -> Result<(), Box<dyn Error>> {
-    let (table, types) = resources.write_table(&insert.table);
+    let (_table, _types) = resources.write_table(&insert.table);
     let row_count = insert.rows.len();
 
     s.client

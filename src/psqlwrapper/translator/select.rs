@@ -100,7 +100,6 @@ fn translate_expr(expr: &Expr, bindings: &HashMap<String, String>) -> String {
             translate_expr(e1, bindings),
             translate_expr(e2, bindings)
         ),
-        _ => unimplemented!(),
     }
 }
 

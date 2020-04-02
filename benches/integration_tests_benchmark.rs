@@ -10,7 +10,8 @@ use criterion::{black_box, criterion_group, criterion_main, Criterion};
 
 fn integration_tests_benchmark(c: &mut Criterion) {
     let mut dir = std::fs::read_dir("test_queries/").unwrap();
-
+    let mut group = c.benchmark_group("Integration Tests");
+    group.sample_size(10);
     while let Some(Ok(entry)) = dir.next() {
         if entry.file_type().map(|f| f.is_dir()).unwrap_or(false) {
             let mut input_path = entry.path();
@@ -21,12 +22,8 @@ fn integration_tests_benchmark(c: &mut Criterion) {
 
             let mut rt = rt();
 
-            c.bench_function(
-                format!(
-                    "Integration Test: {}",
-                    entry.file_name().into_string().unwrap()
-                )
-                .as_str(),
+            group.bench_function(
+                format!("Test: {}", entry.file_name().into_string().unwrap()).as_str(),
                 |b| {
                     b.iter(|| {
                         rt.block_on(async {

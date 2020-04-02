@@ -1,4 +1,3 @@
-use crate::ast::*;
 use crate::table::*;
 use crate::types::{Type, TypeId, TypeMap};
 
