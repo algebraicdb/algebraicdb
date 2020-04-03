@@ -10,7 +10,7 @@ pub use self::schema::Schema;
 
 use crate::local::TTable;
 use crate::types::{TypeId, TypeMap, Value};
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone)]
 pub struct Column {

@@ -1,5 +1,5 @@
 use bincode::{deserialize, serialize_into};
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 use std::char;
 use std::cmp;
 use std::collections::HashMap;

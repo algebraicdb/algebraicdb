@@ -2,16 +2,16 @@ mod iter;
 
 use crate::ast::*;
 use crate::local::{DbState, DbmsState, ResourcesGuard};
+use crate::persistence::WriteToWal;
 use crate::pre_typechecker;
-use crate::table::{Schema, Table, Cell};
+use crate::table::{Cell, Schema, Table};
 use crate::typechecker;
-use crate::types::{TypeMap, Type, TypeId, Value};
+use crate::types::{Type, TypeId, TypeMap, Value};
 use std::error::Error;
 use std::fmt::Write;
 use tokio::io::{AsyncWrite, AsyncWriteExt};
 use std::sync::Arc;
 use std::iter::empty;
-use crate::wal::WriteToWal;
 use self::iter::*;
 
 pub(crate) async fn execute_query(
@@ -87,15 +87,15 @@ async fn execute_stmt(
 ) -> Result<(), Box<dyn Error>> {
     if let WriteToWal::Yes = write_to_wal {
         match &ast {
-            Stmt::CreateTable(_) |
-            Stmt::CreateType(_) |
-            Stmt::Delete(_) |
-            Stmt::Update(_) |
-            Stmt::Drop(_) |
-            Stmt::Insert(_) => {
+            Stmt::CreateTable(_)
+            | Stmt::CreateType(_)
+            | Stmt::Delete(_)
+            | Stmt::Update(_)
+            | Stmt::Drop(_)
+            | Stmt::Insert(_) => {
                 s.wal().write(&ast).await;
             }
-            Stmt::Select(_) => {/* We're only reading, so no logging required*/}
+            Stmt::Select(_) => { /* We're only reading, so no logging required*/ }
         }
     }
     match ast {
@@ -108,8 +108,7 @@ async fn execute_stmt(
             let type_map = &resources.type_map;
             let table = execute_select(&select, &resources);
             print_table(table.iter(type_map), w).await
-
-        },
+        }
         _ => unimplemented!("Not implemented: {:?}", ast),
     }
 }

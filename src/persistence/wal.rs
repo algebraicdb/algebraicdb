@@ -1,12 +1,12 @@
+use crate::ast::Stmt;
 use bincode;
+use serde::{Deserialize, Serialize};
+use std::io;
+use std::sync::atomic::{AtomicU64, Ordering};
 use tokio::fs::{File, OpenOptions};
-use tokio::io::{AsyncWriteExt, AsyncReadExt};
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::sync::{mpsc, oneshot};
 use tokio::task;
-use std::io;
-use crate::ast::Stmt;
-use serde::{Serialize, Deserialize};
-use std::sync::atomic::{AtomicU64, Ordering};
 
 const WAL_NAME: &str = "wal";
 
@@ -32,7 +32,7 @@ pub struct WriteAheadLog {
 }
 
 pub enum WalError {
-    CorruptedFile
+    CorruptedFile,
 }
 
 #[derive(Clone, Copy, Default, Debug, Serialize, Deserialize)]
@@ -55,7 +55,9 @@ impl WriteAheadLog {
         let transaction_number = entries.last().map(|(n, _)| *n).unwrap_or(0);
 
         task::spawn(async move {
-            wal_writer(file, transaction_number, requests_out).await.expect("WAL crashed");
+            wal_writer(file, transaction_number, requests_out)
+                .await
+                .expect("WAL crashed");
         });
 
         let wal = WriteAheadLog {
@@ -68,8 +70,7 @@ impl WriteAheadLog {
     pub async fn write(&mut self, stmt: &Stmt) {
         let data = serialize_log_msg(stmt);
         let (tx, rx) = oneshot::channel();
-        self.channel.send((data, tx)).await
-            .expect("WAL crashed");
+        self.channel.send((data, tx)).await.expect("WAL crashed");
         rx.await.expect("WAL crashed");
     }
 }
@@ -99,19 +100,17 @@ pub async fn load_wal() -> io::Result<(Vec<(TransactionNumber, Stmt)>, File)> {
     let size_of_entry_begin = bincode::serialized_size(&EntryBegin::default()).unwrap() as usize;
     let size_of_entry_end = bincode::serialized_size(&EntryEnd::default()).unwrap() as usize;
 
-    let mut transaction_number: TransactionNumber = 0;
-
     let mut entries = Vec::new();
 
-    { // Read existing WAL
+    {
+        // Read existing WAL
         let mut data = Vec::new();
         file.read_to_end(&mut data).await?;
         let mut data = &data[..];
         loop {
             if data.is_empty() {
                 break;
-            }
-            else if size_of_entry_begin > data.len() {
+            } else if size_of_entry_begin > data.len() {
                 panic!("Corrupt WAL");
             }
 
@@ -147,15 +146,13 @@ pub async fn load_wal() -> io::Result<(Vec<(TransactionNumber, Stmt)>, File)> {
                 panic!("Corrupt WAL: Invalid checksum")
             }
 
-            transaction_number = start.transaction_number;
-
             eprintln!("Read the following from the WAL:");
             eprintln!("start: {:?}", start);
             eprintln!("msg:   {:?}", query);
             eprintln!("end:   {:?}", end);
             eprintln!();
 
-            entries.push((transaction_number, query));
+            entries.push((start.transaction_number, query));
         }
     }
 
@@ -165,7 +162,7 @@ pub async fn load_wal() -> io::Result<(Vec<(TransactionNumber, Stmt)>, File)> {
 pub async fn wal_writer(
     mut file: File,
     mut transaction_number: TransactionNumber,
-    mut channel: RequestReceiver
+    mut channel: RequestReceiver,
 ) -> io::Result<()> {
     TRANSACTION_NUMBER.store(transaction_number, Ordering::Relaxed);
 
@@ -204,9 +201,6 @@ pub async fn wal_writer(
 
     Ok(())
 }
-
-
-
 
 impl From<bincode::Error> for WalError {
     fn from(_error: bincode::Error) -> Self {

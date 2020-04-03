@@ -1,19 +1,23 @@
 mod manager;
-mod write;
 mod read;
+mod wal;
+mod write;
 
-pub(crate) use manager::{spawn_snapshotter};
+pub(crate) use manager::spawn_snapshotter;
 pub(crate) use read::{read, DbData};
+pub(crate) use wal::{TransactionNumber, WriteAheadLog, WriteToWal, TRANSACTION_NUMBER};
 pub(self) use write::snapshot;
 
 // Data-directory layout:
 // - data
+// | - wal                    (the write-ahead log)
 // | - current                (contains the current transaction number, acts as an atomic pointer to the folder)
 // | - <transaction_number>   (a folder containing a snapshot of the database at the given transaction)
 // | | - type_map             (a file containing all type definitions for the database)
 // | | - tables               (a folder containing the raw data of all tables)
 // | | | - <table_name>       (raw data of the table)
 pub(self) const DATA_DIR_NAME: &str = "data";
+pub(self) const WAL_FILE_NAME: &str = "wal";
 pub(self) const CURRENT_TRANSACTION_FILE_NAME: &str = "current_tn";
 pub(self) const TMP_TRANSACTION_FILE_NAME: &str = "tmp_tn";
 pub(self) const TABLES_DIR_NAME: &str = "tables";

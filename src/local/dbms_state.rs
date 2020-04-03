@@ -1,13 +1,10 @@
 use super::types::*;
 use super::*;
-use crate::table::Table;
-use crate::types::TypeMap;
-use crate::wal::WriteAheadLog;
-use crate::snapshot::{self, spawn_snapshotter, DbData};
 use crate::executor::execute_replay_query;
+use crate::persistence::{self, spawn_snapshotter, DbData, WriteAheadLog};
+use crate::table::Table;
 use async_trait::async_trait;
 use futures::executor::block_on;
-use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::mpsc;
 use tokio::sync::oneshot;
@@ -64,10 +61,13 @@ impl DbmsState {
         let (wal, wal_entries) = WriteAheadLog::new().await;
         //let transaction_number: u64 = wal_entries.last().map(|(n, _)| *n).unwrap_or(0);
 
-        let read_state = match snapshot::read().await {
+        let read_state = match persistence::read().await {
             Ok(state) => state,
             Err(e) => {
-                eprintln!("Error reading data from disk, falling back to default. {}", e);
+                eprintln!(
+                    "Error reading data from disk, falling back to default. {}",
+                    e
+                );
                 DbData::default()
             }
         };
@@ -84,7 +84,9 @@ impl DbmsState {
         for (entry_tn, entry) in wal_entries {
             if entry_tn > transaction_number {
                 eprintln!("Replaying transaction {}", entry_tn);
-                execute_replay_query(entry, &mut state, &mut Vec::<u8>::new()).await.unwrap();
+                execute_replay_query(entry, &mut state, &mut Vec::<u8>::new())
+                    .await
+                    .unwrap();
             }
         }
 
@@ -125,7 +127,12 @@ fn resource_manager(mut requests: RequestReceiver, data: DbData) {
 
                 tables.sort_by(|(_, name_a, _), (_, name_b, _)| name_a.cmp(name_b));
 
-                response_ch.send(Response::AcquiredResources(Resources::new(type_map, RW::Read, tables)))
+                response_ch
+                    .send(Response::AcquiredResources(Resources::new(
+                        type_map,
+                        RW::Read,
+                        tables,
+                    )))
                     .unwrap_or_else(|_| eprintln!("global::manager: response channel closed."));
             }
             Request::Acquire(Acquire {

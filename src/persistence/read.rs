@@ -1,24 +1,19 @@
-use std::io;
-use tokio::io::AsyncReadExt;
-use tokio::stream::StreamExt;
-use tokio::fs::{self, File, OpenOptions, read_to_string, create_dir, read_dir};
-use std::collections::HashMap;
-use std::sync::Arc;
-use tokio::sync::RwLock;
+use crate::persistence::TransactionNumber;
 use crate::table::Table;
 use crate::types::TypeMap;
+use std::collections::HashMap;
+use std::io;
 use std::path::PathBuf;
-use crate::wal::TransactionNumber;
+use std::sync::Arc;
+use tokio::fs::{self, read_dir, read_to_string};
+use tokio::stream::StreamExt;
+use tokio::sync::RwLock;
 
-use super::{
-    DATA_DIR_NAME,
-    TABLES_DIR_NAME,
-    CURRENT_TRANSACTION_FILE_NAME,
-    TYPE_MAP_FILE_NAME,
-};
+use super::{CURRENT_TRANSACTION_FILE_NAME, DATA_DIR_NAME, TABLES_DIR_NAME, TYPE_MAP_FILE_NAME};
 
-
+/// All state data associated with the database
 pub struct DbData {
+    /// The transaction_number associated with the state
     pub transaction_number: TransactionNumber,
     pub tables: HashMap<String, Arc<RwLock<Table>>>,
     pub type_map: Arc<RwLock<TypeMap>>,
@@ -59,14 +54,17 @@ pub async fn read() -> io::Result<DbData> {
 }
 
 pub async fn get_current_transaction_number() -> io::Result<TransactionNumber> {
-    let cur_transaction_file_path = PathBuf::from(DATA_DIR_NAME).join(CURRENT_TRANSACTION_FILE_NAME);
-    Ok(read_to_string(cur_transaction_file_path).await?.parse().expect("Parsing transaction number file failed"))
+    let cur_transaction_file_path =
+        PathBuf::from(DATA_DIR_NAME).join(CURRENT_TRANSACTION_FILE_NAME);
+    Ok(read_to_string(cur_transaction_file_path)
+        .await?
+        .parse()
+        .expect("Parsing transaction number file failed"))
 }
 
 pub fn current_snapshot_dir(tn: TransactionNumber) -> PathBuf {
-    PathBuf::from(DATA_DIR_NAME).join(tn.to_string()) 
+    PathBuf::from(DATA_DIR_NAME).join(tn.to_string())
 }
-
 
 pub async fn read_table(path: PathBuf) -> io::Result<Table> {
     let binary = fs::read(path).await?;

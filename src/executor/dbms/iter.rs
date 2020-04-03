@@ -85,7 +85,6 @@ impl<'a> Rows<'a> {
 #[derive(Clone)]
 pub struct RowIter<'a> {
     // FIXME: Avoid using Arc:s
-
     /// The actual data cells iterated over
     pub bindings: Arc<[CellRef<'a>]>,
 

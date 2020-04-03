@@ -1,6 +1,6 @@
 use crate::pattern::Pattern;
 use crate::types::Value;
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize, Deserialize)]
 pub enum Expr {
