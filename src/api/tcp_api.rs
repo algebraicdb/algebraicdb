@@ -1,13 +1,18 @@
+use crate::api::config::DbmsConfig;
 use crate::client::client;
 use crate::client::State;
 use std::error::Error;
 use tokio::net::TcpListener;
 
 /// Start an instance of the dbms which binds itself to a tcp socket
-pub async fn create_tcp_server(address: &str) -> Result<!, Box<dyn Error>> {
-    let state = State::new().await;
+pub async fn create_tcp_server(
+    address: &str,
+    port: u16,
+    dbms_config: DbmsConfig,
+) -> Result<!, Box<dyn Error>> {
+    let state = State::new(dbms_config).await;
 
-    let mut listener = TcpListener::bind(address).await?;
+    let mut listener = TcpListener::bind((address, port)).await?;
 
     loop {
         match listener.accept().await {

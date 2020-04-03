@@ -1,5 +1,4 @@
 /target
 **/*.rs.bk
-wal
-data_tmp
+
 data

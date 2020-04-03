@@ -1,7 +1,8 @@
 use super::types::*;
 use super::*;
+use crate::api::config::DbmsConfig;
 use crate::executor::execute_replay_query;
-use crate::persistence::{self, spawn_snapshotter, DbData, WriteAheadLog};
+use crate::persistence::{load_db_data, spawn_snapshotter, DbData, WriteAheadLog};
 use crate::table::Table;
 use async_trait::async_trait;
 use futures::executor::block_on;
@@ -57,42 +58,52 @@ impl DbState<Table> for DbmsState {
 }
 
 impl DbmsState {
-    pub async fn new() -> Self {
-        let (wal, wal_entries) = WriteAheadLog::new().await;
-        //let transaction_number: u64 = wal_entries.last().map(|(n, _)| *n).unwrap_or(0);
+    pub async fn new(config: DbmsConfig) -> Self {
+        if config.no_data_dir {
+            unimplemented!("no_data_dir")
+        } else {
+            let (wal, wal_entries) = WriteAheadLog::new(&config.data_dir).await;
 
-        let read_state = match persistence::read().await {
-            Ok(state) => state,
-            Err(e) => {
-                eprintln!(
-                    "Error reading data from disk, falling back to default. {}",
-                    e
-                );
-                DbData::default()
+            let db_data = match load_db_data(&config.data_dir).await {
+                Ok(state) => state,
+                Err(e) => {
+                    eprintln!(
+                        "Error reading data from disk, falling back to default. {}",
+                        e
+                    );
+                    DbData::default()
+                }
+            };
+
+            let transaction_number = db_data.transaction_number;
+
+            let (requests_in, requests_out) = mpsc::unbounded_channel();
+
+            std::thread::spawn(move || resource_manager(requests_out, db_data));
+            let mut state = Self {
+                channel: requests_in,
+                wal,
+            };
+
+            // TODO: This can probably be optimized
+            for (entry_tn, entry) in wal_entries {
+                if entry_tn > transaction_number {
+                    eprintln!("Replaying transaction {}", entry_tn);
+                    execute_replay_query(entry, &mut state, &mut Vec::<u8>::new())
+                        .await
+                        .unwrap();
+                }
             }
-        };
-        let transaction_number = read_state.transaction_number;
 
-        let (requests_in, requests_out) = mpsc::unbounded_channel();
-        std::thread::spawn(move || resource_manager(requests_out, read_state));
+            spawn_snapshotter(
+                state.clone(),
+                config.data_dir,
+                config.disk_flush_timing,
+                transaction_number,
+            );
 
-        let mut state = Self {
-            channel: requests_in,
-            wal,
-        };
-        // TODO: This can probably be optimized
-        for (entry_tn, entry) in wal_entries {
-            if entry_tn > transaction_number {
-                eprintln!("Replaying transaction {}", entry_tn);
-                execute_replay_query(entry, &mut state, &mut Vec::<u8>::new())
-                    .await
-                    .unwrap();
-            }
+            state
         }
-
-        spawn_snapshotter(state.clone(), transaction_number);
-
-        state
     }
 
     pub fn wal(&mut self) -> &mut WriteAheadLog {

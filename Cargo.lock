@@ -38,6 +38,7 @@ dependencies = [
  "seahash",
  "serde",
  "smallvec",
+ "structopt 0.3.12",
  "tokio",
  "tokio-util",
 ]

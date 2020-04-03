@@ -2,6 +2,7 @@ use crate::ast::Stmt;
 use bincode;
 use serde::{Deserialize, Serialize};
 use std::io;
+use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
 use tokio::fs::{File, OpenOptions};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
@@ -47,10 +48,11 @@ struct EntryEnd {
 }
 
 impl WriteAheadLog {
-    pub async fn new() -> (Self, Vec<(TransactionNumber, Stmt)>) {
+    pub async fn new(data_dir: &PathBuf) -> (Self, Vec<(TransactionNumber, Stmt)>) {
         let (requests_in, requests_out) = mpsc::channel(256);
 
-        let (entries, file) = load_wal().await.expect("Loading WAL failed");
+        let wal_path = data_dir.join(WAL_NAME);
+        let (entries, file) = load_wal(&wal_path).await.expect("Loading WAL failed");
 
         let transaction_number = entries.last().map(|(n, _)| *n).unwrap_or(0);
 
@@ -89,12 +91,12 @@ fn checksum(data: &[u8]) -> u64 {
     seahash::hash(data)
 }
 
-pub async fn load_wal() -> io::Result<(Vec<(TransactionNumber, Stmt)>, File)> {
+pub async fn load_wal(path: &PathBuf) -> io::Result<(Vec<(TransactionNumber, Stmt)>, File)> {
     let mut file: File = OpenOptions::new()
         .write(true)
         .read(true)
         .create(true)
-        .open(WAL_NAME)
+        .open(path)
         .await?;
 
     let size_of_entry_begin = bincode::serialized_size(&EntryBegin::default()).unwrap() as usize;

@@ -11,12 +11,15 @@ use tokio::fs::{create_dir, rename, OpenOptions};
 use tokio::io::AsyncWriteExt;
 
 use super::{
-    TransactionNumber, CURRENT_TRANSACTION_FILE_NAME, DATA_DIR_NAME, TABLES_DIR_NAME,
-    TMP_TRANSACTION_FILE_NAME, TRANSACTION_NUMBER, TYPE_MAP_FILE_NAME,
+    TransactionNumber, CURRENT_TRANSACTION_FILE_NAME, TABLES_DIR_NAME, TMP_TRANSACTION_FILE_NAME,
+    TRANSACTION_NUMBER, TYPE_MAP_FILE_NAME,
 };
 
 /// Write the current database state to a temporary folder, and then atomically replace the active data folder
-pub(super) async fn snapshot(dbms: &mut DbmsState) -> io::Result<TransactionNumber> {
+pub(super) async fn snapshot(
+    data_dir: &PathBuf,
+    dbms: &mut DbmsState,
+) -> io::Result<TransactionNumber> {
     eprintln!("Snapshot starting...");
 
     // Acquire and lock all tables
@@ -27,7 +30,7 @@ pub(super) async fn snapshot(dbms: &mut DbmsState) -> io::Result<TransactionNumb
     let transaction_number = TRANSACTION_NUMBER.load(Ordering::Relaxed);
     let transaction_number_str = transaction_number.to_string();
 
-    let transaction_folder = PathBuf::from(DATA_DIR_NAME).join(&transaction_number_str);
+    let transaction_folder = data_dir.join(&transaction_number_str);
 
     // TODO: figure out if we should remove this
     //remove_dir_all(&transaction_folder).await?;
@@ -51,9 +54,8 @@ pub(super) async fn snapshot(dbms: &mut DbmsState) -> io::Result<TransactionNumb
 
     snapshot_type_map(&transaction_folder, resources.type_map).await?;
 
-    let tmp_transaction_file_path = PathBuf::from(DATA_DIR_NAME).join(TMP_TRANSACTION_FILE_NAME);
-    let cur_transaction_file_path =
-        PathBuf::from(DATA_DIR_NAME).join(CURRENT_TRANSACTION_FILE_NAME);
+    let tmp_transaction_file_path = data_dir.join(TMP_TRANSACTION_FILE_NAME);
+    let cur_transaction_file_path = data_dir.join(CURRENT_TRANSACTION_FILE_NAME);
 
     flush_to_file(
         &tmp_transaction_file_path,

@@ -9,7 +9,7 @@ use tokio::fs::{self, read_dir, read_to_string};
 use tokio::stream::StreamExt;
 use tokio::sync::RwLock;
 
-use super::{CURRENT_TRANSACTION_FILE_NAME, DATA_DIR_NAME, TABLES_DIR_NAME, TYPE_MAP_FILE_NAME};
+use super::{CURRENT_TRANSACTION_FILE_NAME, TABLES_DIR_NAME, TYPE_MAP_FILE_NAME};
 
 /// All state data associated with the database
 pub struct DbData {
@@ -29,9 +29,9 @@ impl Default for DbData {
     }
 }
 
-pub async fn read() -> io::Result<DbData> {
-    let transaction_number = get_current_transaction_number().await?;
-    let snapshot_dir = current_snapshot_dir(transaction_number);
+pub async fn load_db_data(data_dir: &PathBuf) -> io::Result<DbData> {
+    let transaction_number = get_current_transaction_number(data_dir).await?;
+    let snapshot_dir = data_dir.join(transaction_number.to_string());
     let tables_dir_path = snapshot_dir.join(TABLES_DIR_NAME);
     let mut tables_dir = read_dir(tables_dir_path).await.unwrap();
 
@@ -53,17 +53,12 @@ pub async fn read() -> io::Result<DbData> {
     })
 }
 
-pub async fn get_current_transaction_number() -> io::Result<TransactionNumber> {
-    let cur_transaction_file_path =
-        PathBuf::from(DATA_DIR_NAME).join(CURRENT_TRANSACTION_FILE_NAME);
+pub async fn get_current_transaction_number(data_dir: &PathBuf) -> io::Result<TransactionNumber> {
+    let cur_transaction_file_path = data_dir.join(CURRENT_TRANSACTION_FILE_NAME);
     Ok(read_to_string(cur_transaction_file_path)
         .await?
         .parse()
         .expect("Parsing transaction number file failed"))
-}
-
-pub fn current_snapshot_dir(tn: TransactionNumber) -> PathBuf {
-    PathBuf::from(DATA_DIR_NAME).join(tn.to_string())
 }
 
 pub async fn read_table(path: PathBuf) -> io::Result<Table> {

@@ -16,6 +16,9 @@ mod pre_typechecker;
 mod table;
 mod typechecker;
 mod types;
+mod util;
 
+pub use api::config::DbmsConfig;
 pub use api::custom::create_with_writers;
 pub use api::tcp_api::create_tcp_server;
+pub use util::Timing;
