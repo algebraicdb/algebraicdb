@@ -5,17 +5,17 @@
 #![allow(dead_code)]
 
 mod api;
-mod ast;
+pub mod ast;
 mod client;
-mod executor;
-mod grammar;
-mod local;
+pub mod executor;
+pub mod grammar;
+pub mod local;
 mod pattern;
 mod persistence;
 mod pre_typechecker;
-mod table;
+pub mod table;
 mod typechecker;
-mod types;
+pub mod types;
 mod util;
 
 pub use api::config::DbmsConfig;

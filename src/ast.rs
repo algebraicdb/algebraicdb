@@ -2,52 +2,64 @@ use crate::pattern::Pattern;
 use crate::types::Value;
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Serialize, Deserialize)]
-pub enum Expr {
-    Ident(String),
-    Value(Value),
-    Equals(Box<Expr>, Box<Expr>),
-    NotEquals(Box<Expr>, Box<Expr>),
-    LessEquals(Box<Expr>, Box<Expr>),
-    LessThan(Box<Expr>, Box<Expr>),
-    GreaterThan(Box<Expr>, Box<Expr>),
-    GreaterEquals(Box<Expr>, Box<Expr>),
-    And(Box<Expr>, Box<Expr>),
-    Or(Box<Expr>, Box<Expr>),
+#[derive(Debug, Deserialize, Serialize)]
+pub enum Expr<'a> {
+    Ident(&'a str),
+    Value(Value<'a>),
+    Equals(Box<Expr<'a>>, Box<Expr<'a>>),
+    NotEquals(Box<Expr<'a>>, Box<Expr<'a>>),
+    LessEquals(Box<Expr<'a>>, Box<Expr<'a>>),
+    LessThan(Box<Expr<'a>>, Box<Expr<'a>>),
+    GreaterThan(Box<Expr<'a>>, Box<Expr<'a>>),
+    GreaterEquals(Box<Expr<'a>>, Box<Expr<'a>>),
+    And(Box<Expr<'a>>, Box<Expr<'a>>),
+    Or(Box<Expr<'a>>, Box<Expr<'a>>),
 }
 
-#[derive(Debug, Serialize, Deserialize)]
-pub struct Ass {
-    pub col: String,
-    pub expr: Expr,
+#[derive(Debug, Deserialize, Serialize)]
+pub struct Ass<'a> {
+    pub col: &'a str,
+
+    #[serde(borrow)]
+    pub expr: Expr<'a>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
-pub struct Select {
-    pub items: Vec<Expr>,
-    pub from: Option<SelectFrom>,
-    pub where_clause: Option<WhereClause>,
+#[derive(Debug, Deserialize, Serialize)]
+pub struct Select<'a> {
+    #[serde(borrow)]
+    pub items: Vec<Expr<'a>>,
+
+    #[serde(borrow)]
+    pub from: Option<SelectFrom<'a>>,
+
+    #[serde(borrow)]
+    pub where_clause: Option<WhereClause<'a>>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
-pub enum WhereItem {
-    Expr(Expr),
-    Pattern(String, Pattern),
+#[derive(Debug, Deserialize, Serialize)]
+pub enum WhereItem<'a> {
+    Expr(Expr<'a>),
+    Pattern(&'a str, Pattern<'a>),
 }
 
-#[derive(Debug, Serialize, Deserialize)]
-pub enum SelectFrom {
-    Table(String),
-    Select(Box<Select>),
-    Join(Box<Join>),
+#[derive(Debug, Deserialize, Serialize)]
+pub enum SelectFrom<'a> {
+    Table(&'a str),
+    Select(Box<Select<'a>>),
+    Join(Box<Join<'a>>),
 }
 
-#[derive(Debug, Serialize, Deserialize)]
-pub struct Join {
-    pub table_a: SelectFrom,
-    pub table_b: SelectFrom,
+#[derive(Debug, Deserialize, Serialize)]
+pub struct Join<'a> {
+    #[serde(borrow)]
+    pub table_a: SelectFrom<'a>,
+
+    #[serde(borrow)]
+    pub table_b: SelectFrom<'a>,
     pub join_type: JoinType,
-    pub on_clause: Option<Expr>,
+
+    #[serde(borrow)]
+    pub on_clause: Option<Expr<'a>>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, Copy)]
@@ -58,63 +70,75 @@ pub enum JoinType {
     FullOuter,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
-pub struct WhereClause {
-    pub items: Vec<WhereItem>,
+#[derive(Debug, Deserialize, Serialize)]
+pub struct WhereClause<'a> {
+    #[serde(borrow)]
+    pub items: Vec<WhereItem<'a>>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
-pub struct Delete {
-    pub table: String,
-    pub where_clause: Option<WhereClause>,
+#[derive(Debug, Deserialize, Serialize)]
+pub struct Delete<'a> {
+    pub table: &'a str,
+
+    #[serde(borrow)]
+    pub where_clause: Option<WhereClause<'a>>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
-pub struct Drop {
-    pub table: String,
+#[derive(Debug, Deserialize, Serialize)]
+pub struct Drop<'a> {
+    pub table: &'a str,
     //  pub drop_clause: Option<DropClause>, // should be cascade or restrict
 }
 
-#[derive(Debug, Serialize, Deserialize)]
-pub struct Insert {
-    pub table: String,
-    pub columns: Vec<String>,
-    pub from: InsertFrom,
+#[derive(Debug, Deserialize, Serialize)]
+pub struct Insert<'a> {
+    pub table: &'a str,
+    pub columns: Vec<&'a str>,
+
+    #[serde(borrow)]
+    pub from: InsertFrom<'a>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
-pub enum InsertFrom {
-    Values(Vec<Vec<Expr>>),
-    Select(Select),
+#[derive(Debug, Deserialize, Serialize)]
+pub enum InsertFrom<'a> {
+    #[serde(borrow)]
+    Values(Vec<Vec<Expr<'a>>>),
+    Select(Select<'a>),
 }
 
-#[derive(Debug, Serialize, Deserialize)]
-pub struct CreateTable {
-    pub table: String,
-    pub columns: Vec<(String, String)>,
+#[derive(Debug, Deserialize, Serialize)]
+pub struct CreateTable<'a> {
+    pub table: &'a str,
+    pub columns: Vec<(&'a str, &'a str)>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
-pub enum Stmt {
-    Select(Select),
-    Insert(Insert),
-    Delete(Delete),
-    Update(Update),
-    CreateTable(CreateTable),
-    CreateType(CreateType),
-    Drop(Drop),
+#[derive(Debug, Deserialize, Serialize)]
+pub enum Stmt<'a> {
+    #[serde(borrow)]
+    Select(Select<'a>),
+    Insert(Insert<'a>),
+    Delete(Delete<'a>),
+    Update(Update<'a>),
+    CreateTable(CreateTable<'a>),
+    CreateType(CreateType<'a>),
+    Drop(Drop<'a>),
 }
 
-#[derive(Debug, Serialize, Deserialize)]
-pub struct Update {
-    pub table: String,
-    pub ass: Vec<Ass>,
-    pub where_clause: Option<WhereClause>,
+#[derive(Debug, Deserialize, Serialize)]
+pub struct Update<'a> {
+    #[serde(borrow)]
+    pub table: &'a str,
+
+    #[serde(borrow)]
+    pub ass: Vec<Ass<'a>>,
+
+    #[serde(borrow)]
+    pub where_clause: Option<WhereClause<'a>>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
-pub enum CreateType {
-    Variant(String, Vec<(String, Vec<String>)>),
+#[derive(Debug, Deserialize, Serialize)]
+pub enum CreateType<'a> {
+    Variant(&'a str, Vec<(&'a str, Vec<&'a str>)>),
 }
 
 #[test]
@@ -158,6 +182,11 @@ fn ast_grammar() {
             Var1(newCoolType, alsoCoolType),
         };"#,
         r#"DROP TABLE bananas ;"#,
+        r#"CREATE TYPE newCoolType AS VARIANT {
+            Var1(),
+            -- Var1(Bool), yeah, this is a comment line whatcha gonna do bout it
+            Var1(newCoolType, alsoCoolType),
+        };"#,
     ];
 
     let invalid_examples = vec![
@@ -177,6 +206,10 @@ fn ast_grammar() {
         r#"DELETE FROM now, with, commas ;"#,
         r#"UPDATE SET xxsxsxsxsxsxsxs=2 ;"#,
         r#"DROP ;"#,
+        r#"INSERT INTO empty 
+        -- (a)
+        -- VALUES (2)
+        ;"#,
     ];
 
     for ex in valid_examples {

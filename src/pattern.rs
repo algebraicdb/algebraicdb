@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize, Deserialize)]
-pub enum Pattern {
+pub enum Pattern<'a> {
     /// Char literal
     Char(char),
 
@@ -16,16 +16,16 @@ pub enum Pattern {
 
     /// Actual pattern matching
     Variant {
-        namespace: Option<String>,
-        name: String,
-        sub_patterns: Vec<Pattern>,
+        namespace: Option<&'a str>,
+        name: &'a str,
+        sub_patterns: Vec<Pattern<'a>>,
     },
 
     /// _
     Ignore,
 
     /// Binding a value to a new identifier
-    Binding(String),
+    Binding(&'a str),
 }
 
 #[test]

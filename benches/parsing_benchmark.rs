@@ -1,0 +1,101 @@
+use algebraicdb::grammar::StmtParser;
+use criterion::{black_box, criterion_group, criterion_main, Criterion};
+
+fn lalrpop_parse_benchmark(c: &mut Criterion) {
+    let parser = StmtParser::new();
+    c.bench_function("Parse small example", |b| {
+        b.iter(|| parser.parse(black_box(SMALL_EXAMPLE)))
+    });
+
+    c.bench_function("Parse large example", |b| {
+        b.iter(|| parser.parse(black_box(LARGE_EXAMPLE)))
+    });
+}
+
+criterion_group!(benches, lalrpop_parse_benchmark);
+criterion_main!(benches);
+
+
+/**** EXAMPLE QUERIES ****/
+const SMALL_EXAMPLE: &str = r#"SELECT col FROM t1 LEFT JOIN t2;"#;
+
+const LARGE_EXAMPLE: &str = r#"
+INSERT INTO this_is_a_big_table_right_here_oh_boy_here_we_go_im_going_ghost
+
+SELECT i_want_to_have_my_own_column_i_want_to_have_it_now
+
+           FROM another_big_boy_table_which_is_really_sizeable_but_we_like_it_anyway
+LEFT OUTER JOIN another_big_boy_table_which_is_really_sizeable_but_we_like_it_anyway ON some_column = some_other_column
+LEFT OUTER JOIN another_big_boy_table_which_is_really_sizeable_but_we_like_it_anyway ON some_column = some_other_column
+LEFT OUTER JOIN another_big_boy_table_which_is_really_sizeable_but_we_like_it_anyway ON some_column = some_other_column
+LEFT OUTER JOIN another_big_boy_table_which_is_really_sizeable_but_we_like_it_anyway ON some_column = some_other_column
+LEFT OUTER JOIN another_big_boy_table_which_is_really_sizeable_but_we_like_it_anyway ON some_column = some_other_column
+LEFT OUTER JOIN another_big_boy_table_which_is_really_sizeable_but_we_like_it_anyway ON some_column = some_other_column
+LEFT OUTER JOIN another_big_boy_table_which_is_really_sizeable_but_we_like_it_anyway ON some_column = some_other_column
+LEFT OUTER JOIN another_big_boy_table_which_is_really_sizeable_but_we_like_it_anyway ON some_column = some_other_column
+LEFT OUTER JOIN another_big_boy_table_which_is_really_sizeable_but_we_like_it_anyway ON some_column = some_other_column
+LEFT OUTER JOIN another_big_boy_table_which_is_really_sizeable_but_we_like_it_anyway ON some_column = some_other_column
+LEFT OUTER JOIN another_big_boy_table_which_is_really_sizeable_but_we_like_it_anyway ON some_column = some_other_column
+LEFT OUTER JOIN another_big_boy_table_which_is_really_sizeable_but_we_like_it_anyway ON some_column = some_other_column
+LEFT OUTER JOIN another_big_boy_table_which_is_really_sizeable_but_we_like_it_anyway ON some_column = some_other_column
+LEFT OUTER JOIN another_big_boy_table_which_is_really_sizeable_but_we_like_it_anyway ON some_column = some_other_column
+LEFT OUTER JOIN another_big_boy_table_which_is_really_sizeable_but_we_like_it_anyway ON some_column = some_other_column
+LEFT OUTER JOIN another_big_boy_table_which_is_really_sizeable_but_we_like_it_anyway ON some_column = some_other_column
+LEFT OUTER JOIN another_big_boy_table_which_is_really_sizeable_but_we_like_it_anyway ON some_column = some_other_column
+LEFT OUTER JOIN another_big_boy_table_which_is_really_sizeable_but_we_like_it_anyway ON some_column = some_other_column
+LEFT OUTER JOIN another_big_boy_table_which_is_really_sizeable_but_we_like_it_anyway ON some_column = some_other_column
+LEFT OUTER JOIN another_big_boy_table_which_is_really_sizeable_but_we_like_it_anyway ON some_column = some_other_column
+LEFT OUTER JOIN another_big_boy_table_which_is_really_sizeable_but_we_like_it_anyway ON some_column = some_other_column
+LEFT OUTER JOIN another_big_boy_table_which_is_really_sizeable_but_we_like_it_anyway ON some_column = some_other_column
+LEFT OUTER JOIN another_big_boy_table_which_is_really_sizeable_but_we_like_it_anyway ON some_column = some_other_column
+LEFT OUTER JOIN another_big_boy_table_which_is_really_sizeable_but_we_like_it_anyway ON some_column = some_other_column
+LEFT OUTER JOIN another_big_boy_table_which_is_really_sizeable_but_we_like_it_anyway ON some_column = some_other_column
+LEFT OUTER JOIN another_big_boy_table_which_is_really_sizeable_but_we_like_it_anyway ON some_column = some_other_column
+LEFT OUTER JOIN another_big_boy_table_which_is_really_sizeable_but_we_like_it_anyway ON some_column = some_other_column
+LEFT OUTER JOIN another_big_boy_table_which_is_really_sizeable_but_we_like_it_anyway ON some_column = some_other_column
+LEFT OUTER JOIN another_big_boy_table_which_is_really_sizeable_but_we_like_it_anyway ON some_column = some_other_column
+LEFT OUTER JOIN another_big_boy_table_which_is_really_sizeable_but_we_like_it_anyway ON some_column = some_other_column
+LEFT OUTER JOIN another_big_boy_table_which_is_really_sizeable_but_we_like_it_anyway ON some_column = some_other_column
+LEFT OUTER JOIN another_big_boy_table_which_is_really_sizeable_but_we_like_it_anyway ON some_column = some_other_column
+LEFT OUTER JOIN another_big_boy_table_which_is_really_sizeable_but_we_like_it_anyway ON some_column = some_other_column
+LEFT OUTER JOIN another_big_boy_table_which_is_really_sizeable_but_we_like_it_anyway ON some_column = some_other_column
+LEFT OUTER JOIN another_big_boy_table_which_is_really_sizeable_but_we_like_it_anyway ON some_column = some_other_column
+LEFT OUTER JOIN another_big_boy_table_which_is_really_sizeable_but_we_like_it_anyway ON some_column = some_other_column
+LEFT OUTER JOIN another_big_boy_table_which_is_really_sizeable_but_we_like_it_anyway ON some_column = some_other_column
+LEFT OUTER JOIN another_big_boy_table_which_is_really_sizeable_but_we_like_it_anyway ON some_column = some_other_column
+LEFT OUTER JOIN another_big_boy_table_which_is_really_sizeable_but_we_like_it_anyway ON some_column = some_other_column
+LEFT OUTER JOIN another_big_boy_table_which_is_really_sizeable_but_we_like_it_anyway ON some_column = some_other_column
+LEFT OUTER JOIN another_big_boy_table_which_is_really_sizeable_but_we_like_it_anyway ON some_column = some_other_column
+LEFT OUTER JOIN another_big_boy_table_which_is_really_sizeable_but_we_like_it_anyway ON some_column = some_other_column
+LEFT OUTER JOIN another_big_boy_table_which_is_really_sizeable_but_we_like_it_anyway ON some_column = some_other_column
+LEFT OUTER JOIN another_big_boy_table_which_is_really_sizeable_but_we_like_it_anyway ON some_column = some_other_column
+LEFT OUTER JOIN another_big_boy_table_which_is_really_sizeable_but_we_like_it_anyway ON some_column = some_other_column
+LEFT OUTER JOIN another_big_boy_table_which_is_really_sizeable_but_we_like_it_anyway ON some_column = some_other_column
+LEFT OUTER JOIN another_big_boy_table_which_is_really_sizeable_but_we_like_it_anyway ON some_column = some_other_column
+LEFT OUTER JOIN another_big_boy_table_which_is_really_sizeable_but_we_like_it_anyway ON some_column = some_other_column
+LEFT OUTER JOIN another_big_boy_table_which_is_really_sizeable_but_we_like_it_anyway ON some_column = some_other_column
+LEFT OUTER JOIN another_big_boy_table_which_is_really_sizeable_but_we_like_it_anyway ON some_column = some_other_column
+LEFT OUTER JOIN another_big_boy_table_which_is_really_sizeable_but_we_like_it_anyway ON some_column = some_other_column
+LEFT OUTER JOIN another_big_boy_table_which_is_really_sizeable_but_we_like_it_anyway ON some_column = some_other_column
+LEFT OUTER JOIN another_big_boy_table_which_is_really_sizeable_but_we_like_it_anyway ON some_column = some_other_column
+LEFT OUTER JOIN another_big_boy_table_which_is_really_sizeable_but_we_like_it_anyway ON some_column = some_other_column
+LEFT OUTER JOIN another_big_boy_table_which_is_really_sizeable_but_we_like_it_anyway ON some_column = some_other_column
+LEFT OUTER JOIN another_big_boy_table_which_is_really_sizeable_but_we_like_it_anyway ON some_column = some_other_column
+LEFT OUTER JOIN another_big_boy_table_which_is_really_sizeable_but_we_like_it_anyway ON some_column = some_other_column
+LEFT OUTER JOIN another_big_boy_table_which_is_really_sizeable_but_we_like_it_anyway ON some_column = some_other_column
+LEFT OUTER JOIN another_big_boy_table_which_is_really_sizeable_but_we_like_it_anyway ON some_column = some_other_column
+LEFT OUTER JOIN another_big_boy_table_which_is_really_sizeable_but_we_like_it_anyway ON some_column = some_other_column
+LEFT OUTER JOIN another_big_boy_table_which_is_really_sizeable_but_we_like_it_anyway ON some_column = some_other_column
+LEFT OUTER JOIN another_big_boy_table_which_is_really_sizeable_but_we_like_it_anyway ON some_column = some_other_column
+LEFT OUTER JOIN another_big_boy_table_which_is_really_sizeable_but_we_like_it_anyway ON some_column = some_other_column
+LEFT OUTER JOIN another_big_boy_table_which_is_really_sizeable_but_we_like_it_anyway ON some_column = some_other_column
+LEFT OUTER JOIN another_big_boy_table_which_is_really_sizeable_but_we_like_it_anyway ON some_column = some_other_column
+LEFT OUTER JOIN another_big_boy_table_which_is_really_sizeable_but_we_like_it_anyway ON some_column = some_other_column
+LEFT OUTER JOIN another_big_boy_table_which_is_really_sizeable_but_we_like_it_anyway ON some_column = some_other_column
+LEFT OUTER JOIN another_big_boy_table_which_is_really_sizeable_but_we_like_it_anyway ON some_column = some_other_column
+LEFT OUTER JOIN another_big_boy_table_which_is_really_sizeable_but_we_like_it_anyway ON some_column = some_other_column
+LEFT OUTER JOIN another_big_boy_table_which_is_really_sizeable_but_we_like_it_anyway ON some_column = some_other_column
+LEFT OUTER JOIN another_big_boy_table_which_is_really_sizeable_but_we_like_it_anyway ON some_column = some_other_column
+LEFT OUTER JOIN another_big_boy_table_which_is_really_sizeable_but_we_like_it_anyway ON some_column = some_other_column
+LEFT OUTER JOIN another_big_boy_table_which_is_really_sizeable_but_we_like_it_anyway ON some_column = some_other_column;
+"#;

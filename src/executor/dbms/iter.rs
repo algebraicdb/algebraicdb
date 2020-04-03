@@ -7,8 +7,8 @@ use std::cmp::Ordering;
 use std::sync::Arc;
 
 pub enum ModIter<'a> {
-    Select(&'a [Expr]),
-    Where(&'a [WhereItem]),
+    Select(&'a [Expr<'a>]),
+    Where(&'a [WhereItem<'a>]),
 }
 
 pub enum Rows<'a> {
@@ -214,10 +214,10 @@ impl<'a> RowIter<'a> {
         let mut bindings = vec![];
         'outer: for item in items {
             match item {
-                Expr::Ident(name) => {
-                    for binding in self.bindings.iter() {
+                &Expr::Ident(name) => {
+                    for &binding in self.bindings.iter() {
                         if binding.name == name {
-                            bindings.push(*binding);
+                            bindings.push(binding);
                             continue 'outer;
                         }
                     }
@@ -329,7 +329,7 @@ impl<'a> RowIter<'a> {
                 WhereItem::Expr(_) => {} // Ignore expressions for now
                 WhereItem::Pattern(name, pattern) => {
                     for cell_ref in self.bindings.iter() {
-                        if cell_ref.name == name {
+                        if cell_ref.name == *name {
                             let byte_index = cell_ref.offset;
                             let type_id = cell_ref.type_id;
                             let data = cell_ref.source;

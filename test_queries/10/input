@@ -1,0 +1,28 @@
+CREATE TYPE Option AS VARIANT {
+	Some(Integer),
+	None(),
+};
+
+CREATE TABLE t(a Integer);
+CREATE TABLE y(b Option);
+
+INSERT INTO t(a) VALUES (1), (2), (3);
+INSERT INTO y(b) VALUES (Some(3)), (Some(1)), (None()), (Some(4)), (None()), (Some(2));
+
+SELECT a, u FROM t INNER JOIN (SELECT u FROM y WHERE b: Some(u));
+
+SELECT a, u FROM t INNER JOIN (SELECT u FROM y WHERE b: Some(u)) ON a >  u;
+SELECT a, u FROM t INNER JOIN (SELECT u FROM y WHERE b: Some(u)) ON a >= u;
+SELECT a, u FROM t INNER JOIN (SELECT u FROM y WHERE b: Some(u)) ON a =  u;
+SELECT a, u FROM t INNER JOIN (SELECT u FROM y WHERE b: Some(u)) ON a <= u;
+SELECT a, u FROM t INNER JOIN (SELECT u FROM y WHERE b: Some(u)) ON a <  u;
+
+
+CREATE TABLE b1(a Bool);
+CREATE TABLE b2(b Bool);
+
+INSERT INTO b1(a) VALUES (true), (false), (true), (false);
+INSERT INTO b2(b) VALUES (true), (true), (false), (false);
+
+SELECT a, b FROM b1 INNER JOIN b2 ON a AND b;
+SELECT a, b FROM b1 INNER JOIN b2 ON a OR b;

@@ -53,8 +53,8 @@ pub(crate) async fn execute_query(
     execute_stmt(ast, s, resources, WriteToWal::Yes, w).await
 }
 
-pub(crate) async fn execute_replay_query(
-    ast: Stmt,
+pub(crate) async fn execute_replay_query<'a>(
+    ast: Stmt<'a>,
     s: &mut DbmsState,
     w: &mut (dyn AsyncWrite + Send + Unpin),
 ) -> Result<(), Box<dyn Error>> {
@@ -79,7 +79,7 @@ pub(crate) async fn execute_replay_query(
 }
 
 async fn execute_stmt(
-    ast: Stmt,
+    ast: Stmt<'_>,
     s: &mut DbmsState,
     resources: ResourcesGuard<'_, Table>,
     write_to_wal: WriteToWal,
@@ -171,8 +171,8 @@ fn full_table_scan<'a>(table: &'a Table, type_map: &'a TypeMap) -> RowIter<'a> {
     }
 }
 
-fn execute_select_from<'a>(
-    from: &'a SelectFrom,
+pub fn execute_select_from<'a>(
+    from: &'a SelectFrom<'a>,
     resources: &'a ResourcesGuard<'a, Table>,
 ) -> Rows<'a> {
     let type_map = &resources.type_map;
@@ -231,7 +231,10 @@ fn execute_select_from<'a>(
     }
 }
 
-fn execute_select<'a>(select: &'a Select, resources: &'a ResourcesGuard<'a, Table>) -> Rows<'a> {
+fn execute_select<'a>(
+    select: &'a Select<'a>,
+    resources: &'a ResourcesGuard<'a, Table>,
+) -> Rows<'a> {
     let type_map = &resources.type_map;
 
     let rows = match &select.from {
@@ -254,7 +257,7 @@ fn execute_select<'a>(select: &'a Select, resources: &'a ResourcesGuard<'a, Tabl
 }
 
 async fn execute_create_table(
-    create_table: CreateTable,
+    create_table: CreateTable<'_>,
     s: &DbmsState,
     resources: ResourcesGuard<'_, Table>,
     w: &mut (dyn AsyncWrite + Send + Unpin),
@@ -267,14 +270,14 @@ async fn execute_create_table(
                 .type_map
                 .get_id(&column_type)
                 .expect("Type does not exist");
-            (column_name, t_id)
+            (column_name.to_string(), t_id)
         })
         .collect();
 
     let schema = Schema::new(columns);
     let table = Table::new(schema, &resources.type_map);
 
-    match s.create_table(create_table.table, table).await {
+    match s.create_table(create_table.table.to_string(), table).await {
         Ok(()) => w.write_all(b"Table created\n").await?,
         Err(()) => w.write_all(b"Table already exists\n").await?,
     };
@@ -282,7 +285,7 @@ async fn execute_create_table(
 }
 
 async fn execute_create_type(
-    create_type: CreateType,
+    create_type: CreateType<'_>,
     mut resources: ResourcesGuard<'_, Table>,
     w: &mut (dyn AsyncWrite + Send + Unpin),
 ) -> Result<(), Box<dyn Error>> {
@@ -298,7 +301,7 @@ async fn execute_create_type(
                         .map(|type_name| types.get_id(type_name).unwrap())
                         .collect();
 
-                    (constructor, subtype_ids)
+                    (constructor.to_string(), subtype_ids)
                 })
                 .collect();
 
@@ -312,7 +315,7 @@ async fn execute_create_type(
 }
 
 async fn execute_insert(
-    insert: Insert,
+    insert: Insert<'_>,
     mut resources: ResourcesGuard<'_, Table>,
     w: &mut (dyn AsyncWrite + Send + Unpin),
 ) -> Result<(), Box<dyn Error>> {
@@ -356,13 +359,13 @@ async fn execute_insert(
     Ok(())
 }
 
-fn execute_expr<'a, I>(expr: &Expr, mut bs: I) -> Value
+fn execute_expr<'a, I>(expr: &Expr<'_>, mut bs: I) -> Value<'static>
 where
     I: Iterator<Item = (&'a str, Cell<'a, 'a>)> + Clone,
 {
-    fn cmp<'a, I, F>(e1: &Expr, e2: &Expr, bs: I, f: F) -> Value
+    fn cmp<'a, I, F>(e1: &Expr, e2: &Expr, bs: I, f: F) -> Value<'static>
     where
-        F: FnOnce(&Value, &Value) -> bool,
+        F: for<'l, 'r> FnOnce(&'l Value<'l>, &'r Value<'r>) -> bool,
         I: Iterator<Item = (&'a str, Cell<'a, 'a>)> + Clone,
     {
         let v1 = execute_expr(e1, bs.clone());
@@ -371,9 +374,9 @@ where
     }
 
     match expr {
-        Expr::Value(v) => v.clone(),
-        Expr::Equals(e1, e2) => cmp(e1, e2, bs, PartialEq::eq),
-        Expr::NotEquals(e1, e2) => cmp(e1, e2, bs, PartialEq::ne),
+        Expr::Value(v) => v.deep_clone(),
+        Expr::Equals(e1, e2) => cmp(e1, e2, bs, |v1, v2| v1 == v2),
+        Expr::NotEquals(e1, e2) => cmp(e1, e2, bs, |v1, v2| v1 != v2),
         Expr::LessEquals(e1, e2) => cmp(e1, e2, bs, |v1, v2| v1 <= v2),
         Expr::LessThan(e1, e2) => cmp(e1, e2, bs, |v1, v2| v1 < v2),
         Expr::GreaterThan(e1, e2) => cmp(e1, e2, bs, |v1, v2| v1 > v2),

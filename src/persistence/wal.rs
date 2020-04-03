@@ -48,7 +48,7 @@ struct EntryEnd {
 }
 
 impl WriteAheadLog {
-    pub async fn new(data_dir: &PathBuf) -> (Self, Vec<(TransactionNumber, Stmt)>) {
+    pub async fn new(data_dir: &PathBuf) -> (Self, Vec<(TransactionNumber, Vec<u8>)>) {
         let (requests_in, requests_out) = mpsc::channel(256);
 
         let wal_path = data_dir.join(WAL_NAME);
@@ -69,7 +69,7 @@ impl WriteAheadLog {
         (wal, entries)
     }
 
-    pub async fn write(&mut self, stmt: &Stmt) {
+    pub async fn write(&mut self, stmt: &Stmt<'_>) {
         let data = serialize_log_msg(stmt);
         let (tx, rx) = oneshot::channel();
         self.channel.send((data, tx)).await.expect("WAL crashed");
@@ -91,7 +91,7 @@ fn checksum(data: &[u8]) -> u64 {
     seahash::hash(data)
 }
 
-pub async fn load_wal(path: &PathBuf) -> io::Result<(Vec<(TransactionNumber, Stmt)>, File)> {
+pub async fn load_wal(path: &PathBuf) -> io::Result<(Vec<(TransactionNumber, Vec<u8>)>, File)> {
     let mut file: File = OpenOptions::new()
         .write(true)
         .read(true)
@@ -132,10 +132,7 @@ pub async fn load_wal(path: &PathBuf) -> io::Result<(Vec<(TransactionNumber, Stm
 
             data = &data[size_of_entry_begin..];
 
-            let query: Stmt = match bincode::deserialize(&data[..start.entry_size]) {
-                Ok(stmt) => stmt,
-                Err(_) => panic!("Corrupt WAL"),
-            };
+            let query = data[..start.entry_size].into();
             data = &data[start.entry_size..];
 
             let end: EntryEnd = match bincode::deserialize(&data[..size_of_entry_end]) {

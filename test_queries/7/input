@@ -1,3 +1,5 @@
+-- Test Char type
+
 CREATE TABLE chara (a Char);
 
 INSERT INTO chara (a) VALUES ('a');

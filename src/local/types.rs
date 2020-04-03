@@ -59,7 +59,7 @@ pub enum Resource<'a, T> {
 }
 
 impl<T> Resources<T> {
-    pub(super) fn new(
+    pub fn new(
         type_map: Arc<RwLock<TypeMap>>,
         type_map_perms: RW,
         tables: Vec<(RW, String, Arc<RwLock<T>>)>,

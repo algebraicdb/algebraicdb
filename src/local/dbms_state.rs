@@ -91,10 +91,11 @@ impl DbmsState {
             };
 
             // TODO: This can probably be optimized
-            for (entry_tn, entry) in wal_entries {
+            for (entry_tn, query_data) in wal_entries {
                 if entry_tn > transaction_number {
                     eprintln!("Replaying transaction {}", entry_tn);
-                    execute_replay_query(entry, &mut state, &mut Vec::<u8>::new())
+                    let query = bincode::deserialize(&query_data).unwrap();
+                    execute_replay_query(query, &mut state, &mut Vec::<u8>::new())
                         .await
                         .unwrap();
                 }
@@ -122,8 +123,6 @@ fn resource_manager(mut requests: RequestReceiver, data: DbData) {
 
     let mut tables = data.tables;
     let type_map = data.type_map;
-    //let mut tables: HashMap<String, Arc<RwLock<Table>>> = HashMap::new();
-    //let type_map: Arc<RwLock<TypeMap>> = Arc::new(RwLock::new(TypeMap::new()));
 
     loop {
         let (request, response_ch) = match block_on(requests.recv()) {

@@ -1,3 +1,5 @@
+-- Test creating a basic sum-type
+
 CREATE TYPE Color AS VARIANT {
 	RGB(Integer, Integer, Integer),
 	CMYK(Integer, Integer, Integer, Integer),
