@@ -1,4 +1,4 @@
-use algebraicdb::create_with_writers;
+use algebraicdb::{create_with_writers, DbmsConfig};
 use prettydiff::basic::DiffOp;
 use prettydiff::text::diff_lines;
 use std::io;
@@ -37,7 +37,8 @@ async fn run_example_query(input: String, expected_output: String) -> io::Result
     // Spawn a database
     tokio::spawn(async move {
         let (reader, writer) = db_stream.split();
-        create_with_writers(reader, writer).await.unwrap();
+        let config = DbmsConfig::testing_config();
+        create_with_writers(reader, writer, config).await.unwrap();
     });
 
     // Write query input

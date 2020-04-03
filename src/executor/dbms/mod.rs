@@ -85,16 +85,14 @@ async fn execute_stmt(
     write_to_wal: WriteToWal,
     w: &mut (dyn AsyncWrite + Send + Unpin),
 ) -> Result<(), Box<dyn Error>> {
-    if let WriteToWal::Yes = write_to_wal {
+    if let (WriteToWal::Yes, Some(wal)) = (write_to_wal, s.wal()) {
         match &ast {
             Stmt::CreateTable(_)
             | Stmt::CreateType(_)
             | Stmt::Delete(_)
             | Stmt::Update(_)
             | Stmt::Drop(_)
-            | Stmt::Insert(_) => {
-                s.wal().write(&ast).await;
-            }
+            | Stmt::Insert(_) => wal.write(&ast).await,
             Stmt::Select(_) => { /* We're only reading, so no logging required*/ }
         }
     }

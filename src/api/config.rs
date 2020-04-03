@@ -27,6 +27,18 @@ pub struct DbmsConfig {
     pub data_dir: PathBuf,
 }
 
+impl DbmsConfig {
+    /// A configuration suitable for unit/integration testing
+    ///
+    /// This config will not write anything to disk.
+    pub fn testing_config() -> Self {
+        Self {
+            no_data_dir: true,
+            ..Default::default()
+        }
+    }
+}
+
 impl Default for DbmsConfig {
     fn default() -> Self {
         Self {

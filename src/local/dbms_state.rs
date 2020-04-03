@@ -17,7 +17,7 @@ type RequestReceiver = mpsc::UnboundedReceiver<(Request<Table>, oneshot::Sender<
 #[derive(Clone)]
 pub struct DbmsState {
     channel: RequestSender,
-    wal: WriteAheadLog,
+    wal: Option<WriteAheadLog>,
 }
 
 impl DbmsState {
@@ -59,8 +59,14 @@ impl DbState<Table> for DbmsState {
 
 impl DbmsState {
     pub async fn new(config: DbmsConfig) -> Self {
+        let (requests_in, requests_out) = mpsc::unbounded_channel();
+
         if config.no_data_dir {
-            unimplemented!("no_data_dir")
+            std::thread::spawn(move || resource_manager(requests_out, DbData::default()));
+            Self {
+                channel: requests_in,
+                wal: None,
+            }
         } else {
             let (wal, wal_entries) = WriteAheadLog::new(&config.data_dir).await;
 
@@ -77,12 +83,11 @@ impl DbmsState {
 
             let transaction_number = db_data.transaction_number;
 
-            let (requests_in, requests_out) = mpsc::unbounded_channel();
-
             std::thread::spawn(move || resource_manager(requests_out, db_data));
+
             let mut state = Self {
                 channel: requests_in,
-                wal,
+                wal: Some(wal),
             };
 
             // TODO: This can probably be optimized
@@ -106,8 +111,8 @@ impl DbmsState {
         }
     }
 
-    pub fn wal(&mut self) -> &mut WriteAheadLog {
-        &mut self.wal
+    pub fn wal(&mut self) -> Option<&mut WriteAheadLog> {
+        self.wal.as_mut()
     }
 }
 
