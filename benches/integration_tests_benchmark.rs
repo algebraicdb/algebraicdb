@@ -1,4 +1,4 @@
-use algebraicdb::create_with_writers;
+use algebraicdb::{create_with_writers, DbmsConfig};
 use std::io;
 use std::net::Shutdown;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
@@ -56,7 +56,8 @@ async fn run_example_query(input: String) -> io::Result<Result<(), ()>> {
     // Spawn a database
     tokio::spawn(async move {
         let (reader, writer) = db_stream.split();
-        create_with_writers(reader, writer).await.unwrap();
+        let config = DbmsConfig::testing_config();
+        create_with_writers(reader, writer, config).await.unwrap();
     });
     our_stream.write_all(input.as_bytes()).await?;
     our_stream.shutdown(Shutdown::Write)?;

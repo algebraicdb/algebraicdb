@@ -1,7 +1,8 @@
 use crate::pattern::Pattern;
 use crate::types::Value;
+use serde::{Deserialize, Serialize};
 
-#[derive(Debug)]
+#[derive(Debug, Deserialize, Serialize)]
 pub enum Expr<'a> {
     Ident(&'a str),
     Value(Value<'a>),
@@ -15,41 +16,53 @@ pub enum Expr<'a> {
     Or(Box<Expr<'a>>, Box<Expr<'a>>),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct Ass<'a> {
     pub col: &'a str,
+
+    #[serde(borrow)]
     pub expr: Expr<'a>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct Select<'a> {
+    #[serde(borrow)]
     pub items: Vec<Expr<'a>>,
+
+    #[serde(borrow)]
     pub from: Option<SelectFrom<'a>>,
+
+    #[serde(borrow)]
     pub where_clause: Option<WhereClause<'a>>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Deserialize, Serialize)]
 pub enum WhereItem<'a> {
     Expr(Expr<'a>),
     Pattern(&'a str, Pattern<'a>),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Deserialize, Serialize)]
 pub enum SelectFrom<'a> {
     Table(&'a str),
     Select(Box<Select<'a>>),
     Join(Box<Join<'a>>),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct Join<'a> {
+    #[serde(borrow)]
     pub table_a: SelectFrom<'a>,
+
+    #[serde(borrow)]
     pub table_b: SelectFrom<'a>,
     pub join_type: JoinType,
+
+    #[serde(borrow)]
     pub on_clause: Option<Expr<'a>>,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Serialize, Deserialize, Clone, Copy)]
 pub enum JoinType {
     Inner,
     LeftOuter,
@@ -57,44 +70,51 @@ pub enum JoinType {
     FullOuter,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct WhereClause<'a> {
+    #[serde(borrow)]
     pub items: Vec<WhereItem<'a>>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct Delete<'a> {
     pub table: &'a str,
+
+    #[serde(borrow)]
     pub where_clause: Option<WhereClause<'a>>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct Drop<'a> {
     pub table: &'a str,
     //  pub drop_clause: Option<DropClause>, // should be cascade or restrict
 }
 
-#[derive(Debug)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct Insert<'a> {
     pub table: &'a str,
     pub columns: Vec<&'a str>,
+
+    #[serde(borrow)]
     pub from: InsertFrom<'a>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Deserialize, Serialize)]
 pub enum InsertFrom<'a> {
+    #[serde(borrow)]
     Values(Vec<Vec<Expr<'a>>>),
     Select(Select<'a>),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct CreateTable<'a> {
     pub table: &'a str,
     pub columns: Vec<(&'a str, &'a str)>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Deserialize, Serialize)]
 pub enum Stmt<'a> {
+    #[serde(borrow)]
     Select(Select<'a>),
     Insert(Insert<'a>),
     Delete(Delete<'a>),
@@ -104,14 +124,19 @@ pub enum Stmt<'a> {
     Drop(Drop<'a>),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct Update<'a> {
+    #[serde(borrow)]
     pub table: &'a str,
+
+    #[serde(borrow)]
     pub ass: Vec<Ass<'a>>,
+
+    #[serde(borrow)]
     pub where_clause: Option<WhereClause<'a>>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Deserialize, Serialize)]
 pub enum CreateType<'a> {
     Variant(&'a str, Vec<(&'a str, Vec<&'a str>)>),
 }

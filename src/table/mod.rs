@@ -1,18 +1,16 @@
 mod cell;
 mod iter;
-mod pattern_iter;
 mod row;
 mod schema;
 
 pub use self::cell::Cell;
 pub use self::iter::RowIter;
-pub use self::pattern_iter::{CellPatternIter, RowPatternIter};
 pub use self::row::Row;
 pub use self::schema::Schema;
 
 use crate::local::TTable;
-use crate::pattern::CompiledPattern;
 use crate::types::{TypeId, TypeMap, Value};
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone)]
 pub struct Column {
@@ -20,7 +18,7 @@ pub struct Column {
     name: String,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct Table {
     pub schema: Schema,
     pub data: Vec<u8>,
@@ -53,14 +51,6 @@ impl Table {
 
     pub fn iter<'a>(&'a self) -> RowIter<'a> {
         RowIter::new(self)
-    }
-
-    pub fn pattern_iter<'p, 'ts, 'tb>(
-        &'tb self,
-        pattern: &'p CompiledPattern,
-        types: &'ts TypeMap,
-    ) -> RowPatternIter<'p, 'ts, 'tb> {
-        RowPatternIter::new(pattern, self, types)
     }
 
     pub fn get_row<'a>(&'a self, row: usize) -> Row<'a> {
@@ -113,7 +103,6 @@ impl Table {
 pub mod tests {
     use super::*;
     use crate::types::{BaseType, Type, TypeMap, Value};
-    use std::borrow::Cow;
 
     pub struct TestTypeIds {
         int_id: TypeId,
@@ -272,80 +261,5 @@ pub mod tests {
                 assert!(cell_j > cell_i);
             }
         }
-    }
-
-    #[test]
-    fn test_pattern_iter() {
-        use crate::ast::*;
-        use crate::grammar::StmtParser;
-
-        let tname = Some(Cow::Borrowed("MaybeInt"));
-        let (ids, types) = create_type_map();
-
-        let schema = Schema::new(vec![
-            ("x".into(), ids.int_or_nil_id),
-            ("y".into(), ids.int_or_nil_id),
-        ]);
-
-        let mut table = Table::new(schema.clone(), &types);
-
-        let int_val1 = Value::Sum(tname.clone(), "Int".into(), vec![Value::Integer(1)]);
-        let int_val2 = Value::Sum(tname.clone(), "Int".into(), vec![Value::Integer(2)]);
-        let int_val3 = Value::Sum(tname.clone(), "Int".into(), vec![Value::Integer(3)]);
-        let int_none = Value::Sum(tname.clone(), "Nil".into(), vec![]);
-
-        table.push_row(&[int_val1.clone(), int_val2.clone()], &types);
-        table.push_row(&[int_val3.clone(), int_val2.clone()], &types);
-        table.push_row(&[int_none.clone(), int_none.clone()], &types);
-        table.push_row(&[int_none.clone(), int_none.clone()], &types);
-        table.push_row(&[int_val2.clone(), int_val3.clone()], &types);
-        table.push_row(&[int_val2.clone(), int_val3.clone()], &types);
-        table.push_row(&[int_none.clone(), int_none.clone()], &types);
-        table.push_row(&[int_none.clone(), int_none.clone()], &types);
-        table.push_row(&[int_val2.clone(), int_val2.clone()], &types);
-        table.push_row(&[int_none.clone(), int_none.clone()], &types);
-        table.push_row(&[int_none.clone(), int_none.clone()], &types);
-        table.push_row(&[int_val2.clone(), int_val2.clone()], &types);
-        table.push_row(&[int_val1.clone(), int_none.clone()], &types);
-        table.push_row(&[int_none.clone(), int_none.clone()], &types);
-
-        // helper function for extracting a pattern match ast from sql input
-        let parse_pattern = |input: &str| -> CompiledPattern {
-            let stmt = StmtParser::new()
-                .parse(input)
-                .unwrap_or_else(|_| panic!("Parsing pattern \"{}\" failed.", input));
-            match stmt {
-                Stmt::Select(Select { where_clause, .. }) => {
-                    if let Some(wc) = where_clause {
-                        CompiledPattern::compile(&wc.items, &schema, &types)
-                    } else {
-                        CompiledPattern::compile(&[], &schema, &types)
-                    }
-                }
-                _ => panic!("Not a select statement"),
-            }
-        };
-
-        // function for parsing sql, extracting a pattern match, and trying to run it.
-        let test_pattern = |input: &str, f: Box<dyn FnOnce(RowPatternIter<'_, '_, '_>)>| {
-            let pattern = parse_pattern(input);
-            println!("testing pattern \"{}\": {:#?}", input, pattern);
-            let iter = table.pattern_iter(&pattern, &types);
-            f(iter)
-        };
-
-        // iterate over all matching rows
-        test_pattern("SELECT WHERE x: Int(1);", box |i| assert_eq!(i.count(), 2));
-        test_pattern("SELECT WHERE x: Int(2);", box |i| assert_eq!(i.count(), 4));
-        test_pattern("SELECT WHERE x: Int(3);", box |i| assert_eq!(i.count(), 1));
-        test_pattern("SELECT WHERE x: Int(42);", box |i| assert_eq!(i.count(), 0));
-        test_pattern("SELECT WHERE x: Nil();", box |i| assert_eq!(i.count(), 7));
-
-        // iterate over all bound cells of all matching rows.
-        // two rows should match, multiplied by three bindings x1, ý2, x3.
-        test_pattern(
-            "SELECT WHERE x: Int(2), x: x1, y: y2, x: x3, y: Int(2);",
-            box |i| assert_eq!(i.flatten().count(), 6),
-        );
     }
 }

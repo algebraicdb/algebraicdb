@@ -13,7 +13,7 @@ pub type State = local::PgWrapperState;
 pub(crate) async fn client<R, W>(
     mut reader: R,
     writer: W,
-    state: State,
+    mut state: State,
 ) -> Result<(), Box<dyn Error>>
 where
     R: AsyncRead + Unpin + Send,
@@ -73,7 +73,8 @@ where
             let input = &input[..end];
 
             // Exectue the (semicolon-terminated) string as a query
-            execute_query(input, &state, &mut writer).await?;
+            execute_query(input, &mut state, &mut writer).await?;
+
             writer.flush().await?;
 
             // Remove the string of the executed query from the buffer

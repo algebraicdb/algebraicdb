@@ -1,7 +1,9 @@
 mod iter;
 
+use self::iter::*;
 use crate::ast::*;
 use crate::local::{DbState, DbmsState, ResourcesGuard};
+use crate::persistence::WriteToWal;
 use crate::pre_typechecker;
 use crate::table::{Cell, Schema, Table};
 use crate::typechecker;
@@ -12,11 +14,9 @@ use std::iter::empty;
 use std::sync::Arc;
 use tokio::io::{AsyncWrite, AsyncWriteExt};
 
-use self::iter::*;
-
 pub(crate) async fn execute_query(
     input: &str,
-    s: &DbmsState,
+    s: &mut DbmsState,
     w: &mut (dyn AsyncWrite + Send + Unpin),
 ) -> Result<(), Box<dyn Error>> {
     // 1. parse
@@ -50,15 +50,52 @@ pub(crate) async fn execute_query(
     }
 
     // 5. Execute query
-    execute_stmt(ast, s, resources, w).await
+    execute_stmt(ast, s, resources, WriteToWal::Yes, w).await
+}
+
+pub(crate) async fn execute_replay_query<'a>(
+    ast: Stmt<'a>,
+    s: &mut DbmsState,
+    w: &mut (dyn AsyncWrite + Send + Unpin),
+) -> Result<(), Box<dyn Error>> {
+    // 2. determine resources
+    let request = pre_typechecker::get_resource_request(&ast);
+
+    // 3. acquire resources
+    let response = s.acquire_resources(request).await;
+    let mut resources = match response {
+        Ok(resources) => resources,
+        Err(name) => {
+            return Ok(w
+                .write_all(format!("No such table: {}\n", name).as_bytes())
+                .await?)
+        }
+    };
+    let resources = resources.take().await;
+
+    // 5. Execute query
+    // TODO: Error checking
+    execute_stmt(ast, s, resources, WriteToWal::No, w).await
 }
 
 async fn execute_stmt(
     ast: Stmt<'_>,
-    s: &DbmsState,
+    s: &mut DbmsState,
     resources: ResourcesGuard<'_, Table>,
+    write_to_wal: WriteToWal,
     w: &mut (dyn AsyncWrite + Send + Unpin),
 ) -> Result<(), Box<dyn Error>> {
+    if let (WriteToWal::Yes, Some(wal)) = (write_to_wal, s.wal()) {
+        match &ast {
+            Stmt::CreateTable(_)
+            | Stmt::CreateType(_)
+            | Stmt::Delete(_)
+            | Stmt::Update(_)
+            | Stmt::Drop(_)
+            | Stmt::Insert(_) => wal.write(&ast).await,
+            Stmt::Select(_) => { /* We're only reading, so no logging required*/ }
+        }
+    }
     match ast {
         Stmt::CreateTable(create_table) => {
             execute_create_table(create_table, s, resources, w).await
@@ -194,7 +231,10 @@ pub fn execute_select_from<'a>(
     }
 }
 
-fn execute_select<'a>(select: &'a Select<'a>, resources: &'a ResourcesGuard<'a, Table>) -> Rows<'a> {
+fn execute_select<'a>(
+    select: &'a Select<'a>,
+    resources: &'a ResourcesGuard<'a, Table>,
+) -> Rows<'a> {
     let type_map = &resources.type_map;
 
     let rows = match &select.from {
@@ -230,14 +270,14 @@ async fn execute_create_table(
                 .type_map
                 .get_id(&column_type)
                 .expect("Type does not exist");
-            (column_name.to_owned(), t_id)
+            (column_name.to_string(), t_id)
         })
         .collect();
 
     let schema = Schema::new(columns);
     let table = Table::new(schema, &resources.type_map);
 
-    match s.create_table(create_table.table.to_owned(), table).await {
+    match s.create_table(create_table.table.to_string(), table).await {
         Ok(()) => w.write_all(b"Table created\n").await?,
         Err(()) => w.write_all(b"Table already exists\n").await?,
     };
@@ -261,7 +301,7 @@ async fn execute_create_type(
                         .map(|type_name| types.get_id(type_name).unwrap())
                         .collect();
 
-                    (constructor.to_owned(), subtype_ids)
+                    (constructor.to_string(), subtype_ids)
                 })
                 .collect();
 

@@ -1,10 +1,11 @@
 use super::types::*;
 use super::*;
+use crate::api::config::DbmsConfig;
+use crate::executor::execute_replay_query;
+use crate::persistence::{load_db_data, spawn_snapshotter, DbData, WriteAheadLog};
 use crate::table::Table;
-use crate::types::TypeMap;
 use async_trait::async_trait;
 use futures::executor::block_on;
-use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::mpsc;
 use tokio::sync::oneshot;
@@ -16,6 +17,7 @@ type RequestReceiver = mpsc::UnboundedReceiver<(Request<Table>, oneshot::Sender<
 #[derive(Clone)]
 pub struct DbmsState {
     channel: RequestSender,
+    wal: Option<WriteAheadLog>,
 }
 
 impl DbmsState {
@@ -40,6 +42,13 @@ impl DbState<Table> for DbmsState {
         }
     }
 
+    async fn acquire_all_resources(&self) -> Resources<Table> {
+        match self.send_request(Request::AcquireAll()).await {
+            Response::AcquiredResources(resources) => resources,
+            _ => unreachable!(),
+        }
+    }
+
     async fn create_table(&self, name: String, table: Table) -> Result<(), ()> {
         match self.send_request(Request::CreateTable(name, table)).await {
             Response::CreateTable(resp) => resp,
@@ -49,20 +58,71 @@ impl DbState<Table> for DbmsState {
 }
 
 impl DbmsState {
-    pub fn new() -> Self {
+    pub async fn new(config: DbmsConfig) -> Self {
         let (requests_in, requests_out) = mpsc::unbounded_channel();
 
-        std::thread::spawn(move || resource_manager(requests_out));
+        if config.no_data_dir {
+            std::thread::spawn(move || resource_manager(requests_out, DbData::default()));
+            Self {
+                channel: requests_in,
+                wal: None,
+            }
+        } else {
+            let (wal, wal_entries) = WriteAheadLog::new(&config.data_dir).await;
 
-        Self {
-            channel: requests_in,
+            let db_data = match load_db_data(&config.data_dir).await {
+                Ok(state) => state,
+                Err(e) => {
+                    eprintln!(
+                        "Error reading data from disk, falling back to default. {}",
+                        e
+                    );
+                    DbData::default()
+                }
+            };
+
+            let transaction_number = db_data.transaction_number;
+
+            std::thread::spawn(move || resource_manager(requests_out, db_data));
+
+            let mut state = Self {
+                channel: requests_in,
+                wal: Some(wal),
+            };
+
+            // TODO: This can probably be optimized
+            for (entry_tn, query_data) in wal_entries {
+                if entry_tn > transaction_number {
+                    eprintln!("Replaying transaction {}", entry_tn);
+                    let query = bincode::deserialize(&query_data).unwrap();
+                    execute_replay_query(query, &mut state, &mut Vec::<u8>::new())
+                        .await
+                        .unwrap();
+                }
+            }
+
+            spawn_snapshotter(
+                state.clone(),
+                config.data_dir,
+                config.disk_flush_timing,
+                transaction_number,
+            );
+
+            state
         }
+    }
+
+    pub fn wal(&mut self) -> Option<&mut WriteAheadLog> {
+        self.wal.as_mut()
     }
 }
 
-fn resource_manager(mut requests: RequestReceiver) {
-    let mut tables: HashMap<String, Arc<RwLock<Table>>> = HashMap::new();
-    let type_map: Arc<RwLock<TypeMap>> = Arc::new(RwLock::new(TypeMap::new()));
+fn resource_manager(mut requests: RequestReceiver, data: DbData) {
+    // NOTE: When locking a set of tables, make sure to lock the tables
+    // in order, sorted by their name. If not, we will have deadlocks.
+
+    let mut tables = data.tables;
+    let type_map = data.type_map;
 
     loop {
         let (request, response_ch) = match block_on(requests.recv()) {
@@ -71,6 +131,25 @@ fn resource_manager(mut requests: RequestReceiver) {
         };
 
         match request {
+            Request::AcquireAll() => {
+                let type_map = type_map.clone();
+
+                // TODO: avoid string cloning
+                let mut tables: Vec<(RW, String, _)> = tables
+                    .iter()
+                    .map(|(name, table_lock)| (RW::Read, name.clone(), table_lock.clone()))
+                    .collect();
+
+                tables.sort_by(|(_, name_a, _), (_, name_b, _)| name_a.cmp(name_b));
+
+                response_ch
+                    .send(Response::AcquiredResources(Resources::new(
+                        type_map,
+                        RW::Read,
+                        tables,
+                    )))
+                    .unwrap_or_else(|_| eprintln!("global::manager: response channel closed."));
+            }
             Request::Acquire(Acquire {
                 table_reqs,
                 type_map_perms,

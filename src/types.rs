@@ -1,4 +1,6 @@
 use bincode::{deserialize, serialize_into};
+use serde::{Deserialize, Serialize};
+use std::borrow::Cow;
 use std::char;
 use std::cmp;
 use std::cmp::Ordering;
@@ -7,12 +9,11 @@ use std::fmt::{self, Display, Formatter};
 use std::io::Write;
 use std::mem::size_of;
 use std::ops::Index;
-use std::borrow::Cow;
 
 pub type EnumTag = usize;
 pub type TypeId = usize;
 
-#[derive(Clone)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct TypeMap {
     types: HashMap<TypeId, Type>,
     identifiers: HashMap<String, TypeId>,
@@ -119,7 +120,7 @@ impl TypeMap {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum Type {
     Integer,
     Double,
@@ -128,7 +129,7 @@ pub enum Type {
     Sum(Vec<(String, Vec<TypeId>)>),
 }
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
 pub enum Value<'a> {
     Char(char),
     Integer(i32),
@@ -293,10 +294,13 @@ impl Value<'_> {
     pub fn deep_clone(&self) -> Value<'static> {
         match self {
             Value::Sum(namespace, name, inner_values) => {
-                let inner_values: Vec<Value<'static>> = inner_values.iter().map(|v| v.deep_clone()).collect();
+                let inner_values: Vec<Value<'static>> =
+                    inner_values.iter().map(|v| v.deep_clone()).collect();
 
                 Value::Sum(
-                    namespace.as_ref().map(|ns| Cow::Owned(ns.clone().into_owned())),
+                    namespace
+                        .as_ref()
+                        .map(|ns| Cow::Owned(ns.clone().into_owned())),
                     Cow::Owned(name.clone().into_owned()),
                     inner_values,
                 )

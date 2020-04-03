@@ -1,6 +1,7 @@
 use super::*;
 use crate::table::{Schema, Table};
 use crate::types::TypeMap;
+use crate::DbmsConfig;
 use crossbeam::thread;
 use futures::executor::block_on;
 use rand::Rng;
@@ -10,7 +11,7 @@ use rand::Rng;
 /// Make sure there are not deadlocks when multiple threads are requesting resources.
 #[tokio::test]
 async fn global_resources_contention() {
-    let state = DbmsState::new();
+    let state = DbmsState::new(DbmsConfig::testing_config()).await;
     let state = &state;
 
     let table_ids: Vec<usize> = (0..20).collect();
