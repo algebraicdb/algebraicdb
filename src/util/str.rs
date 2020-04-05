@@ -6,7 +6,9 @@ pub fn get_internal_slice_pos(whole: &str, slice: &str) -> Option<(usize, usize)
     let our_s = slice.as_ptr() as usize;
     let our_e = our_s + slice.len();
 
-    if other_s <= our_s && other_e >= our_e {
+    if other_s == our_s && other_e == our_e {
+        None
+    } else if other_s <= our_s && other_e >= our_e {
         let start = our_s - other_s;
         Some((start, start + slice.len()))
     } else {
@@ -14,6 +16,7 @@ pub fn get_internal_slice_pos(whole: &str, slice: &str) -> Option<(usize, usize)
     }
 }
 
+/// Returns the linee
 pub fn byte_pos_to_line(s: &str, i: usize) -> (&str, usize, usize) {
     let mut iter = s.chars();
     let mut byte: usize = 0;
@@ -31,5 +34,5 @@ pub fn byte_pos_to_line(s: &str, i: usize) -> (&str, usize, usize) {
             return (s, line_num, byte - line_start);
         }
     }
-    panic!("Out of bounds")
+    return (s, line_num, byte - line_start);
 }

@@ -38,14 +38,15 @@ impl ErrorMessage for TypeError<'_> {
                     actual, expected
                 ),
             ),
-            TypeError::NotSupported(feature) => format!("not supported: {}", feature),
+            TypeError::NotSupported(feature) => fmt_error_message(input, input, &format!("not supported: {}", feature)),
             TypeError::MismatchingTypes { type_1, type_2 } => {
-                format!("mismatching types: \"{}\" and \"{}\"", type_1, type_2)
+                fmt_error_message(input, input, &format!("mismatching types: \"{}\" and \"{}\"", type_1, type_2))
             }
-            TypeError::InvalidType { expected, actual } => format!(
+            TypeError::InvalidType { expected, actual } =>
+                fmt_error_message(input, input, &format!(
                 "invalid type: found \"{}\", expected \"{}\"",
                 actual, expected
-            ),
+            )),
         }
     }
 }
@@ -55,55 +56,69 @@ impl ErrorMessage for TypeError<'_> {
 /// This function will print a pretty error message, highlighting the offending part of the input.
 pub fn fmt_error_message(input: &str, offending_slice: &str, message: &str) -> String {
     let inner = || -> Result<String, fmt::Error> {
-        if let Some((start, end)) = get_internal_slice_pos(input, offending_slice) {
-            let mut msg = String::new();
+        let mut output = String::new();
 
-            let (line, start_line, byte_offset) = byte_pos_to_line(input, start);
-            let (_, end_line, _) = byte_pos_to_line(input, end);
+        if let Some((start, end)) = get_internal_slice_pos(input, offending_slice) {
+
+            let (line, start_line, start_byte_offset) = byte_pos_to_line(input, start);
+            let (_, end_line, _end_byte_offset) = byte_pos_to_line(input, end);
 
             if start_line == end_line {
-                writeln!(&mut msg, "    --> ERROR")?;
+                writeln!(&mut output, "    --> ERROR")?;
 
                 // Write the line containing the offending part of the input
-                writeln!(&mut msg, "     |")?;
-                writeln!(&mut msg, "{:4} | {}", start_line + 1, line)?;
-                msg.push_str("     | ");
+                writeln!(&mut output, "     |")?;
+                writeln!(&mut output, "{:4} | {}", start_line + 1, line)?;
+                output.push_str("     | ");
 
                 // Highlight the offending part of the input
-                let offset = line[0..byte_offset].chars().count();
+                let offset = line[0..start_byte_offset].chars().count();
                 let length = offending_slice.chars().count();
 
-                (0..offset).for_each(|_| msg.push(' '));
-                (0..length).for_each(|_| msg.push('^'));
-                writeln!(&mut msg)?;
+                (0..offset).for_each(|_| output.push(' '));
+                (0..length).for_each(|_| output.push('^'));
+                writeln!(&mut output)?;
 
                 // Display the accompanying message beneath the highlighting
                 let msg_length = message.chars().count();
                 let msg_offset = (offset + length / 2)
                     .checked_sub(msg_length / 2)
                     .unwrap_or(0);
-                msg.push_str("     * ");
-                (0..msg_offset).for_each(|_| msg.push(' '));
-                writeln!(&mut msg, "{}", message)?;
-
-                Ok(msg)
+                output.push_str("     * ");
+                (0..msg_offset).for_each(|_| output.push(' '));
+                writeln!(&mut output, "{}", message)?;
             } else {
-                writeln!(&mut msg, "    --> ERROR")?;
-                writeln!(&mut msg, "     |")?;
+                writeln!(&mut output, "    --> ERROR")?;
+                writeln!(&mut output, "     |")?;
 
-                writeln!(&mut msg, "{:4} | {}", start_line, line)?;
+                for (i, line) in input
+                    .lines()
+                    .enumerate()
+                    .skip(start_line)
+                    .take(end_line - start_line + 1)
+                {
+                    writeln!(&mut output, "{:4} | {}", i, line)?;
+                }
 
-                writeln!(&mut msg, "     |")?;
-
-                println!("s {}", start_line);
-                println!("e {}", end_line);
-                println!("\"{}\"", line);
-                println!("\"{}\"", offending_slice);
-                unimplemented!("Multi-line errors")
+                writeln!(&mut output, "     |")?;
+                writeln!(&mut output, "     * {}", message)?;
             }
         } else {
-            panic!("Not a sub-slice");
+            writeln!(&mut output, "    --> ERROR")?;
+            writeln!(&mut output, "     |")?;
+
+            for (i, line) in input
+                .lines()
+                .enumerate()
+            {
+                writeln!(&mut output, "{:4} | {}", i, line)?;
+            }
+
+            writeln!(&mut output, "     |")?;
+            writeln!(&mut output, "     * {}", message)?;
         }
+
+        Ok(output)
     };
 
     inner().expect("Call to write! can't fail with String buffer")

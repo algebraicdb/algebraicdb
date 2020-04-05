@@ -1,33 +1,40 @@
-Type MaybeInt created 
+Type MaybeInt created
 Table created
-InvalidType {
-    expected: 1,
-    actual: 2,
-}
-InvalidType {
-    expected: 1,
-    actual: 3,
-}
-InvalidType {
-    expected: 1,
-    actual: 2,
-}
-InvalidType {
-    expected: 1,
-    actual: 3,
-}
-InvalidType {
-    expected: 5,
-    actual: 1,
-}
+    --> ERROR
+     |
+   0 | -- Test invalid inner type
+   1 | INSERT INTO t(m) VALUES (MaybeInt::Just(42.42));
+     |
+     * invalid type: found "Double", expected "Integer"
+    --> ERROR
+     |
+   0 | INSERT INTO t(m) VALUES (MaybeInt::Just(true));
+     |
+     * invalid type: found "Bool", expected "Integer"
+    --> ERROR
+     |
+   0 | INSERT INTO t(m) VALUES (          Just(42.42));
+     |
+     * invalid type: found "Double", expected "Integer"
+    --> ERROR
+     |
+   0 | INSERT INTO t(m) VALUES (          Just(true));
+     |
+     * invalid type: found "Bool", expected "Integer"
+    --> ERROR
+     |
+   0 | -- Test omitting constructor
+   1 | INSERT INTO t(m) VALUES (42);
+     |
+     * invalid type: found "Integer", expected "MaybeInt"
 UnrecognizedToken {
     token: (
-        73,
+        71,
         Token(
             10,
             ")",
         ),
-        74,
+        72,
     ),
     expected: [
         "\"(\"",
@@ -35,12 +42,12 @@ UnrecognizedToken {
 }
 UnrecognizedToken {
     token: (
-        41,
+        40,
         Token(
             3,
             "42",
         ),
-        43,
+        42,
     ),
     expected: [
         "\"!=\"",

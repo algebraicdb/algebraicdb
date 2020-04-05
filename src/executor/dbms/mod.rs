@@ -275,7 +275,7 @@ async fn execute_create_type(
 
             w.write_all(b"Type ").await?;
             w.write_all(name.as_bytes()).await?;
-            w.write_all(b" created \n").await?;
+            w.write_all(b" created\n").await?;
             types.insert(name, Type::Sum(variant_types));
         }
     }
