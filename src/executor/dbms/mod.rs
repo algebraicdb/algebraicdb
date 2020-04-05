@@ -26,7 +26,10 @@ pub(crate) async fn execute_query(
     let result: Result<Stmt, _> = StmtParser::new().parse(&input);
     let ast = match result {
         Ok(ast) => ast,
-        Err(e) => return Ok(w.write_all(format!("{:#?}\n", e).as_bytes()).await?),
+        Err(e) => {
+            w.write_all(e.display(input).as_bytes()).await?;
+            return Ok(());
+        }
     };
 
     // 2. determine resources
@@ -48,8 +51,7 @@ pub(crate) async fn execute_query(
     match typechecker::check_stmt(&ast, &resources) {
         Ok(()) => {}
         Err(e) => {
-            let msg = e.display(input);
-            w.write_all(msg.as_bytes()).await?;
+            w.write_all(e.display(input).as_bytes()).await?;
             return Ok(());
         }
     }

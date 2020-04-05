@@ -1,10 +1,35 @@
 use crate::ast::Span;
 use crate::typechecker::TypeError;
 use crate::util::str::*;
+use lalrpop_util::ParseError;
 use std::fmt::{self, Write};
 
 pub trait ErrorMessage {
     fn display(&self, input: &str) -> String;
+}
+
+impl<T> ErrorMessage for ParseError<usize, T, &str> {
+    fn display(&self, input: &str) -> String {
+        match self {
+            &ParseError::InvalidToken { location } => {
+                fmt_error_message(input, Some(Span(location, location)), "invalid token")
+            }
+
+            ParseError::UnrecognizedToken {
+                token: (start, _token, end),
+                expected: _,
+            } => fmt_error_message(input, Some(Span(*start, *end)), "unrecognized token"),
+
+            //&ParseError::UnrecognizedToken { token: None, expected } => fmt_error_message(input, None, "unexpected EOF"),
+            ParseError::UnrecognizedEOF { .. } => fmt_error_message(input, None, "unexpected EOF"),
+
+            ParseError::ExtraToken {
+                token: (start, _token, end),
+            } => fmt_error_message(input, Some(Span(*start, *end)), "unexpected token"),
+
+            ParseError::User { error } => fmt_error_message(input, None, error),
+        }
+    }
 }
 
 impl ErrorMessage for TypeError {

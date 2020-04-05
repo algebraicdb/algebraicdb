@@ -25,58 +25,16 @@ Table created
    2 | INSERT INTO t(m) VALUES (42);
      |                          ^^
      *  invalid type: found "Integer", expected "MaybeInt"
-UnrecognizedToken {
-    token: (
-        71,
-        Token(
-            10,
-            ")",
-        ),
-        72,
-    ),
-    expected: [
-        "\"(\"",
-    ],
-}
-UnrecognizedToken {
-    token: (
-        40,
-        Token(
-            3,
-            "42",
-        ),
-        42,
-    ),
-    expected: [
-        "\"!=\"",
-        "\"(\"",
-        "\")\"",
-        "\",\"",
-        "\":\"",
-        "\"::\"",
-        "\";\"",
-        "\"<\"",
-        "\"<=\"",
-        "\"=\"",
-        "\">\"",
-        "\">=\"",
-        "AND",
-        "AS",
-        "FROM",
-        "FULL",
-        "IDENT",
-        "INNER",
-        "JOIN",
-        "LEFT",
-        "ON",
-        "OR",
-        "RIGHT",
-        "SELECT",
-        "SET",
-        "VALUES",
-        "WHERE",
-    ],
-}
+    --> ERROR
+     |
+   2 | INSERT INTO t(m) VALUES (MaybeInt::Nothing);
+     |                                           ^
+     *                                  unrecognized token
+    --> ERROR
+     |
+   1 | INSERT INTO t(m) VALUES (MaybeInt::Just 42);
+     |                                         ^^
+     *                                 unrecognized token
 1 row(s) inserted
 1 row(s) inserted
 [Just(42)]
