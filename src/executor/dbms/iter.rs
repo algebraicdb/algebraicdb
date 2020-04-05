@@ -1,5 +1,4 @@
-use crate::ast::{Expr, WhereItem};
-use crate::pattern::Pattern;
+use crate::ast::{Spanned, Pattern, Expr, WhereItem};
 use crate::table::{Cell, Schema, Table};
 use crate::types::{EnumTag, Type, TypeId, TypeMap};
 use bincode::serialize;
@@ -7,13 +6,13 @@ use std::cmp::Ordering;
 use std::sync::Arc;
 
 pub enum ModIter<'a> {
-    Select(&'a [Expr<'a>]),
+    Select(&'a [Spanned<Expr<'a>>]),
     Where(&'a [WhereItem<'a>]),
 }
 
 pub enum Rows<'a> {
-    Iter(RowIter<'a>),
-    Owned {
+    Scan(RowIter<'a>),
+    Materialized {
         table: Table,
         mods: Vec<ModIter<'a>>,
     },
@@ -21,13 +20,13 @@ pub enum Rows<'a> {
 
 impl<'a> From<RowIter<'a>> for Rows<'a> {
     fn from(iter: RowIter<'a>) -> Self {
-        Rows::Iter(iter)
+        Rows::Scan(iter)
     }
 }
 
 impl From<Table> for Rows<'static> {
     fn from(table: Table) -> Self {
-        Rows::Owned {
+        Rows::Materialized {
             table,
             mods: vec![],
         }
@@ -38,20 +37,20 @@ impl<'a> Rows<'a> {
     pub fn schema(&self) -> Schema {
         // TODO: refactor this into something more efficient
         match self {
-            Rows::Iter(iter) => Schema::new(
+            Rows::Scan(iter) => Schema::new(
                 iter.bindings
                     .iter()
                     .map(|cr| (cr.name.to_owned(), cr.type_id))
                     .collect(),
             ),
-            Rows::Owned { table, .. } => table.schema().clone(),
+            Rows::Materialized { table, .. } => table.schema().clone(),
         }
     }
 
     pub fn iter<'b>(&'b self, type_map: &'b TypeMap) -> RowIter<'b> {
         match self {
-            Rows::Iter(iter) => iter.clone(),
-            Rows::Owned { table, mods } => {
+            Rows::Scan(iter) => iter.clone(),
+            Rows::Materialized { table, mods } => {
                 use super::full_table_scan;
                 let mut scan = full_table_scan(&table, type_map);
                 for m in mods {
@@ -69,17 +68,17 @@ impl<'a> Rows<'a> {
         }
     }
 
-    pub fn select(&mut self, items: &'a [Expr]) {
+    pub fn select(&mut self, items: &'a [Spanned<Expr>]) {
         match self {
-            Rows::Iter(iter) => iter.select(items),
-            Rows::Owned { mods, .. } => mods.push(ModIter::Select(items)),
+            Rows::Scan(iter) => iter.select(items),
+            Rows::Materialized { mods, .. } => mods.push(ModIter::Select(items)),
         }
     }
 
     pub fn apply_pattern(&mut self, patterns: &'a [WhereItem], type_map: &TypeMap) {
         match self {
-            Rows::Iter(iter) => iter.apply_pattern(patterns, type_map),
-            Rows::Owned { mods, .. } => mods.push(ModIter::Where(patterns)),
+            Rows::Scan(iter) => iter.apply_pattern(patterns, type_map),
+            Rows::Materialized { mods, .. } => mods.push(ModIter::Where(patterns)),
         }
     }
 }
@@ -210,13 +209,13 @@ impl<'a> Iterator for CellIter<'a> {
 }
 
 impl<'a> RowIter<'a> {
-    pub fn select(&mut self, items: &'a [Expr]) {
+    pub fn select(&mut self, items: &'a [Spanned<Expr>]) {
         let mut bindings = vec![];
         'outer: for item in items {
-            match item {
+            match item.as_ref() {
                 &Expr::Ident(name) => {
                     for &binding in self.bindings.iter() {
-                        if binding.name == name {
+                        if &binding.name == name.as_ref() {
                             bindings.push(binding);
                             continue 'outer;
                         }
@@ -295,7 +294,7 @@ impl<'a> RowIter<'a> {
                         let (i, (_, sub_types)) = variants
                             .iter()
                             .enumerate()
-                            .find(|(_, (variant, _))| variant == name)
+                            .find(|(_, (variant, _))| variant == name.as_ref())
                             .unwrap();
 
                         matches.push(CellFilter {
@@ -329,7 +328,7 @@ impl<'a> RowIter<'a> {
                 WhereItem::Expr(_) => {} // Ignore expressions for now
                 WhereItem::Pattern(name, pattern) => {
                     for cell_ref in self.bindings.iter() {
-                        if cell_ref.name == *name {
+                        if &cell_ref.name == name.as_ref() {
                             let byte_index = cell_ref.offset;
                             let type_id = cell_ref.type_id;
                             let data = cell_ref.source;

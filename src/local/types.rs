@@ -18,6 +18,7 @@ pub struct TableRequest {
 #[derive(Debug)]
 pub enum Request<T> {
     Acquire(Acquire),
+    AcquireAll(),
     CreateTable(String, T),
 }
 

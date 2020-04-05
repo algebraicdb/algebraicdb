@@ -1,4 +1,5 @@
 use bincode::{deserialize, serialize_into};
+use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
 use std::char;
 use std::cmp;
@@ -12,7 +13,7 @@ use std::ops::Index;
 pub type EnumTag = usize;
 pub type TypeId = usize;
 
-#[derive(Clone)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct TypeMap {
     types: HashMap<TypeId, Type>,
     identifiers: HashMap<String, TypeId>,
@@ -119,7 +120,7 @@ impl TypeMap {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum Type {
     Integer,
     Double,
@@ -128,7 +129,7 @@ pub enum Type {
     Sum(Vec<(String, Vec<TypeId>)>),
 }
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
 pub enum Value<'a> {
     Char(char),
     Integer(i32),

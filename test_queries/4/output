@@ -1,11 +1,11 @@
 Table created
     --> ERROR
      |
-   0 | INSERT INTO ints(int) VALUES (true), (false);
-     |
-     * invalid type: found "Bool", expected "Integer"
+   1 | INSERT INTO ints(int) VALUES (true), (false);
+     |                               ^^^^
+     *          invalid type: found "Bool", expected "Integer"
     --> ERROR
      |
-   0 | INSERT INTO ints(int) VALUES (1.0), (42.42);
-     |
-     * invalid type: found "Double", expected "Integer"
+   1 | INSERT INTO ints(int) VALUES (1.0), (42.42);
+     |                               ^^^
+     *        invalid type: found "Double", expected "Integer"

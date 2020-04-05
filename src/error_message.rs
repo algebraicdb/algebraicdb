@@ -1,65 +1,72 @@
 use crate::typechecker::TypeError;
 use crate::util::str::*;
+use crate::ast::{Span, Spanned};
 use std::fmt::{self, Write};
 
 pub trait ErrorMessage {
     fn display(&self, input: &str) -> String;
 }
 
-impl ErrorMessage for TypeError<'_> {
+impl ErrorMessage for Spanned<TypeError> {
     fn display(&self, input: &str) -> String {
         match self {
-            TypeError::Undefined { kind, item } => {
-                fmt_error_message(input, item, &format!("{} \"{}\" is undefined", kind, item))
+            _ => "hello".into()
+        }
+    }
+}
+
+impl ErrorMessage for TypeError {
+    fn display(&self, input: &str) -> String {
+        match self {
+            TypeError::Undefined { span, kind, item } => {
+                fmt_error_message(input, *span, &format!("{} \"{}\" is undefined", kind, item))
             }
-            TypeError::AmbiguousReference(ident) => {
-                fmt_error_message(input, ident, &format!("\"{}\" is ambiguous", ident))
+            TypeError::AmbiguousReference{ span, ident } => {
+                fmt_error_message(input, *span, &format!("\"{}\" is ambiguous", ident))
             }
-            TypeError::AlreadyDefined(ident) => {
-                fmt_error_message(input, ident, &format!("\"{}\" is defined elsewhere", ident))
+            TypeError::AlreadyDefined { span, ident } => {
+                fmt_error_message(input, *span, &format!("\"{}\" is defined elsewhere", ident))
             }
-            TypeError::MissingColumn(ident) => {
-                fmt_error_message(input, input, &format!("\"{}\" needs to be defined", ident))
+            TypeError::MissingColumn { span, name } => {
+                fmt_error_message(input, *span, &format!("\"{}\" needs to be defined", name))
             }
-            TypeError::InvalidUnknownType { expected, actual } => fmt_error_message(
+            TypeError::InvalidUnknownType { span, expected } => fmt_error_message(
                 input,
-                actual,
+                *span,
                 &format!("expected \"{}\", found unknown type", expected),
             ),
             TypeError::InvalidCount {
-                item,
+                span,
                 expected,
                 actual,
             } => fmt_error_message(
                 input,
-                item,
+                *span,
                 &format!(
                     "invalid number of items: found {}, expected {}",
                     actual, expected
                 ),
             ),
-            TypeError::NotSupported(feature) => fmt_error_message(input, input, &format!("not supported: {}", feature)),
-            TypeError::MismatchingTypes { type_1, type_2 } => {
-                fmt_error_message(input, input, &format!("mismatching types: \"{}\" and \"{}\"", type_1, type_2))
+            TypeError::NotSupported(feature) => fmt_error_message(input, None, &format!("not supported: {}", feature)),
+            TypeError::MismatchingTypes { span, type_1, type_2 } => {
+                fmt_error_message(input, *span, &format!("mismatching types: \"{}\" and \"{}\"", type_1, type_2))
             }
-            TypeError::InvalidType { expected, actual } =>
-                fmt_error_message(input, input, &format!(
+            TypeError::InvalidType { span, expected, actual } =>
+                fmt_error_message(input, *span, &format!(
                 "invalid type: found \"{}\", expected \"{}\"",
                 actual, expected
             )),
         }
     }
 }
-
 /// Display a pretty error message
 ///
 /// This function will print a pretty error message, highlighting the offending part of the input.
-pub fn fmt_error_message(input: &str, offending_slice: &str, message: &str) -> String {
+pub fn fmt_error_message(input: &str, span: Option<Span>, message: &str) -> String {
     let inner = || -> Result<String, fmt::Error> {
         let mut output = String::new();
 
-        if let Some((start, end)) = get_internal_slice_pos(input, offending_slice) {
-
+        if let Some(Span(start, end)) = span {
             let (line, start_line, start_byte_offset) = byte_pos_to_line(input, start);
             let (_, end_line, _end_byte_offset) = byte_pos_to_line(input, end);
 
@@ -73,7 +80,7 @@ pub fn fmt_error_message(input: &str, offending_slice: &str, message: &str) -> S
 
                 // Highlight the offending part of the input
                 let offset = line[0..start_byte_offset].chars().count();
-                let length = offending_slice.chars().count();
+                let length = end - start;
 
                 (0..offset).for_each(|_| output.push(' '));
                 (0..length).for_each(|_| output.push('^'));

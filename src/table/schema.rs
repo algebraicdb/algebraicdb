@@ -1,6 +1,7 @@
 use crate::types::TypeId;
+use serde::{Deserialize, Serialize};
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Schema {
     pub columns: Vec<(String, TypeId)>,
 }

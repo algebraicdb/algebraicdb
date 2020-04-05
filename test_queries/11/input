@@ -1,0 +1,45 @@
+-- Test type-checker error messages
+
+------ Setup ------
+CREATE TYPE Option AS VARIANT { Some(NotAType), None() };
+CREATE TYPE Option AS VARIANT { Some(Integer), None() };
+CREATE TYPE Option AS VARIANT {};
+
+CREATE TABLE t(a NotAType);
+CREATE TABLE ints(i1 Integer, i2 Integer, i3 Integer);
+INSERT INTO ints(i1, i2, i3) VALUES (1, 2, 3);
+
+CREATE TABLE opts(opt Option);
+INSERT INTO opts(opt) VALUES (Some(42));
+
+------ Tests ------
+
+INSERT INTO ints(i1, i2, i1) VALUES (0, 0, 0);
+INSERT INTO ints(i1, i2) VALUES (0, 0);
+INSERT INTO ints(i1, i2, i1, i3) VALUES (0, 0, 0, 0);
+
+INSERT INTO ints(i1, i2, i3) VALUES (1, 2, 3, 4);
+INSERT INTO ints(i1, i2, i3) VALUES (1);
+INSERT INTO ints(i1, i2, i3) VALUES (1), (1,2), (1,2,3,4);
+
+INSERT INTO ints(i1, i2, i3) VALUES (1.0, 1, 'a');
+INSERT INTO ints(i1, i2, i3) VALUES (1, 1.0, 'b');
+
+SELECT i1 FROM ints WHERE i2: Unknown();
+SELECT i1 FROM ints WHERE i2: Some(3);
+SELECT i1 FROM ints WHERE i2: NotOption::Some(3);
+SELECT i1 FROM ints WHERE i2: Option::Some(3);
+SELECT i1 FROM ints WHERE i2: Option::Some('c');
+
+INSERT INTO opts(opt) VALUES (Some(42.0));
+INSERT INTO opts(opt) VALUES (Some(1, 2));
+
+SELECT opt FROM opts WHERE opt: Some();
+SELECT opt FROM opts WHERE opt: Some(_, _);
+SELECT opt FROM opts WHERE opt: Some(opt);
+
+SELECT opt FROM opts WHERE 1 = 2.0 = false;
+SELECT opt FROM opts WHERE 1 > 2 = 3 = true;
+SELECT opt FROM opts WHERE true = (1 < 'a');
+SELECT opt FROM opts WHERE opt: Some(opt2), opt2 = 'a' = false;
+
