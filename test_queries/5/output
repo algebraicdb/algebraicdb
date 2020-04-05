@@ -3,14 +3,14 @@ Type MaybeMaybeInt created
 Table created
     --> ERROR
      |
-   0 | INSERT INTO oh_no(ambiguity) VALUES (Just(42));
-     |
-     * invalid type: found "Integer", expected "MaybeInt"
+   1 | INSERT INTO oh_no(ambiguity) VALUES (Just(42));
+     |                                      ^^^^^^^^
+     *                 invalid type: found "Integer", expected "MaybeInt"
     --> ERROR
      |
    1 | INSERT INTO oh_no(ambiguity) VALUES (Just(Just(Just(42))));
-     |                                                ^^^^
-     *                               expected "Integer", found unknown type
+     |                                      ^^^^^^^^^^^^^^^^^^^^
+     *                             expected "Integer", found unknown type
 12 row(s) inserted
 [Just(Just(42))]
 [Just(Just(24))]

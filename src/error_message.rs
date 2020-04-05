@@ -1,18 +1,10 @@
 use crate::typechecker::TypeError;
 use crate::util::str::*;
-use crate::ast::{Span, Spanned};
+use crate::ast::Span;
 use std::fmt::{self, Write};
 
 pub trait ErrorMessage {
     fn display(&self, input: &str) -> String;
-}
-
-impl ErrorMessage for Spanned<TypeError> {
-    fn display(&self, input: &str) -> String {
-        match self {
-            _ => "hello".into()
-        }
-    }
 }
 
 impl ErrorMessage for TypeError {
