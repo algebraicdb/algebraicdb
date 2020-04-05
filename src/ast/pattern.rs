@@ -1,5 +1,5 @@
-use serde::{Deserialize, Serialize};
 use crate::ast::Spanned;
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize, Deserialize)]
 pub enum Pattern<'a> {

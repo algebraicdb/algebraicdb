@@ -1,4 +1,6 @@
-/// Returns the linee
+/// Returns the line number corresponding to the char at the byte index
+///
+/// Also returns the line, and the byte index of the character within that line
 pub fn byte_pos_to_line(s: &str, i: usize) -> (&str, usize, usize) {
     let mut iter = s.chars();
     let mut byte: usize = 0;

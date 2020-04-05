@@ -1,4 +1,4 @@
-use crate::ast::{Spanned, Pattern, Expr, WhereItem};
+use crate::ast::{Expr, Pattern, Spanned, WhereItem};
 use crate::table::{Cell, Schema, Table};
 use crate::types::{EnumTag, Type, TypeId, TypeMap};
 use bincode::serialize;

@@ -1,6 +1,6 @@
+use crate::ast::Span;
 use crate::typechecker::TypeError;
 use crate::util::str::*;
-use crate::ast::Span;
 use std::fmt::{self, Write};
 
 pub trait ErrorMessage {
@@ -13,7 +13,7 @@ impl ErrorMessage for TypeError {
             TypeError::Undefined { span, kind, item } => {
                 fmt_error_message(input, *span, &format!("{} \"{}\" is undefined", kind, item))
             }
-            TypeError::AmbiguousReference{ span, ident } => {
+            TypeError::AmbiguousReference { span, ident } => {
                 fmt_error_message(input, *span, &format!("\"{}\" is ambiguous", ident))
             }
             TypeError::AlreadyDefined { span, ident } => {
@@ -39,21 +39,37 @@ impl ErrorMessage for TypeError {
                     actual, expected
                 ),
             ),
-            TypeError::NotSupported(feature) => fmt_error_message(input, None, &format!("not supported: {}", feature)),
-            TypeError::MismatchingTypes { span, type_1, type_2 } => {
-                fmt_error_message(input, *span, &format!("mismatching types: \"{}\" and \"{}\"", type_1, type_2))
+            TypeError::NotSupported(feature) => {
+                fmt_error_message(input, None, &format!("not supported: {}", feature))
             }
-            TypeError::InvalidType { span, expected, actual } =>
-                fmt_error_message(input, *span, &format!(
-                "invalid type: found \"{}\", expected \"{}\"",
-                actual, expected
-            )),
+            TypeError::MismatchingTypes {
+                span,
+                type_1,
+                type_2,
+            } => fmt_error_message(
+                input,
+                *span,
+                &format!("mismatching types: \"{}\" and \"{}\"", type_1, type_2),
+            ),
+            TypeError::InvalidType {
+                span,
+                expected,
+                actual,
+            } => fmt_error_message(
+                input,
+                *span,
+                &format!(
+                    "invalid type: found \"{}\", expected \"{}\"",
+                    actual, expected
+                ),
+            ),
         }
     }
 }
-/// Display a pretty error message
+
+/// Formats a pretty error message
 ///
-/// This function will print a pretty error message, highlighting the offending part of the input.
+/// This function will format a pretty error message, highlighting the offending part of the input.
 pub fn fmt_error_message(input: &str, span: Option<Span>, message: &str) -> String {
     let inner = || -> Result<String, fmt::Error> {
         let mut output = String::new();
@@ -106,10 +122,7 @@ pub fn fmt_error_message(input: &str, span: Option<Span>, message: &str) -> Stri
             writeln!(&mut output, "    --> ERROR")?;
             writeln!(&mut output, "     |")?;
 
-            for (i, line) in input
-                .lines()
-                .enumerate()
-            {
+            for (i, line) in input.lines().enumerate() {
                 writeln!(&mut output, "{:4} | {}", i, line)?;
             }
 

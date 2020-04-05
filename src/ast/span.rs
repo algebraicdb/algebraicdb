@@ -1,6 +1,6 @@
-use std::ops::{Deref, DerefMut};
+use serde::{Deserialize, Serialize};
 use std::fmt::{self, Display, Formatter};
-use serde::{Serialize, Deserialize};
+use std::ops::{Deref, DerefMut};
 
 #[derive(Clone, Copy, Debug)]
 pub struct Span(pub usize, pub usize);
@@ -27,21 +27,11 @@ impl<T> Spanned<T> {
             value,
         }
     }
-
-//    pub fn same_span<U>(&self, value: U) -> Spanned<U> {
-//        Self {
-//            span: self.span,
-//            value,
-//        }
-//    }
 }
 
 impl<T> From<T> for Spanned<T> {
     fn from(value: T) -> Self {
-        Self {
-            span: None,
-            value,
-        }
+        Self { span: None, value }
     }
 }
 

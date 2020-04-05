@@ -23,11 +23,7 @@ fn integration_tests_benchmark(c: &mut Criterion) {
             let mut rt = rt();
 
             group.bench_function(
-                format!(
-                    "Test: {}",
-                    entry.file_name().into_string().unwrap()
-                )
-                .as_str(),
+                format!("Test: {}", entry.file_name().into_string().unwrap()).as_str(),
                 |b| {
                     b.iter(|| {
                         rt.block_on(async {

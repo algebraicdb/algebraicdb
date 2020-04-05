@@ -1,8 +1,8 @@
-mod span;
 mod pattern;
+mod span;
 
-pub use span::*;
 pub use pattern::*;
+pub use span::*;
 
 use crate::types::Value;
 use serde::{Deserialize, Serialize};
@@ -10,7 +10,6 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Deserialize, Serialize)]
 pub enum Expr<'a> {
     #[serde(borrow)]
-
     Ident(Spanned<&'a str>),
     Value(Spanned<Value<'a>>),
     Eq(Box<(Spanned<Expr<'a>>, Spanned<Expr<'a>>)>),
@@ -151,8 +150,8 @@ pub enum CreateType<'a> {
         name: Spanned<&'a str>,
 
         #[serde(borrow)]
-        variants: Vec<(Spanned<&'a str>, Vec<Spanned<&'a str>>)>
-    }
+        variants: Vec<(Spanned<&'a str>, Vec<Spanned<&'a str>>)>,
+    },
 }
 
 #[test]

@@ -42,4 +42,3 @@ SELECT opt FROM opts WHERE 1 = 2.0 = false;
 SELECT opt FROM opts WHERE 1 > 2 = 3 = true;
 SELECT opt FROM opts WHERE true = (1 < 'a');
 SELECT opt FROM opts WHERE opt: Some(opt2), opt2 = 'a' = false;
-
