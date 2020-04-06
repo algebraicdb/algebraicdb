@@ -1,64 +1,7 @@
 [workspace]
 members = [
+    "algebraicdb",
     "adbcat",
+    "benches",
     ]
-
-[package]
-name = "algebraicdb"
-version = "0.1.0"
-authors = [
-    "feffe <feffe@feffe.dev>",
-    "Joakim Hulthe <joakim@hulthe.net>",
-]
-edition = "2018"
-build = "build.rs" # LALRPOP preprocessing
-
-[lib]
-bench = false
-
-[[bin]]
-name = "algebraicdb"
-path = "src/main.rs"
-bench = false
-
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-
-[dependencies]
-bincode = "1.2.1"
-rand = "0.7.3"
-lalrpop-util = "0.18.1"
-regex = "1.3.4"
-smallvec = "1.2.0"
-tokio = { version = "0.2.11", features = ["full"] }
-tokio-util = {version = "0.2", features = ["udp", "codec"]}
-futures = "0.3.4"
-async-trait = "0.1.24"
-serde = "1.0.104"
-seahash = "4.0.0"
-structopt = "0.3.12"
-
-[build-dependencies.lalrpop]
-version = "0.18.1"
-features = ["lexer"]
-
-[dev-dependencies]
-prettydiff = "0.3.1"
-criterion = "0.3"
-crossbeam = "0.7.3"
-
-
-
-
-# Benchmarks
-
-[[bench]]
-name = "parsing_benchmark"
-harness = false
-
-[[bench]]
-name = "executor_benchmark"
-harness = false
-
-[[bench]]
-name = "integration_tests_benchmark"
-harness = false
+default-members= ["algebraicdb", "benches"]
