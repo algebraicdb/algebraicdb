@@ -1,5 +1,5 @@
-use crate::local::types::{Resource, Resources};
-use crate::local::{dbms_state::DbmsState, DbState};
+use crate::state::types::{Resource, Resources};
+use crate::state::{DbState, DbmsState};
 use crate::table::Table;
 use crate::types::TypeMap;
 use futures::future::join_all;

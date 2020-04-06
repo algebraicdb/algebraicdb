@@ -1,10 +1,10 @@
-pub mod dbms_state;
+pub mod dbms;
 pub mod types;
 
 #[cfg(test)]
 mod tests;
 
-pub use self::dbms_state::*;
+pub use self::dbms::*;
 pub use self::types::*;
 use crate::table::Schema;
 use async_trait::async_trait;

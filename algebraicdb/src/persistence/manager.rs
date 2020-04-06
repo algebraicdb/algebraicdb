@@ -1,4 +1,4 @@
-use crate::local::dbms_state::DbmsState;
+use crate::state::DbmsState;
 use crate::util::Timing;
 use std::path::PathBuf;
 use std::sync::atomic::Ordering;

@@ -1,14 +1,14 @@
 use crate::executor::execute_query;
-use crate::local;
+use crate::state;
 use regex::Regex;
 use std::error::Error;
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, BufWriter};
 
 #[cfg(not(feature = "wrapper"))]
-pub type State = local::DbmsState;
+pub type State = state::DbmsState;
 
 #[cfg(feature = "wrapper")]
-pub type State = local::PgWrapperState;
+pub type State = state::PgWrapperState;
 
 pub(crate) async fn client<R, W>(
     mut reader: R,

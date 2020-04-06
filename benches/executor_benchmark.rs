@@ -1,6 +1,6 @@
 use algebraicdb::ast::SelectFrom;
 use algebraicdb::executor::dbms::execute_select_from;
-use algebraicdb::local::types::{Resource, ResourcesGuard};
+use algebraicdb::state::types::{Resource, ResourcesGuard};
 use algebraicdb::table::{Schema, Table};
 use algebraicdb::types::{BaseType, TypeMap, Value};
 

@@ -1,5 +1,5 @@
 use crate::ast::*;
-use crate::local::{ResourcesGuard, TTable};
+use crate::state::{ResourcesGuard, TTable};
 use crate::types::*;
 use std::collections::HashMap;
 use std::collections::HashSet;
@@ -725,7 +725,7 @@ pub fn type_of_value<'ast>(
 mod tests {
     use super::*;
     use crate::ast::Expr;
-    use crate::local::{Resource, ResourcesGuard};
+    use crate::state::{Resource, ResourcesGuard};
     use crate::table::{tests::create_type_map, Table};
     use futures::executor::block_on;
     use std::sync::Arc;

@@ -1,5 +1,5 @@
-use crate::local::dbms_state::DbData;
 use crate::persistence::TransactionNumber;
+use crate::state::DbData;
 use crate::table::Table;
 use crate::types::TypeMap;
 use std::collections::HashMap;

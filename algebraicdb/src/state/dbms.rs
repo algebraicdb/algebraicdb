@@ -87,7 +87,9 @@ impl DbState<Table> for DbmsState {
         if state.tables.contains_key(&name) {
             Err(())
         } else {
-            state.tables.insert(name.to_string(), Arc::new(RwLock::new(table)));
+            state
+                .tables
+                .insert(name.to_string(), Arc::new(RwLock::new(table)));
             Ok(())
         }
     }
