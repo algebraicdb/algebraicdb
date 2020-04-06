@@ -20,6 +20,7 @@ pub enum Request<T> {
     Acquire(Acquire),
     AcquireAll(),
     CreateTable(String, T),
+    DropTable(String),
 }
 
 #[derive(Debug)]
@@ -38,6 +39,7 @@ pub enum Response<T> {
     AcquiredResources(Resources<T>),
     NoSuchTable(String),
     CreateTable(Result<(), ()>),
+    DropTable(Result<T, ()>),
     // TODO add future table deleted???????
 }
 

@@ -1,3 +1,4 @@
+use crate::local::dbms_state::DbData;
 use crate::persistence::TransactionNumber;
 use crate::table::Table;
 use crate::types::TypeMap;
@@ -10,24 +11,6 @@ use tokio::stream::StreamExt;
 use tokio::sync::RwLock;
 
 use super::{CURRENT_TRANSACTION_FILE_NAME, TABLES_DIR_NAME, TYPE_MAP_FILE_NAME};
-
-/// All state data associated with the database
-pub struct DbData {
-    /// The transaction_number associated with the state
-    pub transaction_number: TransactionNumber,
-    pub tables: HashMap<String, Arc<RwLock<Table>>>,
-    pub type_map: Arc<RwLock<TypeMap>>,
-}
-
-impl Default for DbData {
-    fn default() -> Self {
-        Self {
-            transaction_number: 0,
-            tables: HashMap::new(),
-            type_map: Arc::new(RwLock::new(TypeMap::new())),
-        }
-    }
-}
 
 pub async fn load_db_data(data_dir: &PathBuf) -> io::Result<DbData> {
     let transaction_number = get_current_transaction_number(data_dir).await?;

@@ -4,7 +4,7 @@ mod wal;
 mod write;
 
 pub(crate) use manager::spawn_snapshotter;
-pub(crate) use read::{load_db_data, DbData};
+pub(crate) use read::load_db_data;
 pub(crate) use wal::{TransactionNumber, WriteAheadLog, WriteToWal, TRANSACTION_NUMBER};
 pub(self) use write::snapshot;
 

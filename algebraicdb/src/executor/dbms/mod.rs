@@ -114,7 +114,9 @@ async fn execute_stmt(
             let table = execute_select(&select, &resources);
             print_table(table.iter(type_map), w).await
         }
-        _ => unimplemented!("Not implemented: {:?}", ast),
+        Stmt::Drop(drop) => execute_drop_table(drop, s, w).await,
+        ast @ Stmt::Delete(_) => unimplemented!("Not implemented: {:?}", ast),
+        ast @ Stmt::Update(_) => unimplemented!("Not implemented: {:?}", ast),
     }
 }
 
@@ -319,6 +321,18 @@ async fn execute_create_type(
             w.write_all(b" created\n").await?;
             types.insert(name.value, Type::Sum(variant_types));
         }
+    }
+    Ok(())
+}
+
+async fn execute_drop_table(
+    drop: Drop<'_>,
+    s: &DbmsState,
+    w: &mut (dyn AsyncWrite + Send + Unpin),
+) -> Result<(), Box<dyn Error>> {
+    match s.drop_table(drop.table).await {
+        Ok(_table) => w.write_all(b"Table created\n").await?,
+        Err(()) => w.write_all(b"Table already exists\n").await?,
     }
     Ok(())
 }

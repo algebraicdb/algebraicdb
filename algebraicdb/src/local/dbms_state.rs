@@ -2,69 +2,107 @@ use super::types::*;
 use super::*;
 use crate::api::config::DbmsConfig;
 use crate::executor::execute_replay_query;
-use crate::persistence::{load_db_data, spawn_snapshotter, DbData, WriteAheadLog};
+use crate::persistence::TransactionNumber;
+use crate::persistence::{load_db_data, spawn_snapshotter, WriteAheadLog};
 use crate::table::Table;
+use crate::types::TypeMap;
 use async_trait::async_trait;
-use futures::executor::block_on;
+use std::collections::HashMap;
 use std::sync::Arc;
-use tokio::sync::mpsc;
-use tokio::sync::oneshot;
-use tokio::sync::RwLock;
-
-type RequestSender = mpsc::UnboundedSender<(Request<Table>, oneshot::Sender<Response<Table>>)>;
-type RequestReceiver = mpsc::UnboundedReceiver<(Request<Table>, oneshot::Sender<Response<Table>>)>;
+use tokio::sync::{Mutex, RwLock};
 
 #[derive(Clone)]
 pub struct DbmsState {
-    channel: RequestSender,
+    state: Arc<Mutex<DbData>>,
     wal: Option<WriteAheadLog>,
 }
 
-impl DbmsState {
-    async fn send_request(&self, request: Request<Table>) -> Response<Table> {
-        let (response_in, response_out) = oneshot::channel();
-        self.channel
-            .send((request, response_in))
-            .unwrap_or_else(|_| panic!("Global resources request channel closed"));
-        response_out
-            .await
-            .expect("Global resources request channel closed")
+/// All state data associated with the database
+pub struct DbData {
+    /// The transaction_number associated with the initial state
+    pub transaction_number: TransactionNumber,
+
+    /// All tables in the database
+    ///
+    /// NOTE: When locking a set of tables, make sure to lock the tables
+    /// in order, sorted by their name. If not, we will have deadlocks.
+    pub tables: HashMap<String, Arc<RwLock<Table>>>,
+
+    /// A map of all types in the db
+    pub type_map: Arc<RwLock<TypeMap>>,
+}
+
+impl Default for DbData {
+    fn default() -> Self {
+        Self {
+            transaction_number: 0,
+            tables: HashMap::new(),
+            type_map: Arc::new(RwLock::new(TypeMap::new())),
+        }
     }
 }
 
 #[async_trait]
 impl DbState<Table> for DbmsState {
     async fn acquire_resources(&self, acquire: Acquire) -> Result<Resources<Table>, String> {
-        match self.send_request(Request::Acquire(acquire)).await {
-            Response::AcquiredResources(resources) => Ok(resources),
-            Response::NoSuchTable(name) => Err(name),
-            _ => unreachable!(),
+        let state = self.state.lock().await;
+        let type_map = state.type_map.clone();
+        let resources: Result<Vec<_>, _> = acquire
+            .table_reqs
+            .into_iter()
+            .map(|req| {
+                if let Some(lock) = state.tables.get(&req.table) {
+                    // cloning an Arc is relatively cheap
+                    Ok((req.rw, req.table, lock.clone()))
+                } else {
+                    Err(req.table)
+                }
+            })
+            .collect();
+
+        match resources {
+            Ok(tables) => Ok(Resources::new(type_map, acquire.type_map_perms, tables)),
+            Err(err) => Err(err.to_string()),
         }
     }
 
     async fn acquire_all_resources(&self) -> Resources<Table> {
-        match self.send_request(Request::AcquireAll()).await {
-            Response::AcquiredResources(resources) => resources,
-            _ => unreachable!(),
-        }
+        let state = self.state.lock().await;
+        let type_map = state.type_map.clone();
+
+        // TODO: avoid string cloning
+        let mut tables: Vec<(RW, String, _)> = state
+            .tables
+            .iter()
+            .map(|(name, table_lock)| (RW::Read, name.clone(), table_lock.clone()))
+            .collect();
+
+        tables.sort_by(|(_, name_a, _), (_, name_b, _)| name_a.cmp(name_b));
+
+        Resources::new(type_map, RW::Read, tables)
     }
 
     async fn create_table(&self, name: String, table: Table) -> Result<(), ()> {
-        match self.send_request(Request::CreateTable(name, table)).await {
-            Response::CreateTable(resp) => resp,
-            _ => unreachable!(),
+        let mut state = self.state.lock().await;
+        if state.tables.contains_key(&name) {
+            Err(())
+        } else {
+            state.tables.insert(name.to_string(), Arc::new(RwLock::new(table)));
+            Ok(())
         }
+    }
+
+    async fn drop_table(&self, name: &str) -> Result<(), ()> {
+        let mut state = self.state.lock().await;
+        state.tables.remove(name).map(|_| ()).ok_or(())
     }
 }
 
 impl DbmsState {
     pub async fn new(config: DbmsConfig) -> Self {
-        let (requests_in, requests_out) = mpsc::unbounded_channel();
-
         if config.no_data_dir {
-            std::thread::spawn(move || resource_manager(requests_out, DbData::default()));
             Self {
-                channel: requests_in,
+                state: Default::default(),
                 wal: None,
             }
         } else {
@@ -83,10 +121,8 @@ impl DbmsState {
 
             let transaction_number = db_data.transaction_number;
 
-            std::thread::spawn(move || resource_manager(requests_out, db_data));
-
             let mut state = Self {
-                channel: requests_in,
+                state: Arc::new(Mutex::new(db_data)),
                 wal: Some(wal),
             };
 
@@ -114,81 +150,5 @@ impl DbmsState {
 
     pub fn wal(&mut self) -> Option<&mut WriteAheadLog> {
         self.wal.as_mut()
-    }
-}
-
-fn resource_manager(mut requests: RequestReceiver, data: DbData) {
-    // NOTE: When locking a set of tables, make sure to lock the tables
-    // in order, sorted by their name. If not, we will have deadlocks.
-
-    let mut tables = data.tables;
-    let type_map = data.type_map;
-
-    loop {
-        let (request, response_ch) = match block_on(requests.recv()) {
-            Some(r) => r,
-            None => return, // channel closed, exit manager.
-        };
-
-        match request {
-            Request::AcquireAll() => {
-                let type_map = type_map.clone();
-
-                // TODO: avoid string cloning
-                let mut tables: Vec<(RW, String, _)> = tables
-                    .iter()
-                    .map(|(name, table_lock)| (RW::Read, name.clone(), table_lock.clone()))
-                    .collect();
-
-                tables.sort_by(|(_, name_a, _), (_, name_b, _)| name_a.cmp(name_b));
-
-                response_ch
-                    .send(Response::AcquiredResources(Resources::new(
-                        type_map,
-                        RW::Read,
-                        tables,
-                    )))
-                    .unwrap_or_else(|_| eprintln!("global::manager: response channel closed."));
-            }
-            Request::Acquire(Acquire {
-                table_reqs,
-                type_map_perms,
-            }) => {
-                let type_map = type_map.clone();
-                let resources: Result<Vec<_>, _> = table_reqs
-                    .into_iter()
-                    .map(|req| {
-                        if let Some(lock) = tables.get(&req.table) {
-                            // cloning an Arc is relatively cheap
-                            Ok((req.rw, req.table, lock.clone()))
-                        } else {
-                            Err(Response::NoSuchTable(req.table.clone()))
-                        }
-                    })
-                    .collect();
-
-                match resources {
-                    Ok(tables) => response_ch.send(Response::AcquiredResources(Resources::new(
-                        type_map,
-                        type_map_perms,
-                        tables,
-                    ))),
-                    Err(err) => response_ch.send(err),
-                }
-                .unwrap_or_else(|_| eprintln!("global::manager: response channel closed."));
-            }
-            Request::CreateTable(name, table) => {
-                if tables.contains_key(&name) {
-                    response_ch
-                        .send(Response::CreateTable(Err(())))
-                        .unwrap_or_else(|_| eprintln!("global::manager: response channel closed."));
-                } else {
-                    tables.insert(name, Arc::new(RwLock::new(table)));
-                    response_ch
-                        .send(Response::CreateTable(Ok(())))
-                        .unwrap_or_else(|_| eprintln!("global::manager: response channel closed."));
-                }
-            }
-        }
     }
 }
