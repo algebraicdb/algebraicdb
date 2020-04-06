@@ -2,9 +2,11 @@ use serde::{Deserialize, Serialize};
 use std::fmt::{self, Display, Formatter};
 use std::ops::{Deref, DerefMut};
 
+/// Represents a slice of string by the start and end byte index
 #[derive(Clone, Copy, Debug)]
 pub struct Span(pub usize, pub usize);
 
+/// A value with an associated span
 #[derive(Debug, Clone, Copy, Deserialize, Serialize)]
 pub struct Spanned<T> {
     #[serde(skip)]
