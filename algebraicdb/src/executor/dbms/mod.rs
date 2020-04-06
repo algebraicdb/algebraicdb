@@ -99,7 +99,7 @@ async fn execute_stmt(
             | Stmt::Delete(_)
             | Stmt::Update(_)
             | Stmt::Drop(_)
-            | Stmt::Insert(_) => wal.write(&ast).await,
+            | Stmt::Insert(_) => wal.write(&ast).await?,
             Stmt::Select(_) => { /* We're only reading, so no logging required*/ }
         }
     }

@@ -102,13 +102,14 @@ impl DbState<Table> for DbmsState {
 
 impl DbmsState {
     pub async fn new(config: DbmsConfig) -> Self {
-        if config.no_data_dir {
+        if config.no_persistence {
             Self {
                 state: Default::default(),
                 wal: None,
             }
         } else {
-            let (wal, wal_entries) = WriteAheadLog::new(&config.data_dir).await;
+            let (wal, wal_entries) =
+                WriteAheadLog::new(&config.data_dir, config.wal_truncate_at).await;
 
             let db_data = match load_db_data(&config.data_dir).await {
                 Ok(state) => state,

@@ -6,13 +6,12 @@ use futures::future::join_all;
 use std::io;
 use std::ops::Deref;
 use std::path::PathBuf;
-use std::sync::atomic::Ordering;
-use tokio::fs::{create_dir, rename, OpenOptions};
+use tokio::fs::{create_dir, rename, File, OpenOptions};
 use tokio::io::AsyncWriteExt;
 
 use super::{
     TransactionNumber, CURRENT_TRANSACTION_FILE_NAME, TABLES_DIR_NAME, TMP_TRANSACTION_FILE_NAME,
-    TRANSACTION_NUMBER, TYPE_MAP_FILE_NAME,
+    TYPE_MAP_FILE_NAME,
 };
 
 /// Write the current database state to a temporary folder, and then atomically replace the active data folder
@@ -27,7 +26,7 @@ pub(super) async fn snapshot(
     let resources = resources.take().await;
 
     // Ordering::Relaxed should be fine since we have also locked all tables, which means no one is writing to the WAL.
-    let transaction_number = TRANSACTION_NUMBER.load(Ordering::Relaxed);
+    let transaction_number = dbms.wal().unwrap().transaction_number();
     let transaction_number_str = transaction_number.to_string();
 
     let transaction_folder = data_dir.join(&transaction_number_str);
@@ -68,7 +67,13 @@ pub(super) async fn snapshot(
         "Renaming {:?} to {:?}.",
         tmp_transaction_file_path, cur_transaction_file_path
     );
+
+    // Rename the file, and make sure the rename gets synced to disk
     rename(&tmp_transaction_file_path, &cur_transaction_file_path).await?;
+    File::open(&cur_transaction_file_path)
+        .await?
+        .sync_all()
+        .await?;
 
     eprintln!("Snapshot complete.");
 

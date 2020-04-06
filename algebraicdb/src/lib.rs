@@ -1,4 +1,5 @@
 #![feature(str_strip)]
+#![feature(const_int_pow)]
 #![feature(never_type)]
 #![feature(box_syntax)]
 #![feature(box_patterns)]

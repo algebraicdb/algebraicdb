@@ -1,4 +1,4 @@
-use crate::util::Timing;
+use crate::util::{NumBytes, Timing};
 use std::path::PathBuf;
 use structopt::StructOpt;
 
@@ -8,16 +8,20 @@ pub struct DbmsConfig {
     /// This option will make the dbms store all data in memory.
     /// Setting this option will make the `data_dir` option be ignored.
     #[structopt(long)]
-    pub no_data_dir: bool,
+    pub no_persistence: bool,
+
+    /// Aftec the WAL reaches this many bytes, truncate it.
+    #[structopt(long, env = "ALGDB_WAL_TRUNCATE_AT", default_value = "1G")]
+    pub wal_truncate_at: NumBytes,
 
     /// Determine when the dbms should try to flush to disk.
-    /// Has no effect if `no_data_dir` is set.
+    /// Has no effect if `no_persistence` is set.
     #[structopt(long, env = "ALGDB_SNAPSHOT_TIMING", default_value = "30s")]
     pub disk_flush_timing: Timing,
 
     /// The dbms data directory.
     /// This option will make the dbms store all data in memory.
-    /// Has no effect if `no_data_dir` is set.
+    /// Has no effect if `no_persistence` is set.
     #[structopt(
         long,
         parse(from_os_str),
@@ -33,7 +37,7 @@ impl DbmsConfig {
     /// This config will not write anything to disk.
     pub fn testing_config() -> Self {
         Self {
-            no_data_dir: true,
+            no_persistence: true,
             ..Default::default()
         }
     }
@@ -42,7 +46,8 @@ impl DbmsConfig {
 impl Default for DbmsConfig {
     fn default() -> Self {
         Self {
-            no_data_dir: false,
+            no_persistence: false,
+            wal_truncate_at: "1G".parse().unwrap(),
             disk_flush_timing: "30s".parse().unwrap(),
             data_dir: "./data".parse().unwrap(),
         }

@@ -5,7 +5,7 @@ mod write;
 
 pub(crate) use manager::spawn_snapshotter;
 pub(crate) use read::load_db_data;
-pub(crate) use wal::{TransactionNumber, WriteAheadLog, WriteToWal, TRANSACTION_NUMBER};
+pub(crate) use wal::{TransactionNumber, WriteAheadLog, WriteToWal};
 pub(self) use write::snapshot;
 
 // Data-directory layout:
