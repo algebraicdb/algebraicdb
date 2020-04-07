@@ -1,33 +1,39 @@
-use crate::pattern::Pattern;
+mod pattern;
+mod span;
+
+pub use pattern::*;
+pub use span::*;
+
 use crate::types::Value;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Deserialize, Serialize)]
 pub enum Expr<'a> {
-    Ident(&'a str),
-    Value(Value<'a>),
-    Equals(Box<Expr<'a>>, Box<Expr<'a>>),
-    NotEquals(Box<Expr<'a>>, Box<Expr<'a>>),
-    LessEquals(Box<Expr<'a>>, Box<Expr<'a>>),
-    LessThan(Box<Expr<'a>>, Box<Expr<'a>>),
-    GreaterThan(Box<Expr<'a>>, Box<Expr<'a>>),
-    GreaterEquals(Box<Expr<'a>>, Box<Expr<'a>>),
-    And(Box<Expr<'a>>, Box<Expr<'a>>),
-    Or(Box<Expr<'a>>, Box<Expr<'a>>),
+    #[serde(borrow)]
+    Ident(Spanned<&'a str>),
+    Value(Spanned<Value<'a>>),
+    Eql(Box<(Spanned<Expr<'a>>, Spanned<Expr<'a>>)>),
+    NEq(Box<(Spanned<Expr<'a>>, Spanned<Expr<'a>>)>),
+    LEq(Box<(Spanned<Expr<'a>>, Spanned<Expr<'a>>)>),
+    LTh(Box<(Spanned<Expr<'a>>, Spanned<Expr<'a>>)>),
+    GTh(Box<(Spanned<Expr<'a>>, Spanned<Expr<'a>>)>),
+    GEq(Box<(Spanned<Expr<'a>>, Spanned<Expr<'a>>)>),
+    And(Box<(Spanned<Expr<'a>>, Spanned<Expr<'a>>)>),
+    Or(Box<(Spanned<Expr<'a>>, Spanned<Expr<'a>>)>),
 }
 
 #[derive(Debug, Deserialize, Serialize)]
 pub struct Ass<'a> {
-    pub col: &'a str,
+    pub col: Spanned<&'a str>,
 
     #[serde(borrow)]
-    pub expr: Expr<'a>,
+    pub expr: Spanned<Expr<'a>>,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
 pub struct Select<'a> {
     #[serde(borrow)]
-    pub items: Vec<Expr<'a>>,
+    pub items: Vec<Spanned<Expr<'a>>>,
 
     #[serde(borrow)]
     pub from: Option<SelectFrom<'a>>,
@@ -38,8 +44,9 @@ pub struct Select<'a> {
 
 #[derive(Debug, Deserialize, Serialize)]
 pub enum WhereItem<'a> {
-    Expr(Expr<'a>),
-    Pattern(&'a str, Pattern<'a>),
+    #[serde(borrow)]
+    Expr(Spanned<Expr<'a>>),
+    Pattern(Spanned<&'a str>, Spanned<Pattern<'a>>),
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -59,7 +66,7 @@ pub struct Join<'a> {
     pub join_type: JoinType,
 
     #[serde(borrow)]
-    pub on_clause: Option<Expr<'a>>,
+    pub on_clause: Option<Spanned<Expr<'a>>>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, Copy)]
@@ -93,7 +100,7 @@ pub struct Drop<'a> {
 #[derive(Debug, Deserialize, Serialize)]
 pub struct Insert<'a> {
     pub table: &'a str,
-    pub columns: Vec<&'a str>,
+    pub columns: Spanned<Vec<Spanned<&'a str>>>,
 
     #[serde(borrow)]
     pub from: InsertFrom<'a>,
@@ -102,14 +109,14 @@ pub struct Insert<'a> {
 #[derive(Debug, Deserialize, Serialize)]
 pub enum InsertFrom<'a> {
     #[serde(borrow)]
-    Values(Vec<Vec<Expr<'a>>>),
-    Select(Select<'a>),
+    Values(Vec<Spanned<Vec<Spanned<Expr<'a>>>>>),
+    Select(Spanned<Select<'a>>),
 }
 
 #[derive(Debug, Deserialize, Serialize)]
 pub struct CreateTable<'a> {
     pub table: &'a str,
-    pub columns: Vec<(&'a str, &'a str)>,
+    pub columns: Vec<(Spanned<&'a str>, Spanned<&'a str>)>,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -138,7 +145,13 @@ pub struct Update<'a> {
 
 #[derive(Debug, Deserialize, Serialize)]
 pub enum CreateType<'a> {
-    Variant(&'a str, Vec<(&'a str, Vec<&'a str>)>),
+    Variant {
+        #[serde(borrow)]
+        name: Spanned<&'a str>,
+
+        #[serde(borrow)]
+        variants: Vec<(Spanned<&'a str>, Vec<Spanned<&'a str>>)>,
+    },
 }
 
 #[test]

@@ -1,16 +1,17 @@
 #![feature(str_strip)]
 #![feature(never_type)]
 #![feature(box_syntax)]
+#![feature(box_patterns)]
 #![feature(async_closure)]
 #![allow(dead_code)]
 
 mod api;
 pub mod ast;
 mod client;
+mod error_message;
 pub mod executor;
 pub mod grammar;
 pub mod local;
-mod pattern;
 mod persistence;
 mod pre_typechecker;
 pub mod table;

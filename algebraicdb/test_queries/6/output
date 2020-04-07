@@ -1,77 +1,40 @@
-Type MaybeInt created 
+Type MaybeInt created
 Table created
-InvalidType {
-    expected: 1,
-    actual: 2,
-}
-InvalidType {
-    expected: 1,
-    actual: 3,
-}
-InvalidType {
-    expected: 1,
-    actual: 2,
-}
-InvalidType {
-    expected: 1,
-    actual: 3,
-}
-InvalidType {
-    expected: 5,
-    actual: 1,
-}
-UnrecognizedToken {
-    token: (
-        73,
-        Token(
-            10,
-            ")",
-        ),
-        74,
-    ),
-    expected: [
-        "\"(\"",
-    ],
-}
-UnrecognizedToken {
-    token: (
-        41,
-        Token(
-            3,
-            "42",
-        ),
-        43,
-    ),
-    expected: [
-        "\"!=\"",
-        "\"(\"",
-        "\")\"",
-        "\",\"",
-        "\":\"",
-        "\"::\"",
-        "\";\"",
-        "\"<\"",
-        "\"<=\"",
-        "\"=\"",
-        "\">\"",
-        "\">=\"",
-        "AND",
-        "AS",
-        "FROM",
-        "FULL",
-        "IDENT",
-        "INNER",
-        "JOIN",
-        "LEFT",
-        "ON",
-        "OR",
-        "RIGHT",
-        "SELECT",
-        "SET",
-        "VALUES",
-        "WHERE",
-    ],
-}
+    --> ERROR
+     |
+   2 | INSERT INTO t(m) VALUES (MaybeInt::Just(42.42));
+     |                          ^^^^^^^^^^^^^^^^^^^^^
+     *            invalid type: found "Double", expected "Integer"
+    --> ERROR
+     |
+   1 | INSERT INTO t(m) VALUES (MaybeInt::Just(true));
+     |                          ^^^^^^^^^^^^^^^^^^^^
+     *             invalid type: found "Bool", expected "Integer"
+    --> ERROR
+     |
+   1 | INSERT INTO t(m) VALUES (          Just(42.42));
+     |                                    ^^^^^^^^^^^
+     *                 invalid type: found "Double", expected "Integer"
+    --> ERROR
+     |
+   1 | INSERT INTO t(m) VALUES (          Just(true));
+     |                                    ^^^^^^^^^^
+     *                  invalid type: found "Bool", expected "Integer"
+    --> ERROR
+     |
+   2 | INSERT INTO t(m) VALUES (42);
+     |                          ^^
+     *  invalid type: found "Integer", expected "MaybeInt"
+    --> ERROR
+     |
+   2 | INSERT INTO t(m) VALUES (MaybeInt::Nothing);
+     |                                           ^
+     *                                  unrecognized token
+    --> ERROR
+     |
+   1 | INSERT INTO t(m) VALUES (MaybeInt::Just 42);
+     |                                         ^^
+     *                                 unrecognized token
 1 row(s) inserted
 1 row(s) inserted
 [Just(42)]

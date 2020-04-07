@@ -73,7 +73,7 @@ where
             let input = &input[..end];
 
             // Exectue the (semicolon-terminated) string as a query
-            execute_query(input, &mut state, &mut writer).await?;
+            execute_query(input.trim(), &mut state, &mut writer).await?;
 
             writer.flush().await?;
 
