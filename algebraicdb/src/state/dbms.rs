@@ -109,7 +109,7 @@ impl DbmsState {
             }
         } else {
             let (wal, wal_entries) =
-                WriteAheadLog::new(&config.data_dir, config.wal_truncate_at).await;
+                WriteAheadLog::new(config.data_dir.clone(), config.wal_truncate_at).await;
 
             let db_data = match load_db_data(&config.data_dir).await {
                 Ok(state) => state,
@@ -132,11 +132,13 @@ impl DbmsState {
             // TODO: This can probably be optimized
             for (entry_tn, query_data) in wal_entries {
                 if entry_tn > transaction_number {
-                    eprintln!("Replaying transaction {}", entry_tn);
-                    let query = bincode::deserialize(&query_data).unwrap();
-                    execute_replay_query(query, &mut state, &mut Vec::<u8>::new())
-                        .await
-                        .unwrap();
+                    if let Some(query_data) = query_data {
+                        eprintln!("Replaying transaction {}", entry_tn);
+                        let query = bincode::deserialize(&query_data).unwrap();
+                        execute_replay_query(query, &mut state, &mut Vec::<u8>::new())
+                            .await
+                            .unwrap();
+                    }
                 }
             }
 

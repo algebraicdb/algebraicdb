@@ -34,7 +34,9 @@ async fn manager(
                 "Checking snapshot {} vs current: {}",
                 last_snapshotted, current
             );
-            if current != last_snapshotted {
+
+            assert!(current >= last_snapshotted);
+            if current > last_snapshotted {
                 last_snapshotted = snapshot(&data_dir, &mut dbms).await.unwrap_or_else(|err| {
                     eprintln!("Failed to write snapshot: {:?}\n", err);
                     last_snapshotted

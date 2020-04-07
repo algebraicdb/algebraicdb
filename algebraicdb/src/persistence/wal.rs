@@ -6,11 +6,10 @@ use std::io;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::sync::Arc;
-use tokio::fs::{File, OpenOptions};
+use tokio::fs::{rename, File, OpenOptions};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::sync::Mutex;
-
-const WAL_NAME: &str = "wal";
+use super::{WAL_FILE_NAME, TMP_WAL_FILE_NAME};
 
 pub type TransactionNumber = u64;
 
@@ -29,29 +28,46 @@ struct WalState {
     file_size: AtomicUsize,
     truncate_at: NumBytes,
     transaction_number: AtomicU64,
+    data_dir: PathBuf,
 }
 
 pub enum WalError {
     CorruptedFile,
 }
 
-#[derive(Clone, Copy, Default, Debug, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, Serialize, Deserialize)]
 struct EntryBegin {
     transaction_number: TransactionNumber,
+
+    /// The size in bytes of the associated serialized query.
+    /// Set to 0 if there is no associated query
     entry_size: usize,
 }
 
-#[derive(Clone, Copy, Default, Debug, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, Serialize, Deserialize)]
 struct EntryEnd {
     checksum: u64,
 }
 
+lazy_static! {
+    static ref ENTRY_START_SIZE: usize = {
+        bincode::serialized_size(&EntryBegin {
+            transaction_number: 0,
+            entry_size: 0,
+        }).unwrap() as usize
+    };
+
+    static ref ENTRY_END_SIZE: usize = {
+        bincode::serialized_size(&EntryEnd { checksum: 0 } ).unwrap() as usize
+    };
+}
+
 impl WriteAheadLog {
     pub async fn new(
-        data_dir: &PathBuf,
+        data_dir: PathBuf,
         truncate_at: NumBytes,
-    ) -> (Self, Vec<(TransactionNumber, Vec<u8>)>) {
-        let wal_path = data_dir.join(WAL_NAME);
+    ) -> (Self, Vec<(TransactionNumber, Option<Vec<u8>>)>) {
+        let wal_path = data_dir.join(WAL_FILE_NAME);
         let (file_size, entries, file) = load_wal(&wal_path).await.expect("Loading WAL failed");
 
         let transaction_number = entries.last().map(|(n, _)| *n).unwrap_or(0);
@@ -62,6 +78,7 @@ impl WriteAheadLog {
                 file_size: file_size.into(),
                 truncate_at,
                 transaction_number: transaction_number.into(),
+                data_dir,
             }),
         };
 
@@ -75,7 +92,7 @@ impl WriteAheadLog {
     pub async fn write(&mut self, stmt: &Stmt<'_>) -> io::Result<()> {
         let data = serialize_log_msg(stmt);
 
-        let mut buf = Vec::with_capacity(data.len() + 16);
+        let mut buf = Vec::with_capacity(data.len() + *ENTRY_START_SIZE + *ENTRY_END_SIZE);
 
         let mut file = self.state.file.lock().await;
 
@@ -109,7 +126,7 @@ impl WriteAheadLog {
 
         eprintln!("Wrote the following to the WAL:");
         eprintln!("start:  {:?}", start);
-        eprintln!("msg:    {:?}", stmt);
+        eprintln!("entry:  {:?}", stmt);
         eprintln!("end:    {:?}", end);
         eprintln!("#bytes: {}", buf.len());
         eprintln!();
@@ -118,13 +135,67 @@ impl WriteAheadLog {
     }
 
     /// Truncate the wal if it needs it
+    ///
+    /// `until_tn` is the TransactionNumber of the latest snapshot.
+    ///
+    /// The WAL will only be truncated if...
+    /// - ...its size has reached the truncate threshold
+    /// - ...`until_tn` matches the latest entry in the wal
     pub async fn truncate_wal(&mut self, until_tn: TransactionNumber) -> io::Result<()> {
-        if self.transaction_number() <= until_tn
-            || self.state.file_size.load(Ordering::Relaxed) < self.state.truncate_at.0
-        {
+        // Don't truncate if the wal hasn't reached max size
+        if self.state.file_size.load(Ordering::Relaxed) < self.state.truncate_at.0 {
             return Ok(());
         }
-        unimplemented!("truncate wal")
+
+        let tmp_file_path = self.state.data_dir.join(TMP_WAL_FILE_NAME);
+        let file_path = self.state.data_dir.join(WAL_FILE_NAME);
+
+        // Take the file lock
+        let mut file = self.state.file.lock().await;
+
+        // Only truncate the wal if everything is synced to disk
+        // Under heavy load, if this function is called after snapshotting, this check might not
+        // pass. In which case, the wal might grow past the maximum size.
+        let transaction_number = self.state.transaction_number.load(Ordering::Relaxed);
+        if transaction_number != until_tn {
+            return Ok(());
+        }
+
+        eprintln!("truncating wal...");
+
+        // Serialize an initial entry, with the current transaction number
+        let mut buf = Vec::with_capacity(*ENTRY_START_SIZE + *ENTRY_END_SIZE);
+
+        let start = EntryBegin {
+            transaction_number,
+            entry_size: 0,
+        };
+        bincode::serialize_into(&mut buf, &start).unwrap();
+
+        let end = EntryEnd {
+            checksum: checksum(&buf),
+        };
+        bincode::serialize_into(&mut buf, &end).unwrap();
+
+        // Create a new temporary file
+        let mut new_file = OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&tmp_file_path)
+            .await?;
+
+        // Write the initial entry to the file
+        new_file.write_all(&buf).await?;
+        new_file.sync_all().await?;
+
+        // Replace the new file with the old one in our state
+        std::mem::swap(&mut new_file, &mut file);
+        drop(new_file);
+
+        // Replace the old file with the new one on disk.
+        // _Should_ be no need to sync this, since the file
+        // will get synced anyway after its first write.
+        rename(&tmp_file_path, &file_path).await
     }
 }
 
@@ -144,16 +215,13 @@ fn checksum(data: &[u8]) -> u64 {
 
 pub async fn load_wal(
     path: &PathBuf,
-) -> io::Result<(usize, Vec<(TransactionNumber, Vec<u8>)>, File)> {
+) -> io::Result<(usize, Vec<(TransactionNumber, Option<Vec<u8>>)>, File)> {
     let mut file: File = OpenOptions::new()
         .write(true)
         .read(true)
         .create(true)
         .open(path)
         .await?;
-
-    let size_of_entry_begin = bincode::serialized_size(&EntryBegin::default()).unwrap() as usize;
-    let size_of_entry_end = bincode::serialized_size(&EntryEnd::default()).unwrap() as usize;
 
     let mut data = Vec::new();
     let mut entries = Vec::new();
@@ -164,34 +232,37 @@ pub async fn load_wal(
         loop {
             if data.is_empty() {
                 break;
-            } else if size_of_entry_begin > data.len() {
+            } else if *ENTRY_START_SIZE > data.len() {
                 panic!("Corrupt WAL");
             }
 
-            let start: EntryBegin = match bincode::deserialize(&data[..size_of_entry_begin]) {
+            let start: EntryBegin = match bincode::deserialize(&data[..*ENTRY_START_SIZE]) {
                 Ok(eb) => eb,
                 Err(_) => break,
             };
 
-            if start.entry_size + size_of_entry_begin + size_of_entry_end > data.len() {
-                panic!("Corrupt WAL");
-            }
-
             let calculated_checksum = {
-                let checksum_area = size_of_entry_begin + start.entry_size;
+                let checksum_area = *ENTRY_START_SIZE + start.entry_size;
                 checksum(&data[..checksum_area])
             };
 
-            data = &data[size_of_entry_begin..];
+            if start.entry_size + *ENTRY_START_SIZE + *ENTRY_END_SIZE > data.len() {
+                panic!("Corrupt WAL");
+            }
 
-            let query = data[..start.entry_size].into();
-            data = &data[start.entry_size..];
+            data = &data[*ENTRY_START_SIZE..];
 
-            let end: EntryEnd = match bincode::deserialize(&data[..size_of_entry_end]) {
+            let mut query = None;
+            if start.entry_size > 0 {
+                query = Some(data[..start.entry_size].into());
+                data = &data[start.entry_size..];
+            }
+
+            let end: EntryEnd = match bincode::deserialize(&data[..*ENTRY_END_SIZE]) {
                 Ok(stmt) => stmt,
                 Err(_) => panic!("Corrupt WAL"),
             };
-            data = &data[size_of_entry_end..];
+            data = &data[*ENTRY_END_SIZE..];
 
             if end.checksum != calculated_checksum {
                 panic!("Corrupt WAL: Invalid checksum")
@@ -199,7 +270,7 @@ pub async fn load_wal(
 
             eprintln!("Read the following from the WAL:");
             eprintln!("start: {:?}", start);
-            eprintln!("msg:   {:?}", query);
+            eprintln!("entry: {:?}", query);
             eprintln!("end:   {:?}", end);
             eprintln!();
 

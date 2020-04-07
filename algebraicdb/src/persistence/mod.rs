@@ -17,7 +17,8 @@ pub(self) use write::snapshot;
 // | | - tables               (a folder containing the raw data of all tables)
 // | | | - <table_name>       (raw data of the table)
 pub(self) const WAL_FILE_NAME: &str = "wal";
-pub(self) const CURRENT_TRANSACTION_FILE_NAME: &str = "current_tn";
-pub(self) const TMP_TRANSACTION_FILE_NAME: &str = "tmp_tn";
+pub(self) const TMP_WAL_FILE_NAME: &str = "wal.tmp";
+pub(self) const CURRENT_TRANSACTION_FILE_NAME: &str = "tnum";
+pub(self) const TMP_TRANSACTION_FILE_NAME: &str = "tnum.tmp";
 pub(self) const TABLES_DIR_NAME: &str = "tables";
 pub(self) const TYPE_MAP_FILE_NAME: &str = "type_map";

@@ -6,6 +6,9 @@
 #![feature(async_closure)]
 #![allow(dead_code)]
 
+#[macro_use]
+extern crate lazy_static;
+
 mod api;
 pub mod ast;
 mod client;
