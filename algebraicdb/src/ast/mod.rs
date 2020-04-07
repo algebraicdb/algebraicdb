@@ -12,14 +12,14 @@ pub enum Expr<'a> {
     #[serde(borrow)]
     Ident(Spanned<&'a str>),
     Value(Spanned<Value<'a>>),
-    Eq(Box<(Spanned<Expr<'a>>, Spanned<Expr<'a>>)>),
-    NE(Box<(Spanned<Expr<'a>>, Spanned<Expr<'a>>)>),
-    LE(Box<(Spanned<Expr<'a>>, Spanned<Expr<'a>>)>),
-    LT(Box<(Spanned<Expr<'a>>, Spanned<Expr<'a>>)>),
-    GT(Box<(Spanned<Expr<'a>>, Spanned<Expr<'a>>)>),
-    GE(Box<(Spanned<Expr<'a>>, Spanned<Expr<'a>>)>),
-    Or(Box<(Spanned<Expr<'a>>, Spanned<Expr<'a>>)>),
+    Eql(Box<(Spanned<Expr<'a>>, Spanned<Expr<'a>>)>),
+    NEq(Box<(Spanned<Expr<'a>>, Spanned<Expr<'a>>)>),
+    LEq(Box<(Spanned<Expr<'a>>, Spanned<Expr<'a>>)>),
+    LTh(Box<(Spanned<Expr<'a>>, Spanned<Expr<'a>>)>),
+    GTh(Box<(Spanned<Expr<'a>>, Spanned<Expr<'a>>)>),
+    GEq(Box<(Spanned<Expr<'a>>, Spanned<Expr<'a>>)>),
     And(Box<(Spanned<Expr<'a>>, Spanned<Expr<'a>>)>),
+    Or(Box<(Spanned<Expr<'a>>, Spanned<Expr<'a>>)>),
 }
 
 #[derive(Debug, Deserialize, Serialize)]

@@ -571,12 +571,12 @@ fn check_expr<'ast, T: TTable>(
         Expr::Value(value) => type_of_value(&value, expr.span, type_map),
 
         // All types are currently Eq and Ord
-        Expr::Eq(box (e1, e2))
-        | Expr::NE(box (e1, e2))
-        | Expr::LE(box (e1, e2))
-        | Expr::LT(box (e1, e2))
-        | Expr::GE(box (e1, e2))
-        | Expr::GT(box (e1, e2)) => {
+        Expr::Eql(box (e1, e2))
+        | Expr::NEq(box (e1, e2))
+        | Expr::LEq(box (e1, e2))
+        | Expr::LTh(box (e1, e2))
+        | Expr::GEq(box (e1, e2))
+        | Expr::GTh(box (e1, e2)) => {
             let type_1 = check_expr(e1, ctx)?;
             let type_2 = check_expr(e2, ctx)?;
             assert_type_eq(type_1, type_2, expr.span, type_map)?;
@@ -745,21 +745,21 @@ mod tests {
         };
 
         let valid_examples = vec![
-            Expr::Eq(box (
+            Expr::Eql(box (
                 Expr::Value(Value::Integer(3).into()).into(),
                 Expr::Value(Value::Integer(2).into()).into(),
             )),
-            Expr::Eq(box (
+            Expr::Eql(box (
                 Expr::Value(Value::Bool(true).into()).into(),
                 Expr::Value(Value::Bool(true).into()).into(),
             )),
-            Expr::Eq(box (
+            Expr::Eql(box (
                 Expr::Value(Value::Double(0.0).into()).into(),
                 Expr::Value(Value::Double(0.1).into()).into(),
             )),
             Expr::And(box (
                 Expr::Value(Value::Bool(false).into()).into(),
-                Expr::GT(box (
+                Expr::GTh(box (
                     Expr::Value(Value::Integer(42).into()).into(),
                     Expr::Value(Value::Integer(0).into()).into(),
                 ))
@@ -768,7 +768,7 @@ mod tests {
         ];
 
         let invalid_examples = vec![
-            Expr::Eq(box (
+            Expr::Eql(box (
                 Expr::Value(Value::Bool(false).into()).into(),
                 Expr::Value(Value::Integer(2).into()).into(),
             )),

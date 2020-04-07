@@ -384,12 +384,12 @@ where
 
     match expr {
         Expr::Value(v) => v.deep_clone(),
-        Expr::Eq(box (e1, e2)) => cmp(e1, e2, bs, |v1, v2| v1 == v2),
-        Expr::NE(box (e1, e2)) => cmp(e1, e2, bs, |v1, v2| v1 != v2),
-        Expr::LE(box (e1, e2)) => cmp(e1, e2, bs, |v1, v2| v1 <= v2),
-        Expr::LT(box (e1, e2)) => cmp(e1, e2, bs, |v1, v2| v1 < v2),
-        Expr::GT(box (e1, e2)) => cmp(e1, e2, bs, |v1, v2| v1 > v2),
-        Expr::GE(box (e1, e2)) => cmp(e1, e2, bs, |v1, v2| v1 >= v2),
+        Expr::Eql(box (e1, e2)) => cmp(e1, e2, bs, |v1, v2| v1 == v2),
+        Expr::NEq(box (e1, e2)) => cmp(e1, e2, bs, |v1, v2| v1 != v2),
+        Expr::LEq(box (e1, e2)) => cmp(e1, e2, bs, |v1, v2| v1 <= v2),
+        Expr::LTh(box (e1, e2)) => cmp(e1, e2, bs, |v1, v2| v1 < v2),
+        Expr::GTh(box (e1, e2)) => cmp(e1, e2, bs, |v1, v2| v1 > v2),
+        Expr::GEq(box (e1, e2)) => cmp(e1, e2, bs, |v1, v2| v1 >= v2),
         Expr::And(box (e1, e2)) => match execute_expr(e1, bs.clone()) {
             Value::Bool(true) => execute_expr(e2, bs),
             Value::Bool(false) => Value::Bool(false),

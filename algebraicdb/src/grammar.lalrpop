@@ -217,12 +217,12 @@ Expr3: Expr<'input> = {
 }
 
 Expr2: Expr<'input> = {
-    <e1:Spanned<Expr2>> "="  <e2:Spanned<Expr3>> => Expr::Eq(box (e1, e2)),
-    <e1:Spanned<Expr2>> "!=" <e2:Spanned<Expr3>> => Expr::NE(box (e1, e2)),
-    <e1:Spanned<Expr2>> "<=" <e2:Spanned<Expr3>> => Expr::LE(box (e1, e2)),
-    <e1:Spanned<Expr2>> ">=" <e2:Spanned<Expr3>> => Expr::GE(box (e1, e2)),
-    <e1:Spanned<Expr2>> "<"  <e2:Spanned<Expr3>> => Expr::LT(box (e1, e2)),
-    <e1:Spanned<Expr2>> ">"  <e2:Spanned<Expr3>> => Expr::GT(box (e1, e2)),
+    <e1:Spanned<Expr2>> "="  <e2:Spanned<Expr3>> => Expr::Eql(box (e1, e2)),
+    <e1:Spanned<Expr2>> "!=" <e2:Spanned<Expr3>> => Expr::NEq(box (e1, e2)),
+    <e1:Spanned<Expr2>> "<=" <e2:Spanned<Expr3>> => Expr::LEq(box (e1, e2)),
+    <e1:Spanned<Expr2>> ">=" <e2:Spanned<Expr3>> => Expr::GEq(box (e1, e2)),
+    <e1:Spanned<Expr2>> "<"  <e2:Spanned<Expr3>> => Expr::LTh(box (e1, e2)),
+    <e1:Spanned<Expr2>> ">"  <e2:Spanned<Expr3>> => Expr::GTh(box (e1, e2)),
     Expr3,
 }
 
