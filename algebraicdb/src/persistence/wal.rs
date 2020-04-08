@@ -1,3 +1,4 @@
+use super::{TMP_WAL_FILE_NAME, WAL_FILE_NAME};
 use crate::ast::Stmt;
 use crate::util::NumBytes;
 use bincode;
@@ -9,7 +10,6 @@ use std::sync::Arc;
 use tokio::fs::{rename, File, OpenOptions};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::sync::Mutex;
-use super::{WAL_FILE_NAME, TMP_WAL_FILE_NAME};
 
 pub type TransactionNumber = u64;
 
@@ -54,12 +54,11 @@ lazy_static! {
         bincode::serialized_size(&EntryBegin {
             transaction_number: 0,
             entry_size: 0,
-        }).unwrap() as usize
+        })
+        .unwrap() as usize
     };
-
-    static ref ENTRY_END_SIZE: usize = {
-        bincode::serialized_size(&EntryEnd { checksum: 0 } ).unwrap() as usize
-    };
+    static ref ENTRY_END_SIZE: usize =
+        { bincode::serialized_size(&EntryEnd { checksum: 0 }).unwrap() as usize };
 }
 
 impl WriteAheadLog {
@@ -101,7 +100,8 @@ impl WriteAheadLog {
         let transaction_number = self
             .state
             .transaction_number
-            .fetch_add(1, Ordering::Relaxed) + 1;
+            .fetch_add(1, Ordering::Relaxed)
+            + 1;
         let start = EntryBegin {
             transaction_number,
             entry_size: data.len(),

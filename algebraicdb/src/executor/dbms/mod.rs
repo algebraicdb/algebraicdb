@@ -289,8 +289,14 @@ async fn execute_create_table(
     let table = Table::new(schema, &resources.type_map);
 
     match s.create_table(create_table.table.to_string(), table).await {
-        Ok(()) => w.write_all(format!("table created: \"{}\"\n", create_table.table).as_bytes()).await?,
-        Err(()) => w.write_all(format!("table already exists: \"{}\"\n", create_table.table).as_bytes()).await?,
+        Ok(()) => {
+            w.write_all(format!("table created: \"{}\"\n", create_table.table).as_bytes())
+                .await?
+        }
+        Err(()) => {
+            w.write_all(format!("table already exists: \"{}\"\n", create_table.table).as_bytes())
+                .await?
+        }
     };
     Ok(())
 }
@@ -331,8 +337,14 @@ async fn execute_drop_table(
     w: &mut (dyn AsyncWrite + Send + Unpin),
 ) -> Result<(), Box<dyn Error>> {
     match s.drop_table(drop.table).await {
-        Ok(()) => w.write_all(format!("table dropped: \"{}\"\n", drop.table).as_bytes()).await?,
-        Err(()) => w.write_all(format!("no such table: \"{}\"\n", drop.table).as_bytes()).await?,
+        Ok(()) => {
+            w.write_all(format!("table dropped: \"{}\"\n", drop.table).as_bytes())
+                .await?
+        }
+        Err(()) => {
+            w.write_all(format!("no such table: \"{}\"\n", drop.table).as_bytes())
+                .await?
+        }
     }
     Ok(())
 }
