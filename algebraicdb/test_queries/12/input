@@ -1,0 +1,19 @@
+-- creating and dropping a table
+
+SELECT FROM t;
+
+CREATE TABLE t(a Integer);
+INSERT INTO t(a) VALUES (42);
+SELECT a FROM t;
+
+DROP TABLE t;
+SELECT a FROM t;
+
+CREATE TABLE t(a Integer);
+SELECT a FROM t;
+
+INSERT INTO t(a) VALUES (37);
+SELECT a FROM t;
+
+DROP TABLE t;
+SELECT a FROM t;

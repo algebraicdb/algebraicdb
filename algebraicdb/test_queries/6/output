@@ -1,5 +1,5 @@
-Type MaybeInt created
-Table created
+type MaybeInt created
+table created: "t"
     --> ERROR
      |
    2 | INSERT INTO t(m) VALUES (MaybeInt::Just(42.42));

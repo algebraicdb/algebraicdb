@@ -1,6 +1,6 @@
-Type MaybeInt created
-Type MaybeMaybeInt created
-Table created
+type MaybeInt created
+type MaybeMaybeInt created
+table created: "oh_no"
     --> ERROR
      |
    1 | INSERT INTO oh_no(ambiguity) VALUES (Just(42));

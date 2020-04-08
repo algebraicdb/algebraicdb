@@ -101,7 +101,7 @@ impl WriteAheadLog {
         let transaction_number = self
             .state
             .transaction_number
-            .fetch_add(1, Ordering::Relaxed);
+            .fetch_add(1, Ordering::Relaxed) + 1;
         let start = EntryBegin {
             transaction_number,
             entry_size: data.len(),

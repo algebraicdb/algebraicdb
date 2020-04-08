@@ -1,4 +1,4 @@
-Table created
+table created: "ints"
     --> ERROR
      |
    1 | INSERT INTO ints(int) VALUES (true), (false);

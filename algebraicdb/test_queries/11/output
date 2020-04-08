@@ -3,7 +3,7 @@
    4 | CREATE TYPE Option AS VARIANT { Some(NotAType), None() };
      |                                      ^^^^^^^^
      *                            type "NotAType" is undefined
-Type Option created
+type Option created
     --> ERROR
      |
    1 | CREATE TYPE Option AS VARIANT {};
@@ -14,9 +14,9 @@ Type Option created
    1 | CREATE TABLE t(a NotAType);
      |                  ^^^^^^^^
      *        type "NotAType" is undefined
-Table created
+table created: "ints"
 1 row(s) inserted
-Table created
+table created: "opts"
 1 row(s) inserted
     --> ERROR
      |
