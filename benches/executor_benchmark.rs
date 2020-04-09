@@ -5,7 +5,6 @@ use algebraicdb::table::{Schema, Table};
 use algebraicdb::types::{BaseType, TypeMap, Value};
 
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
-use tokio::runtime::{self, Runtime};
 use tokio::sync::RwLock;
 
 use benches::rt;

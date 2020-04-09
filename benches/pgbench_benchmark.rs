@@ -1,117 +1,153 @@
-use benches::tps::simplebench::{connect2, connect};
-use benches::{rt, tps::simplebench::startup_no_wal};
-use channel_stream::{pair, Reader, Writer};
-use core::time::Duration;
-use criterion::Benchmark;
+use benches::tps::simplebench::connect2;
+use benches::{rt, tps::simplebench::{startup_with_wal, startup_no_wal}};
+
 use criterion::{black_box, criterion_group, criterion_main, BatchSize, Criterion};
-use futures::executor::block_on;
-use futures::poll;
-use futures::prelude::Future;
-use futures::task::Poll;
-use std::sync::Arc;
+
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
-use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite};
-use tokio::net::{
-    unix::{ReadHalf, WriteHalf},
-    UnixStream,
-};
+use tokio::io::{AsyncRead, AsyncWrite};
+
 use tokio::stream::StreamExt;
+
+use futures::future::join_all;
+use channel_stream::{Writer, Reader};
+
+use criterion::Throughput;
 
 fn temporary(c: &mut Criterion) {
     let mut group = c.benchmark_group("hej");
     group.sample_size(11);
 
+    group.throughput(Throughput::Elements(5000));
 
-    eprintln!("done!");
     group.bench_function("test", |b| {
-        // b.iter(|| block_on(async {()}))
-
-        //let mut srt = rt();
         b.iter_batched(
             || {
-                let mut mrt = rt();
+                let mut rt = rt();
 
-                let (writer, reader) = mrt.block_on(async {
-                    let state = startup_no_wal().await.unwrap();
-                    let mut stream = connect(state.clone()).await.unwrap();
-                    let (reader, mut writer) = stream.split();
+                let connections = rt.block_on(async {
+                    let state = startup_with_wal().await.unwrap();
+                    let (mut writer, reader) = connect2(state.clone());
                     writer
                         .write_all(
-                            "
+                            b"
                             CREATE TABLE a (b Integer);
-                            INSERT INTO a (b) VALUES (1);
-                            "
-                            .as_bytes(),
+                            INSERT INTO a (b) VALUES (1), (2), (3), (4), (5), (6), (7), (8);
+                            INSERT INTO a (b) SELECT b FROM a;
+                            INSERT INTO a (b) SELECT b FROM a;
+                            INSERT INTO a (b) SELECT b FROM a;
+                            INSERT INTO a (b) SELECT b FROM a;
+                            INSERT INTO a (b) SELECT b FROM a;
+                            ",
                         )
                         .await
                         .unwrap();
-                    //drop(writer);
-                    writer.shutdown().await.expect("writer shutown failed");
-                    let buf_reader = BufReader::new(reader);
-                    let _: Vec<String> = buf_reader.lines().collect::<Result<_, _>>().await.unwrap();
+                    drop(writer);
+
+                    let reader = BufReader::new(reader);
+                    let _: Vec<String> = reader.lines().collect::<Result<_, _>>().await.unwrap();
+
+                    let connections: Vec<(Writer, Reader)> = (0..50)
+                        .map(|_| connect2(state.clone()))
+                        .collect();
+                    connections
+                });
+
+                (rt, connections)
+            },
+            |(mut rt, connections)| rt.block_on(async move {
+                let mut tasks = Vec::with_capacity(connections.len());
+                for (writer, reader) in connections.into_iter() {
+                    tasks.push(actual_bench(reader, writer));
+                }
+                join_all(tasks).await;
+            }),
+            BatchSize::PerIteration,
+        );
+    });
+}
+
+
+
+
+/*
+fn select_from_small_table(c: &mut Criterion) {
+    let mut group = c.benchmark_group("pgbench-ish");
+    group.sample_size(11);
+    group.bench_function("select_from_small_table", |b| bench_query(
+        b"CREATE TABLE t(a Integer);
+        INSERT INTO t(a) VALUES (42);",
+        b"SELECT a FROM b",
+        b
+    ));
+}
+
+fn bench_query(setup_query: &[u8], bench_query: &[u8], b: &mut Bencher) {
+        b.iter_batched(
+            || {
+                let mut rt = rt();
+
+                let (writer, reader) = rt.block_on(async {
+                    let state = startup_with_wal().await.unwrap();
+                    let (mut writer, reader) = connect2(state.clone());
+                    writer
+                        .write_all(setup_query)
+                        .await
+                        .unwrap();
+                    drop(writer);
+
+                    let reader = BufReader::new(reader);
+                    let _: Vec<String> = reader.lines().collect::<Result<_, _>>().await.unwrap();
                     connect2(state)
                 });
 
-                (mrt, writer, reader)
+                (rt, writer, reader)
             },
-            |(mut mrt, writer, reader)| 
-                mrt.block_on(actual_bench(reader, writer)).unwrap(),
+            |(mut rt, writer, reader)| rt.block_on(async move {
+                    // Send query to the database
+                    writer.write_all(bench_query.await.unwrap();
+                    drop(writer);
+
+                    // Wait for response from the database
+                    let buf_reader = BufReader::new(reader);
+                    let _: Vec<String> = buf_reader.lines().collect::<Result<_, _>>().await.unwrap();
+                }).unwrap(),
             BatchSize::PerIteration,
         );
-
-        //Benchmark::new("Connection", |b| {
-        //    let mut stream: UnixStream;
-        //    b.iter(|| block_on(connect(state.clone())).unwrap())
-        //    })
-        //    .with_function("Do the thing", |b| b.iter(|| {
-        //        let (mut reader, mut writer) = stream.split();
-        //        block_on(actual_bench(&mut reader, &mut writer)).unwrap()
-        //    })
-        //    .sample_size(50)))
-    });
 }
+*/
 
 async fn actual_bench<R, W>(reader: R, mut writer: W) -> Result<(), ()>
 where
     R: AsyncRead + Unpin,
     W: AsyncWrite + Unpin,
 {
-    eprintln!("i'm gonna start writing now i tell you hwhat");
-    writer.write_all(b"SELECT b FROM a;").await.unwrap();
+    for _ in 0..10 {
+        writer.write_all(black_box(b"SELECT b FROM a;SELECT b FROM a;SELECT b FROM a;SELECT b FROM a;SELECT b FROM a;SELECT b FROM a;SELECT b FROM a;SELECT b FROM a;SELECT b FROM a;SELECT b FROM a;")).await.unwrap();
+    }
+    //writer.write_all(black_box(b"
+    //    CREATE TABLE feffes(ass Char);
+    //    INSERT INTO feffes(ass) VALUES ('D') ('I') ('C') ('K');
+    //    INSERT INTO feffes(ass) VALUES ('8') ('=') ('=') ('D');
+    //    SELECT ass FROM feffes;
 
-    // while let Poll::Pending = w.poll(){
+    //    INSERT INTO feffes(ass) SELECT ass FROM feffes;
+    //    INSERT INTO feffes(ass) SELECT ass FROM feffes;
+    //    INSERT INTO feffes(ass) SELECT ass FROM feffes;
+    //    INSERT INTO feffes(ass) SELECT ass FROM feffes;
+    //    INSERT INTO feffes(ass) SELECT ass FROM feffes;
+    //    INSERT INTO feffes(ass) SELECT ass FROM feffes;
+    //    INSERT INTO feffes(ass) SELECT ass FROM feffes;
+    //    INSERT INTO feffes(ass) SELECT ass FROM feffes;
+    //    SELECT ass FROM feffes;
 
-    // };
-
-    eprintln!("wrote some shit");
+    //    DROP TABLE feffes;
+    //")).await.unwrap();
     drop(writer);
-    //writer.flush().await.expect("flushing writer failed");
 
     // Await for results to be ready
-    //dbg!(writer.shutdown().await.expect("writer shutown failed"));
-
     let buf_reader = BufReader::new(reader);
-    let mut lines = buf_reader.lines();
-    let mut count: usize = 0;
-    while let Some(line) = lines.next().await {
-        count += 1;
-        eprintln!("line {}: {}", count, line.expect("read line failed"));
-    }
+    let _: Vec<String> = buf_reader.lines().collect::<Result<_, _>>().await.unwrap();
 
-    //let mut buf = String::new();
-    //eprintln!("heyo let's  go");
-    //let mut breader = BufReader::with_capacity(1000000, reader);
-    //let _: Vec<String> = breader.lines().collect::<Result<_, _>>().await.unwrap();
-    //let _: Vec<String> = breader.lines().collect::<Result<_, _>>().await.unwrap();
-    // eprintln!("THE OUTPUT BE THE {}", buf);
-
-    // if (buf != "[1]\n"){
-    //     panic!(buf)
-    // }
-
-
-
-    eprintln!("jobs done");
     Ok(())
 }
 
