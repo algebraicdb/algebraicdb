@@ -70,10 +70,12 @@ where
             } else {
                 break;
             };
-            let input = &input[..end];
+            let input = input[..end].trim();
+
+            debug!("executing query:\n{}\n", input);
 
             // Exectue the (semicolon-terminated) string as a query
-            execute_query(input.trim(), &mut state, &mut writer).await?;
+            execute_query(input, &mut state, &mut writer).await?;
 
             writer.flush().await?;
 

@@ -10,10 +10,16 @@ use tokio::fs::{self, read_dir, read_to_string};
 use tokio::stream::StreamExt;
 use tokio::sync::RwLock;
 
-use super::{CURRENT_TRANSACTION_FILE_NAME, TABLES_DIR_NAME, TYPE_MAP_FILE_NAME};
+use super::{TNUM_FILE_NAME, TABLES_DIR_NAME, TYPE_MAP_FILE_NAME};
 
 pub async fn load_db_data(data_dir: &PathBuf) -> io::Result<DbData> {
     let transaction_number = get_current_transaction_number(data_dir).await?;
+
+    if transaction_number == 0 {
+        // No data has been written to disk yet
+        return Ok(DbData::default());
+    }
+
     let snapshot_dir = data_dir.join(transaction_number.to_string());
     let tables_dir_path = snapshot_dir.join(TABLES_DIR_NAME);
     let mut tables_dir = read_dir(tables_dir_path).await.unwrap();
@@ -37,7 +43,7 @@ pub async fn load_db_data(data_dir: &PathBuf) -> io::Result<DbData> {
 }
 
 pub async fn get_current_transaction_number(data_dir: &PathBuf) -> io::Result<TransactionNumber> {
-    let cur_transaction_file_path = data_dir.join(CURRENT_TRANSACTION_FILE_NAME);
+    let cur_transaction_file_path = data_dir.join(TNUM_FILE_NAME);
     Ok(read_to_string(cur_transaction_file_path)
         .await?
         .parse()

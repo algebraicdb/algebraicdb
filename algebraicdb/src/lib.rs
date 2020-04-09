@@ -9,6 +9,9 @@
 #[macro_use]
 extern crate lazy_static;
 
+#[macro_use]
+extern crate log;
+
 mod api;
 pub mod ast;
 mod client;

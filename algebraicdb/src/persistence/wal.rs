@@ -1,4 +1,4 @@
-use super::{TMP_WAL_FILE_NAME, WAL_FILE_NAME};
+use super::{TMP_EXTENSION, WAL_FILE_NAME};
 use crate::ast::Stmt;
 use crate::util::NumBytes;
 use bincode;
@@ -124,12 +124,11 @@ impl WriteAheadLog {
 
         self.state.file_size.fetch_add(buf.len(), Ordering::Relaxed);
 
-        eprintln!("Wrote the following to the WAL:");
-        eprintln!("start:  {:?}", start);
-        eprintln!("entry:  {:?}", stmt);
-        eprintln!("end:    {:?}", end);
-        eprintln!("#bytes: {}", buf.len());
-        eprintln!();
+        debug!("Wrote the following to the WAL:");
+        debug!("start:  {:?}", start);
+        debug!("entry:  {:?}", stmt);
+        debug!("end:    {:?}", end);
+        debug!("#bytes: {}", buf.len());
 
         Ok(())
     }
@@ -147,8 +146,9 @@ impl WriteAheadLog {
             return Ok(());
         }
 
-        let tmp_file_path = self.state.data_dir.join(TMP_WAL_FILE_NAME);
         let file_path = self.state.data_dir.join(WAL_FILE_NAME);
+        let mut tmp_file_path = file_path.clone();
+        tmp_file_path.set_extension(TMP_EXTENSION);
 
         // Take the file lock
         let mut file = self.state.file.lock().await;
@@ -161,7 +161,7 @@ impl WriteAheadLog {
             return Ok(());
         }
 
-        eprintln!("truncating wal...");
+        info!("truncating wal...");
 
         // Serialize an initial entry, with the current transaction number
         let mut buf = Vec::with_capacity(*ENTRY_START_SIZE + *ENTRY_END_SIZE);
@@ -195,7 +195,13 @@ impl WriteAheadLog {
         // Replace the old file with the new one on disk.
         // _Should_ be no need to sync this, since the file
         // will get synced anyway after its first write.
-        rename(&tmp_file_path, &file_path).await
+        rename(&tmp_file_path, &file_path).await?;
+
+        drop(file);
+
+        info!("wal truncated");
+
+        Ok(())
     }
 }
 
@@ -268,11 +274,10 @@ pub async fn load_wal(
                 panic!("Corrupt WAL: Invalid checksum")
             }
 
-            eprintln!("Read the following from the WAL:");
-            eprintln!("start: {:?}", start);
-            eprintln!("entry: {:?}", query);
-            eprintln!("end:   {:?}", end);
-            eprintln!();
+            debug!("Read the following from the WAL:");
+            debug!("start: {:?}", start);
+            debug!("entry: {:?}", query);
+            debug!("end:   {:?}", end);
 
             entries.push((start.transaction_number, query));
         }

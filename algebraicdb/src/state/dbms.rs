@@ -3,7 +3,7 @@ use super::*;
 use crate::api::config::DbmsConfig;
 use crate::executor::execute_replay_query;
 use crate::persistence::TransactionNumber;
-use crate::persistence::{load_db_data, spawn_snapshotter, WriteAheadLog};
+use crate::persistence::{load_db_data, initialize_data_dir, spawn_snapshotter, WriteAheadLog};
 use crate::table::Table;
 use crate::types::TypeMap;
 use async_trait::async_trait;
@@ -108,19 +108,18 @@ impl DbmsState {
                 wal: None,
             }
         } else {
-            let (wal, wal_entries) =
-                WriteAheadLog::new(config.data_dir.clone(), config.wal_truncate_at).await;
-
             let db_data = match load_db_data(&config.data_dir).await {
                 Ok(state) => state,
                 Err(e) => {
-                    eprintln!(
-                        "Error reading data from disk, falling back to default. {}",
-                        e
-                    );
+                    info!("Failed to read stored data from disk, is this a fresh instance? {}", e);
+                    initialize_data_dir(&config.data_dir).await
+                        .expect("Failed to initialize data directory");
                     DbData::default()
                 }
             };
+
+            let (wal, wal_entries) =
+                WriteAheadLog::new(config.data_dir.clone(), config.wal_truncate_at).await;
 
             let transaction_number = db_data.transaction_number;
 
@@ -133,7 +132,7 @@ impl DbmsState {
             for (entry_tn, query_data) in wal_entries {
                 if entry_tn > transaction_number {
                     if let Some(query_data) = query_data {
-                        eprintln!("Replaying transaction {}", entry_tn);
+                        debug!("replaying transaction {}", entry_tn);
                         let query = bincode::deserialize(&query_data).unwrap();
                         execute_replay_query(query, &mut state, &mut Vec::<u8>::new())
                             .await

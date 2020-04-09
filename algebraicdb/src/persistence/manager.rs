@@ -30,20 +30,16 @@ async fn manager(
 
             // check tip of WAL, and tip of current snapshot
             let current = wal.transaction_number();
-            eprintln!(
-                "Checking snapshot {} vs current: {}",
-                last_snapshotted, current
-            );
 
             assert!(current >= last_snapshotted);
             if current > last_snapshotted {
                 last_snapshotted = snapshot(&data_dir, &mut dbms).await.unwrap_or_else(|err| {
-                    eprintln!("Failed to write snapshot: {:?}\n", err);
+                    error!("failed to write snapshot: {:?}\n", err);
                     last_snapshotted
                 });
 
                 if let Err(e) = wal.truncate_wal(last_snapshotted).await {
-                    eprintln!("Failed to truncate wal: {:?}", e);
+                    error!("failed to truncate wal: {:?}", e);
                 }
             }
         },
