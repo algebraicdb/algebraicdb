@@ -6,7 +6,7 @@ use futures::future::join_all;
 use std::io;
 use std::ops::Deref;
 use std::path::PathBuf;
-use tokio::fs::{read_dir, create_dir, rename, File, OpenOptions};
+use tokio::fs::{read_dir, remove_dir_all, create_dir, rename, File, OpenOptions};
 use tokio::io::AsyncWriteExt;
 use tokio::stream::StreamExt;
 
@@ -41,6 +41,7 @@ pub async fn initialize_data_dir(data_dir: &PathBuf) -> io::Result<()> {
 /// Write the current database state to a temporary folder, and then atomically replace the active data folder
 pub(super) async fn snapshot(
     data_dir: &PathBuf,
+    last_snapshotted: TransactionNumber,
     dbms: &mut DbmsState,
 ) -> io::Result<TransactionNumber> {
     info!("data snapshot starting...");
@@ -70,6 +71,8 @@ pub(super) async fn snapshot(
         .map(|(name, table)| snapshot_table(&transaction_folder, name, table))
         .collect();
 
+    // Await all table flush tasks concurrently.
+    // The table lock for a task is dropped when it completes.
     for task in join_all(tasks).await {
         task?
     }
@@ -79,6 +82,12 @@ pub(super) async fn snapshot(
     write_tnum(data_dir, transaction_number).await?;
 
     info!("data snapshot complete");
+
+    if last_snapshotted != 0 {
+        info!("removing previous snapshot: {}", last_snapshotted);
+        let prev_transaction_folder = data_dir.join(&last_snapshotted.to_string());
+        remove_dir_all(&prev_transaction_folder).await?;
+    }
 
     Ok(transaction_number)
 }

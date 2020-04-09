@@ -22,3 +22,6 @@ pub(self) const TNUM_FILE_NAME: &str = "tnum";
 pub(self) const TMP_EXTENSION: &str = "tmp";
 pub(self) const TABLES_DIR_NAME: &str = "tables";
 pub(self) const TYPE_MAP_FILE_NAME: &str = "type_map";
+
+// All top-level data dir files
+pub(self) const DATA_DIR_FILES: &[&str] = &[WAL_FILE_NAME, TNUM_FILE_NAME];

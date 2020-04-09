@@ -11,6 +11,8 @@ use tokio::fs::{rename, File, OpenOptions};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::sync::Mutex;
 
+/// With every transaction written to the WAL, this number is incremented by 1.
+/// The first transaction must be indexed with 1, since 0 means no transactions has happened yet.
 pub type TransactionNumber = u64;
 
 pub enum WriteToWal {

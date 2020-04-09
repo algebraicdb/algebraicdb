@@ -33,7 +33,7 @@ async fn manager(
 
             assert!(current >= last_snapshotted);
             if current > last_snapshotted {
-                last_snapshotted = snapshot(&data_dir, &mut dbms).await.unwrap_or_else(|err| {
+                last_snapshotted = snapshot(&data_dir, last_snapshotted, &mut dbms).await.unwrap_or_else(|err| {
                     error!("failed to write snapshot: {:?}\n", err);
                     last_snapshotted
                 });
