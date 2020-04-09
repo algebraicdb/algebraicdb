@@ -9,11 +9,16 @@ use crate::state::{DbState, DbmsState, ResourcesGuard};
 use crate::table::{Cell, Schema, Table};
 use crate::typechecker;
 use crate::types::{Type, TypeId, TypeMap, Value};
+use crate::grammar::StmtParser;
 use std::error::Error;
 use std::fmt::Write;
 use std::iter::empty;
 use std::sync::Arc;
 use tokio::io::{AsyncWrite, AsyncWriteExt};
+
+lazy_static! {
+    static ref PARSER: StmtParser = StmtParser::new();
+}
 
 pub(crate) async fn execute_query(
     input: &str,
@@ -21,9 +26,7 @@ pub(crate) async fn execute_query(
     w: &mut (dyn AsyncWrite + Send + Unpin),
 ) -> Result<(), Box<dyn Error>> {
     // 1. parse
-    use crate::grammar::StmtParser;
-
-    let result: Result<Stmt, _> = StmtParser::new().parse(&input);
+    let result: Result<Stmt, _> = PARSER.parse(&input);
     let ast = match result {
         Ok(ast) => ast,
         Err(e) => {

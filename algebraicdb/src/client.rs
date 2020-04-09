@@ -10,6 +10,19 @@ pub type State = state::DbmsState;
 #[cfg(feature = "wrapper")]
 pub type State = state::PgWrapperState;
 
+lazy_static! {
+    // This regex tokenizes the input string, and lets
+    // us find the first non-quoted non-commented semicolon
+    static ref TOKENIZER_REGEX: Regex = Regex::new(
+        r#"(?mx)
+          (?P<string>    "([^"]|(\\.))*"?)
+        | (?P<comment>   --.*$)
+        | (?P<semicolon> ;)
+        | (?P<other>     .)
+        "#
+    ).expect("invalid regex");
+}
+
 pub async fn client<R, W>(mut reader: R, writer: W, mut state: State) -> Result<(), Box<dyn Error>>
 where
     R: AsyncRead + Unpin + Send,
@@ -17,18 +30,6 @@ where
 {
     let mut writer = BufWriter::new(writer);
     let mut buf = vec![];
-
-    // This regex tokenizes the input string, and lets
-    // us find the first non-quoted non-commented semicolon
-    let r = Regex::new(
-        r#"(?mx)
-          (?P<string>    "([^"]|(\\.))*"?)
-        | (?P<comment>   --.*$)
-        | (?P<semicolon> ;)
-        | (?P<other>     .)
-    "#,
-    )
-    .expect("Invalid regex");
 
     loop {
         let _n: usize = match reader.read_buf(&mut buf).await? {
@@ -57,7 +58,7 @@ where
             };
 
             // Find the first semicolon, and take the entire string up to that character.
-            let end = if let Some(semicolon) = r
+            let end = if let Some(semicolon) = TOKENIZER_REGEX
                 .captures_iter(input)
                 .flat_map(|c| c.name("semicolon"))
                 .next()
