@@ -1,11 +1,10 @@
-use crate::local::dbms_state::DbmsState;
+use crate::state::DbmsState;
 use crate::util::Timing;
 use std::path::PathBuf;
-use std::sync::atomic::Ordering;
 use tokio::time::delay_for;
 
 use super::snapshot;
-use super::{TransactionNumber, TRANSACTION_NUMBER};
+use super::TransactionNumber;
 
 pub fn spawn_snapshotter(
     dbms: DbmsState,
@@ -22,6 +21,7 @@ async fn manager(
     timing: Timing,
     startup_id: TransactionNumber,
 ) {
+    let mut wal = dbms.wal().unwrap_or_else(|| panic!("No WAL")).clone();
     let mut last_snapshotted: TransactionNumber = startup_id;
     match timing {
         Timing::Never() => {}
@@ -29,16 +29,18 @@ async fn manager(
             delay_for(duration).await;
 
             // check tip of WAL, and tip of current snapshot
-            let current = TRANSACTION_NUMBER.load(Ordering::Relaxed);
-            eprintln!(
-                "Checking snapshot {} vs current: {}",
-                last_snapshotted, current
-            );
-            if current != last_snapshotted {
-                last_snapshotted = snapshot(&data_dir, &mut dbms).await.unwrap_or_else(|err| {
-                    eprintln!("Failed to write snapshot: {:?}\n", err);
+            let current = wal.transaction_number();
+
+            assert!(current >= last_snapshotted);
+            if current > last_snapshotted {
+                last_snapshotted = snapshot(&data_dir, last_snapshotted, &mut dbms).await.unwrap_or_else(|err| {
+                    error!("failed to write snapshot: {:?}\n", err);
                     last_snapshotted
                 });
+
+                if let Err(e) = wal.truncate_wal(last_snapshotted).await {
+                    error!("failed to truncate wal: {:?}", e);
+                }
             }
         },
     }

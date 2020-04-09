@@ -1,5 +1,5 @@
 use crate::ast::*;
-use crate::local::*;
+use crate::state::*;
 
 pub fn get_resource_request(stmt: &Stmt) -> Acquire {
     Acquire {

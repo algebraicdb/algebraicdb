@@ -1,9 +1,9 @@
-Table created
+table created: "ints"
 1 row(s) inserted
 [42]
-Table created
+table created: "f64s"
 1 row(s) inserted
 [123.321]
-Table created
+table created: "bools"
 1 row(s) inserted
 [true]

@@ -16,13 +16,6 @@ pub struct TableRequest {
 }
 
 #[derive(Debug)]
-pub enum Request<T> {
-    Acquire(Acquire),
-    AcquireAll(),
-    CreateTable(String, T),
-}
-
-#[derive(Debug)]
 pub struct Acquire {
     pub table_reqs: Vec<TableRequest>,
     pub type_map_perms: RW,
@@ -32,13 +25,6 @@ pub struct Acquire {
 pub enum CreateTableResponse {
     TableCreated,
     TableAlreadyExists,
-}
-
-pub enum Response<T> {
-    AcquiredResources(Resources<T>),
-    NoSuchTable(String),
-    CreateTable(Result<(), ()>),
-    // TODO add future table deleted???????
 }
 
 pub struct Resources<T> {

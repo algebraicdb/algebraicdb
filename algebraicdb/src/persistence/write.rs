@@ -1,44 +1,67 @@
-use crate::local::types::{Resource, Resources};
-use crate::local::{dbms_state::DbmsState, DbState};
+use crate::state::types::{Resource, Resources};
+use crate::state::{DbState, DbmsState};
 use crate::table::Table;
 use crate::types::TypeMap;
 use futures::future::join_all;
 use std::io;
 use std::ops::Deref;
 use std::path::PathBuf;
-use std::sync::atomic::Ordering;
-use tokio::fs::{create_dir, rename, OpenOptions};
+use tokio::fs::{read_dir, remove_dir_all, create_dir, rename, File, OpenOptions};
 use tokio::io::AsyncWriteExt;
+use tokio::stream::StreamExt;
 
 use super::{
-    TransactionNumber, CURRENT_TRANSACTION_FILE_NAME, TABLES_DIR_NAME, TMP_TRANSACTION_FILE_NAME,
-    TRANSACTION_NUMBER, TYPE_MAP_FILE_NAME,
+    TransactionNumber, TNUM_FILE_NAME, TABLES_DIR_NAME, TMP_EXTENSION,
+    TYPE_MAP_FILE_NAME,
 };
+
+pub async fn initialize_data_dir(data_dir: &PathBuf) -> io::Result<()> {
+    info!("initializing data directory {:?}", data_dir);
+
+    let mut entries = read_dir(data_dir).await?;
+
+    let mut existing_files_present: bool = false;
+    while let Some(entry) = entries.next().await {
+        let entry = entry?;
+        if !existing_files_present {
+            existing_files_present = true;
+            error!("the data directory already contains files:")
+        }
+        error!("  {:?}", entry.file_name());
+    }
+
+    if existing_files_present {
+        panic!("data directory not empty");
+    }
+
+    write_tnum(data_dir, 0).await
+}
+
 
 /// Write the current database state to a temporary folder, and then atomically replace the active data folder
 pub(super) async fn snapshot(
     data_dir: &PathBuf,
+    last_snapshotted: TransactionNumber,
     dbms: &mut DbmsState,
 ) -> io::Result<TransactionNumber> {
-    eprintln!("Snapshot starting...");
+    info!("data snapshot starting...");
 
     // Acquire and lock all tables
     let mut resources: Resources<_> = dbms.acquire_all_resources().await;
     let resources = resources.take().await;
 
     // Ordering::Relaxed should be fine since we have also locked all tables, which means no one is writing to the WAL.
-    let transaction_number = TRANSACTION_NUMBER.load(Ordering::Relaxed);
-    let transaction_number_str = transaction_number.to_string();
+    let transaction_number = dbms.wal().unwrap().transaction_number();
 
-    let transaction_folder = data_dir.join(&transaction_number_str);
+    let transaction_folder = data_dir.join(&transaction_number.to_string());
 
     // TODO: figure out if we should remove this
     //remove_dir_all(&transaction_folder).await?;
 
-    eprintln!("Creating {:?}", &transaction_folder);
+    debug!("creating {:?}", &transaction_folder);
     create_dir(&transaction_folder).await?;
 
-    eprintln!("Creating {:?}", transaction_folder.join(TABLES_DIR_NAME));
+    debug!("creating {:?}", transaction_folder.join(TABLES_DIR_NAME));
     create_dir(transaction_folder.join(TABLES_DIR_NAME)).await?;
 
     // Spawn tasks to flush the tables to disk
@@ -48,35 +71,53 @@ pub(super) async fn snapshot(
         .map(|(name, table)| snapshot_table(&transaction_folder, name, table))
         .collect();
 
+    // Await all table flush tasks concurrently.
+    // The table lock for a task is dropped when it completes.
     for task in join_all(tasks).await {
         task?
     }
 
     snapshot_type_map(&transaction_folder, resources.type_map).await?;
 
-    let tmp_transaction_file_path = data_dir.join(TMP_TRANSACTION_FILE_NAME);
-    let cur_transaction_file_path = data_dir.join(CURRENT_TRANSACTION_FILE_NAME);
+    write_tnum(data_dir, transaction_number).await?;
 
-    flush_to_file(
-        &tmp_transaction_file_path,
-        transaction_number_str.as_bytes(),
-        false,
-    )
-    .await?;
+    info!("data snapshot complete");
 
-    eprintln!(
-        "Renaming {:?} to {:?}.",
-        tmp_transaction_file_path, cur_transaction_file_path
-    );
-    rename(&tmp_transaction_file_path, &cur_transaction_file_path).await?;
-
-    eprintln!("Snapshot complete.");
+    if last_snapshotted != 0 {
+        info!("removing previous snapshot: {}", last_snapshotted);
+        let prev_transaction_folder = data_dir.join(&last_snapshotted.to_string());
+        remove_dir_all(&prev_transaction_folder).await?;
+    }
 
     Ok(transaction_number)
 }
 
+async fn write_tnum(data_dir: &PathBuf, tnum: TransactionNumber) -> io::Result<()> {
+    debug!("writing transaction number [{}] to disk", tnum);
+
+    let cur_tnum_path = data_dir.join(TNUM_FILE_NAME);
+    let mut tmp_tnum_path = cur_tnum_path.clone();
+    tmp_tnum_path.set_extension(TMP_EXTENSION);
+
+    flush_to_file(
+        &tmp_tnum_path,
+        tnum.to_string().as_bytes(),
+        false,
+    )
+    .await?;
+
+    // Rename the file, and make sure the rename gets synced to disk
+    rename(&tmp_tnum_path, &cur_tnum_path).await?;
+    File::open(&cur_tnum_path)
+        .await?
+        .sync_all()
+        .await?;
+
+    Ok(())
+}
+
 async fn snapshot_type_map(folder: &PathBuf, type_map: Resource<'_, TypeMap>) -> io::Result<()> {
-    eprintln!("Snapshotting typemap");
+    debug!("snapshotting typemap");
     let data = bincode::serialize(type_map.deref()).unwrap();
     let file_path = folder.join(TYPE_MAP_FILE_NAME);
     flush_to_file(&file_path, &data, true).await
@@ -87,7 +128,7 @@ async fn snapshot_table(
     name: &str,
     table: Resource<'_, Table>,
 ) -> io::Result<()> {
-    eprintln!("Snapshotting table {}", name);
+    debug!("snapshotting table \"{}\"", name);
     let data = bincode::serialize(table.deref()).unwrap();
     let file_path = folder.join(TABLES_DIR_NAME).join(name);
     flush_to_file(&file_path, &data, true).await
@@ -98,7 +139,7 @@ async fn snapshot_table(
 /// Makes sure the data is synced to disk.
 /// if new_only, then the file must not already exist.
 async fn flush_to_file(path: &PathBuf, data: &[u8], new_only: bool) -> io::Result<()> {
-    eprintln!("Writing file {:?}", path);
+    debug!("writing file {:?}", path);
     let mut file = if new_only {
         OpenOptions::new()
             .write(true)

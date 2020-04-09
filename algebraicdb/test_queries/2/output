@@ -1,9 +1,9 @@
-Type MaybeInt created
-Type Foo created
-Type Boi created
-Type WeMustGoDeeper created
-Table created
-Table created
+type MaybeInt created
+type Foo created
+type Boi created
+type WeMustGoDeeper created
+table created: "t1"
+table created: "t2"
 13 row(s) inserted
 [Lessesst(Nothing())]
 [DeepInto(Hoi(Bar(Just(0))))]

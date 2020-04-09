@@ -3,9 +3,9 @@ mod iter;
 use self::iter::*;
 use crate::ast::*;
 use crate::error_message::ErrorMessage;
-use crate::local::{DbState, DbmsState, ResourcesGuard};
 use crate::persistence::WriteToWal;
 use crate::pre_typechecker;
+use crate::state::{DbState, DbmsState, ResourcesGuard};
 use crate::table::{Cell, Schema, Table};
 use crate::typechecker;
 use crate::types::{Type, TypeId, TypeMap, Value};
@@ -41,7 +41,7 @@ pub(crate) async fn execute_query(
         Ok(resources) => resources,
         Err(name) => {
             return Ok(w
-                .write_all(format!("No such table: {}\n", name).as_bytes())
+                .write_all(format!("no such table: \"{}\"\n", name).as_bytes())
                 .await?)
         }
     };
@@ -74,7 +74,7 @@ pub(crate) async fn execute_replay_query<'a>(
         Ok(resources) => resources,
         Err(name) => {
             return Ok(w
-                .write_all(format!("No such table: {}\n", name).as_bytes())
+                .write_all(format!("no such table: \"{}\"\n", name).as_bytes())
                 .await?)
         }
     };
@@ -99,7 +99,7 @@ async fn execute_stmt(
             | Stmt::Delete(_)
             | Stmt::Update(_)
             | Stmt::Drop(_)
-            | Stmt::Insert(_) => wal.write(&ast).await,
+            | Stmt::Insert(_) => wal.write(&ast).await?,
             Stmt::Select(_) => { /* We're only reading, so no logging required*/ }
         }
     }
@@ -114,7 +114,9 @@ async fn execute_stmt(
             let table = execute_select(&select, &resources);
             print_table(table.iter(type_map), w).await
         }
-        _ => unimplemented!("Not implemented: {:?}", ast),
+        Stmt::Drop(drop) => execute_drop_table(drop, s, w).await,
+        ast @ Stmt::Delete(_) => unimplemented!("Not implemented: {:?}", ast),
+        ast @ Stmt::Update(_) => unimplemented!("Not implemented: {:?}", ast),
     }
 }
 
@@ -287,8 +289,14 @@ async fn execute_create_table(
     let table = Table::new(schema, &resources.type_map);
 
     match s.create_table(create_table.table.to_string(), table).await {
-        Ok(()) => w.write_all(b"Table created\n").await?,
-        Err(()) => w.write_all(b"Table already exists\n").await?,
+        Ok(()) => {
+            w.write_all(format!("table created: \"{}\"\n", create_table.table).as_bytes())
+                .await?
+        }
+        Err(()) => {
+            w.write_all(format!("table already exists: \"{}\"\n", create_table.table).as_bytes())
+                .await?
+        }
     };
     Ok(())
 }
@@ -314,10 +322,28 @@ async fn execute_create_type(
                 })
                 .collect();
 
-            w.write_all(b"Type ").await?;
+            w.write_all(b"type ").await?;
             w.write_all(name.as_bytes()).await?;
             w.write_all(b" created\n").await?;
             types.insert(name.value, Type::Sum(variant_types));
+        }
+    }
+    Ok(())
+}
+
+async fn execute_drop_table(
+    drop: Drop<'_>,
+    s: &DbmsState,
+    w: &mut (dyn AsyncWrite + Send + Unpin),
+) -> Result<(), Box<dyn Error>> {
+    match s.drop_table(drop.table).await {
+        Ok(()) => {
+            w.write_all(format!("table dropped: \"{}\"\n", drop.table).as_bytes())
+                .await?
+        }
+        Err(()) => {
+            w.write_all(format!("no such table: \"{}\"\n", drop.table).as_bytes())
+                .await?
         }
     }
     Ok(())

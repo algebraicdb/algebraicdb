@@ -1,0 +1,11 @@
+no such table: "t"
+table created: "t"
+1 row(s) inserted
+[42]
+table dropped: "t"
+no such table: "t"
+table created: "t"
+1 row(s) inserted
+[37]
+table dropped: "t"
+no such table: "t"
