@@ -1,14 +1,14 @@
 use crate::executor::execute_query;
-use crate::local;
+use crate::state;
 use regex::Regex;
 use std::error::Error;
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, BufWriter};
 
 #[cfg(not(feature = "wrapper"))]
-pub type State = local::DbmsState;
+pub type State = state::DbmsState;
 
 #[cfg(feature = "wrapper")]
-pub type State = local::PgWrapperState;
+pub type State = state::PgWrapperState;
 
 pub async fn client<R, W>(mut reader: R, writer: W, mut state: State) -> Result<(), Box<dyn Error>>
 where
@@ -31,10 +31,9 @@ where
     .expect("Invalid regex");
 
     loop {
-        dbg!("client: reading");
-        let _n: usize = match dbg!(reader.read_buf(&mut buf).await?) {
+        let _n: usize = match reader.read_buf(&mut buf).await? {
             // No bytes read means EOF was reached
-            0 => return dbg!(Ok(())),
+            0 => return Ok(()),
             // Read n bytes
             n => n,
         };
@@ -47,7 +46,7 @@ where
         loop {
             // Validate bytes as utf-8 string
             let input = match std::str::from_utf8(&buf[..]) {
-                Ok(input) => dbg!(input),
+                Ok(input) => input,
                 Err(e) => {
                     writer
                         .write_all(format!("Error: {}\n", e).as_bytes())
@@ -67,12 +66,12 @@ where
             } else {
                 break;
             };
-            let input = &input[..end];
+            let input = input[..end].trim();
+
+            debug!("executing query:\n{}\n", input);
 
             // Exectue the (semicolon-terminated) string as a query
-            execute_query(dbg!(input), &mut state, &mut writer).await?;
-
-            dbg!("done executing query");
+            execute_query(input, &mut state, &mut writer).await?;
 
             writer.flush().await?;
 

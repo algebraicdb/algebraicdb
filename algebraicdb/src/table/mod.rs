@@ -8,7 +8,7 @@ pub use self::iter::RowIter;
 pub use self::row::Row;
 pub use self::schema::Schema;
 
-use crate::local::TTable;
+use crate::state::TTable;
 use crate::types::{TypeId, TypeMap, Value};
 use serde::{Deserialize, Serialize};
 

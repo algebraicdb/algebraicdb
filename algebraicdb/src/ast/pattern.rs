@@ -1,3 +1,4 @@
+use crate::ast::Spanned;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -16,9 +17,9 @@ pub enum Pattern<'a> {
 
     /// Actual pattern matching
     Variant {
-        namespace: Option<&'a str>,
-        name: &'a str,
-        sub_patterns: Vec<Pattern<'a>>,
+        namespace: Option<Spanned<&'a str>>,
+        name: Spanned<&'a str>,
+        sub_patterns: Vec<Spanned<Pattern<'a>>>,
     },
 
     /// _

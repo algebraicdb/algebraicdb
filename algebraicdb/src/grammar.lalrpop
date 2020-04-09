@@ -1,6 +1,5 @@
 use crate::ast::*;
 use std::str::FromStr;
-use crate::pattern::Pattern;
 use crate::types::Value;
 
 grammar;
@@ -138,13 +137,13 @@ WhereClause: WhereClause<'input> = {
 }
 
 WhereItem: WhereItem<'input> = {
-    <col:Ident> ":" <pattern:Pattern> => (WhereItem::Pattern(col, pattern)),
+    <col:Spanned<Ident>> ":" <pattern:Spanned<Pattern>> => (WhereItem::Pattern(col, pattern)),
     Expr => WhereItem::Expr(<>),
 }
 
 CreateTable: CreateTable<'input> = {
     CREATE TABLE <table:Ident>
-        <columns:("(" <Comma<(Ident Ident)>> ")")>
+        <columns:("(" <Comma<(Spanned<Ident> Spanned<Ident>)>> ")")>
     => CreateTable {
         table,
         columns,
@@ -153,19 +152,19 @@ CreateTable: CreateTable<'input> = {
 
 Insert: Insert<'input> = {
     INSERT INTO <table:Ident>
-        <columns:("(" <Comma<Ident>> ")")?>
+        <columns:("(" <Spanned<Comma<Spanned<Ident>>>> ")")?>
         <from:InsertFrom>
 
     => Insert {
         table,
-        columns: columns.unwrap_or(vec![]),
+        columns: columns.unwrap_or(vec![].into()),
         from,
     }
 }
 
 InsertFrom: InsertFrom<'input> = {
-    VALUES <Comma<("(" <Comma<Expr>> ")")>> => InsertFrom::Values(<>),
-    Select => InsertFrom::Select(<>)
+    VALUES <Comma<Spanned<("(" <Comma<Expr>> ")")>>> => InsertFrom::Values(<>),
+    Spanned<Select> => InsertFrom::Select(<>)
 }
 
 JoinType: JoinType = {
@@ -175,21 +174,23 @@ JoinType: JoinType = {
     INNER? JOIN => JoinType::Inner,
 }
 
-VarDef: (&'input str, Vec<&'input str>) = {
-    <name:Ident> "(" <variants:Comma<Ident>> ")"
+VarDef: (Spanned<&'input str>, Vec<Spanned<&'input str>>) = {
+    <name:Spanned<Ident>> "(" <variants:Comma<Spanned<Ident>>> ")"
         => (name, variants),
 }
 
 CreateType: CreateType<'input> = {
     CREATE TYPE
-        <name:Ident>
+        <name:Spanned<Ident>>
         AS VARIANT
         "{" <variants:Comma<VarDef>> "}"
-        => CreateType::Variant(name, variants),
+        => CreateType::Variant {
+            name, variants
+        },
 }
 
-Namespace: &'input str = {
-    <Ident> "::",
+Namespace: Spanned<&'input str> = {
+    <Spanned<Ident>> "::",
 }
 
 Value: Value<'input> = {
@@ -203,40 +204,43 @@ Value: Value<'input> = {
         <variant:Ident> "("
         <values:Comma<Value>> ")"
     => Value::Sum(
-        namespace.map(|s| s.into()),
+        namespace.map(|s| s.value.into()),
         variant.into(),
         values,
     ),
 }
 
 Expr3: Expr<'input> = {
-    Ident => Expr::Ident(<>),
-    Value => Expr::Value(<>),
-    "(" <Expr> ")",
+    Spanned<Ident> => Expr::Ident(<>),
+    Spanned<Value> => Expr::Value(<>),
+    "(" <Expr0> ")",
 }
 
 Expr2: Expr<'input> = {
-    <e1:Expr2> "="  <e2:Expr3> => Expr::Equals(box e1, box e2),
-    <e1:Expr2> "!=" <e2:Expr3> => Expr::NotEquals(box e1, box e2),
-    <e1:Expr2> "<=" <e2:Expr3> => Expr::LessEquals(box e1, box e2),
-    <e1:Expr2> ">=" <e2:Expr3> => Expr::GreaterEquals(box e1, box e2),
-    <e1:Expr2> "<"  <e2:Expr3> => Expr::LessThan(box e1, box e2),
-    <e1:Expr2> ">"  <e2:Expr3> => Expr::GreaterThan(box e1, box e2),
+    <e1:Spanned<Expr2>> "="  <e2:Spanned<Expr3>> => Expr::Eql(box (e1, e2)),
+    <e1:Spanned<Expr2>> "!=" <e2:Spanned<Expr3>> => Expr::NEq(box (e1, e2)),
+    <e1:Spanned<Expr2>> "<=" <e2:Spanned<Expr3>> => Expr::LEq(box (e1, e2)),
+    <e1:Spanned<Expr2>> ">=" <e2:Spanned<Expr3>> => Expr::GEq(box (e1, e2)),
+    <e1:Spanned<Expr2>> "<"  <e2:Spanned<Expr3>> => Expr::LTh(box (e1, e2)),
+    <e1:Spanned<Expr2>> ">"  <e2:Spanned<Expr3>> => Expr::GTh(box (e1, e2)),
     Expr3,
 }
 
 Expr1: Expr<'input> = {
-    <e1:Expr1> AND <e2:Expr2> => Expr::And(box e1, box e2),
+    <e1:Spanned<Expr1>> AND <e2:Spanned<Expr2>> => Expr::And(box (e1, e2)),
     Expr2
 }
 
-Expr: Expr<'input> = {
-    <e1:Expr> OR <e2:Expr1> => Expr::Or(box e1, box e2),
+Expr0: Expr<'input> = {
+    <e1:Spanned<Expr0>> OR <e2:Spanned<Expr1>> => Expr::Or(box (e1, e2)),
     Expr1,
+
 }
 
+Expr: Spanned<Expr<'input>> = <Spanned<Expr0>>;
+
 Ass: Ass<'input> = {
-    <col:Ident> "=" <expr:Expr> => Ass {
+    <col:Spanned<Ident>> "=" <expr:Expr> => Ass {
         col,
         expr,
     }
@@ -250,8 +254,8 @@ pub Pattern: Pattern<'input> = {
     Double => Pattern::Double(<>),
     Ident => Pattern::Binding(<>),
     <namespace:Namespace?>
-        <name:Ident>
-        "(" <sub_patterns:Comma<Pattern>> ")"
+        <name:Spanned<Ident>>
+        "(" <sub_patterns:Comma<Spanned<Pattern>>> ")"
     => Pattern::Variant {
         namespace,
         name,
@@ -285,6 +289,10 @@ Bool: bool = {
     "true" => true,
     "false" => false,
 };
+
+Spanned<T>: Spanned<T> = {
+    <l:@L> <t:T> <r:@R> => Spanned::new(l, r, t),
+}
 
 // Generic helper-rule for comma-separated lists
 Comma<E>: Vec<E> =

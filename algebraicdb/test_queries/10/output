@@ -1,6 +1,6 @@
-Type Option created 
-Table created
-Table created
+type Option created
+table created: "t"
+table created: "y"
 3 row(s) inserted
 6 row(s) inserted
 [1, 3]
@@ -42,8 +42,8 @@ Table created
 [2, 3]
 [2, 4]
 [3, 4]
-Table created
-Table created
+table created: "b1"
+table created: "b2"
 4 row(s) inserted
 4 row(s) inserted
 [true, true]

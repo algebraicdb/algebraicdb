@@ -14,10 +14,12 @@ pub async fn create_tcp_server(
 
     let mut listener = TcpListener::bind((address, port)).await?;
 
+    info!("listening on {}:{}", address, port);
+
     loop {
         match listener.accept().await {
             Ok((mut socket, client_address)) => {
-                println!("new client [{}] connected", client_address);
+                info!("new client [{}] connected", client_address);
 
                 // Copy state accessor, not the state itself.
                 let state = state.clone();
@@ -26,15 +28,15 @@ pub async fn create_tcp_server(
                     let (reader, writer) = socket.split();
                     match client(reader, writer, state).await {
                         Ok(()) => {
-                            println!("client [{}] socket closed", client_address);
+                            info!("client [{}] socket closed", client_address);
                         }
                         Err(e) => {
-                            println!("client [{}] errored: {}", client_address, e);
+                            info!("client [{}] errored: {}", client_address, e);
                         }
                     }
                 });
             }
-            Err(e) => println!("error accepting socket; error = {:?}", e),
+            Err(e) => info!("error accepting socket; error = {:?}", e),
         }
     }
 }

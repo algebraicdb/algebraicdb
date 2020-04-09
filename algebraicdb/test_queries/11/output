@@ -1,0 +1,130 @@
+    --> ERROR
+     |
+   4 | CREATE TYPE Option AS VARIANT { Some(NotAType), None() };
+     |                                      ^^^^^^^^
+     *                            type "NotAType" is undefined
+type Option created
+    --> ERROR
+     |
+   1 | CREATE TYPE Option AS VARIANT {};
+     |             ^^^^^^
+     *  "Option" is defined elsewhere
+    --> ERROR
+     |
+   1 | CREATE TABLE t(a NotAType);
+     |                  ^^^^^^^^
+     *        type "NotAType" is undefined
+table created: "ints"
+1 row(s) inserted
+table created: "opts"
+1 row(s) inserted
+    --> ERROR
+     |
+   3 | INSERT INTO ints(i1, i2, i1) VALUES (0, 0, 0);
+     |                          ^^
+     *               "i1" is defined elsewhere
+    --> ERROR
+     |
+   1 | INSERT INTO ints(i1, i2) VALUES (0, 0);
+     |                  ^^^^^^
+     *         "i3" needs to be defined
+    --> ERROR
+     |
+   1 | INSERT INTO ints(i1, i2, i1, i3) VALUES (0, 0, 0, 0);
+     |                          ^^
+     *               "i1" is defined elsewhere
+    --> ERROR
+     |
+   1 | INSERT INTO ints(i1, i2, i3) VALUES (1, 2, 3, 4);
+     |                                     ^^^^^^^^^^^^
+     *                     invalid number of items: found 4, expected 3
+    --> ERROR
+     |
+   1 | INSERT INTO ints(i1, i2, i3) VALUES (1);
+     |                                     ^^^
+     *                invalid number of items: found 1, expected 3
+    --> ERROR
+     |
+   1 | INSERT INTO ints(i1, i2, i3) VALUES (1), (1,2), (1,2,3,4);
+     |                                     ^^^
+     *                invalid number of items: found 1, expected 3
+    --> ERROR
+     |
+   1 | INSERT INTO ints(i1, i2, i3) VALUES (1.0, 1, 'a');
+     |                                      ^^^
+     *               invalid type: found "Double", expected "Integer"
+    --> ERROR
+     |
+   1 | INSERT INTO ints(i1, i2, i3) VALUES (1, 1.0, 'b');
+     |                                         ^^^
+     *                  invalid type: found "Double", expected "Integer"
+    --> ERROR
+     |
+   1 | SELECT i1 FROM ints WHERE i2: Unknown();
+     |                               ^^^^^^^^^
+     *                expected "Integer", found unknown type
+    --> ERROR
+     |
+   1 | SELECT i1 FROM ints WHERE i2: Some(3);
+     |                               ^^^^^^^
+     *               expected "Integer", found unknown type
+    --> ERROR
+     |
+   1 | SELECT i1 FROM ints WHERE i2: NotOption::Some(3);
+     |                               ^^^^^^^^^
+     *                     type "NotOption" is undefined
+    --> ERROR
+     |
+   1 | SELECT i1 FROM ints WHERE i2: Option::Some(3);
+     |                               ^^^^^^^^^^^^^^^
+     *              invalid type: found "Option", expected "Integer"
+    --> ERROR
+     |
+   1 | SELECT i1 FROM ints WHERE i2: Option::Some('c');
+     |                               ^^^^^^^^^^^^^^^^^
+     *               invalid type: found "Option", expected "Integer"
+    --> ERROR
+     |
+   1 | INSERT INTO opts(opt) VALUES (Some(42.0));
+     |                               ^^^^^^^^^^
+     *            invalid type: found "Double", expected "Integer"
+    --> ERROR
+     |
+   1 | INSERT INTO opts(opt) VALUES (Some(1, 2));
+     |                               ^^^^^^^^^^
+     *              invalid number of items: found 2, expected 1
+    --> ERROR
+     |
+   1 | SELECT opt FROM opts WHERE opt: Some();
+     |                                 ^^^^^^
+     *              invalid number of items: found 0, expected 1
+    --> ERROR
+     |
+   1 | SELECT opt FROM opts WHERE opt: Some(_, _);
+     |                                 ^^^^^^^^^^
+     *                invalid number of items: found 2, expected 1
+    --> ERROR
+     |
+   1 | SELECT opt FROM opts WHERE opt: Some(opt);
+     |        ^^^
+     * "opt" is ambiguous
+    --> ERROR
+     |
+   1 | SELECT opt FROM opts WHERE 1 = 2.0 = false;
+     |                            ^^^^^^^
+     *           mismatching types: "Integer" and "Double"
+    --> ERROR
+     |
+   1 | SELECT opt FROM opts WHERE 1 > 2 = 3 = true;
+     |                            ^^^^^^^^^
+     *             mismatching types: "Bool" and "Integer"
+    --> ERROR
+     |
+   1 | SELECT opt FROM opts WHERE true = (1 < 'a');
+     |                                   ^^^^^^^^^
+     *                    mismatching types: "Integer" and "Char"
+    --> ERROR
+     |
+   1 | SELECT opt FROM opts WHERE opt: Some(opt2), opt2 = 'a' = false;
+     |                                             ^^^^^^^^^^
+     *                               mismatching types: "Integer" and "Char"

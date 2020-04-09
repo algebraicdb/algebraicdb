@@ -1,5 +1,4 @@
-use crate::ast::{Expr, WhereItem};
-use crate::pattern::Pattern;
+use crate::ast::{Expr, Pattern, Spanned, WhereItem};
 use crate::table::{Cell, Schema, Table};
 use crate::types::{EnumTag, Type, TypeId, TypeMap};
 use bincode::serialize;
@@ -7,7 +6,7 @@ use std::cmp::Ordering;
 use std::sync::Arc;
 
 pub enum ModIter<'a> {
-    Select(&'a [Expr<'a>]),
+    Select(&'a [Spanned<Expr<'a>>]),
     Where(&'a [WhereItem<'a>]),
 }
 
@@ -69,7 +68,7 @@ impl<'a> Rows<'a> {
         }
     }
 
-    pub fn select(&mut self, items: &'a [Expr]) {
+    pub fn select(&mut self, items: &'a [Spanned<Expr>]) {
         match self {
             Rows::Scan(iter) => iter.select(items),
             Rows::Materialized { mods, .. } => mods.push(ModIter::Select(items)),
@@ -210,13 +209,13 @@ impl<'a> Iterator for CellIter<'a> {
 }
 
 impl<'a> RowIter<'a> {
-    pub fn select(&mut self, items: &'a [Expr]) {
+    pub fn select(&mut self, items: &'a [Spanned<Expr>]) {
         let mut bindings = vec![];
         'outer: for item in items {
-            match item {
+            match item.as_ref() {
                 &Expr::Ident(name) => {
                     for &binding in self.bindings.iter() {
-                        if binding.name == name {
+                        if &binding.name == name.as_ref() {
                             bindings.push(binding);
                             continue 'outer;
                         }
@@ -295,7 +294,7 @@ impl<'a> RowIter<'a> {
                         let (i, (_, sub_types)) = variants
                             .iter()
                             .enumerate()
-                            .find(|(_, (variant, _))| variant == name)
+                            .find(|(_, (variant, _))| variant == name.as_ref())
                             .unwrap();
 
                         matches.push(CellFilter {
@@ -329,7 +328,7 @@ impl<'a> RowIter<'a> {
                 WhereItem::Expr(_) => {} // Ignore expressions for now
                 WhereItem::Pattern(name, pattern) => {
                     for cell_ref in self.bindings.iter() {
-                        if cell_ref.name == *name {
+                        if &cell_ref.name == name.as_ref() {
                             let byte_index = cell_ref.offset;
                             let type_id = cell_ref.type_id;
                             let data = cell_ref.source;

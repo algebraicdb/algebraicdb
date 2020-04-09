@@ -43,7 +43,6 @@ impl AsyncRead for Reader {
     ) -> Poll<io::Result<usize>> {
         if self.buffer.len() > 0 {
             let n = buf.write(&self.buffer).unwrap();
-            dbg!(std::str::from_utf8(&self.buffer[..n]));
             self.buffer.drain(..n);
             Poll::Ready(Ok(n))
         } else {
@@ -59,7 +58,6 @@ impl AsyncRead for Reader {
                 }
             };
             let n = buf.write(&self.buffer).unwrap();
-            dbg!(std::str::from_utf8(&self.buffer[..n]));
             self.buffer.drain(..n);
             Poll::Ready(Ok(n))
         }
@@ -79,10 +77,7 @@ impl AsyncWrite for Writer {
         pin_mut!(write);
         match write.poll(cx) {
             Poll::Ready(r) => match r {
-                Ok(()) => {
-                    dbg!(std::str::from_utf8(&chunk));
-                    Poll::Ready(Ok(n))
-                }
+                Ok(()) => Poll::Ready(Ok(n)),
                 Err(e) => Poll::Ready(Err(io::Error::new(io::ErrorKind::BrokenPipe, e))),
             },
             Poll::Pending => Poll::Pending,

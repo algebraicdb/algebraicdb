@@ -1,5 +1,5 @@
-Type Color created 
-Table created
+type Color created
+table created: "pretty_colors"
 13 row(s) inserted
 [true, RGB(255, 0, 0)]
 [false, RGB(0, 255, 0)]

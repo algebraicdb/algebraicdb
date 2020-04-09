@@ -1,12 +1,11 @@
 use crate::ast::*;
-use crate::local::{ResourcesGuard, TTable};
-use crate::pattern::Pattern;
+use crate::state::{ResourcesGuard, TTable};
 use crate::types::*;
 use std::collections::HashMap;
 use std::collections::HashSet;
 
-pub struct Context<'a, T> {
-    pub globals: &'a ResourcesGuard<'a, T>,
+pub struct Context<'ast, T> {
+    pub globals: &'ast ResourcesGuard<'ast, T>,
     locals: Vec<Scope>,
 }
 
@@ -15,20 +14,48 @@ type Scope = HashMap<String, Vec<TypeId>>;
 #[derive(Debug)]
 pub enum TypeError {
     NotSupported(&'static str),
-    Undefined(String),
-    AmbiguousReference(String),
-    NotASumType,
-    AlreadyDefined,
-    MissingColumn(String),
-    MismatchingTypes { type_1: TypeId, type_2: TypeId },
-    InvalidType { expected: TypeId, actual: TypeId },
-    InvalidCount { expected: usize, actual: usize },
+    Undefined {
+        span: Option<Span>,
+        kind: &'static str,
+        item: String,
+    },
+    AmbiguousReference {
+        span: Option<Span>,
+        ident: String,
+    },
+    AlreadyDefined {
+        span: Option<Span>,
+        ident: String,
+    },
+    MissingColumn {
+        span: Option<Span>,
+        name: String,
+    },
+    MismatchingTypes {
+        span: Option<Span>,
+        type_1: String,
+        type_2: String,
+    },
+    InvalidType {
+        span: Option<Span>,
+        expected: String,
+        actual: String,
+    },
+    InvalidUnknownType {
+        span: Option<Span>,
+        expected: String,
+    },
+    InvalidCount {
+        span: Option<Span>,
+        expected: usize,
+        actual: usize,
+    },
 }
 
 #[derive(Clone, Copy, Debug)]
-pub enum DuckType<'a> {
+pub enum DuckType<'ast> {
     Concrete(TypeId),
-    Variant(&'a str, &'a [Value<'a>]),
+    Variant(&'ast str, &'ast [Value<'ast>]),
 }
 
 impl From<TypeId> for DuckType<'static> {
@@ -37,27 +64,36 @@ impl From<TypeId> for DuckType<'static> {
     }
 }
 
-impl<'a, T: TTable> Context<'a, T> {
-    pub fn new(globals: &'a ResourcesGuard<'a, T>) -> Self {
+impl<'ast, T: TTable> Context<'ast, T> {
+    pub fn new(globals: &'ast ResourcesGuard<'ast, T>) -> Self {
         Context {
             globals,
             locals: vec![HashMap::new()],
         }
     }
 
-    pub fn search_locals(&self, ident: &str) -> Result<TypeId, TypeError> {
+    pub fn search_locals(&self, ident: &Spanned<&str>) -> Result<TypeId, TypeError> {
         self.locals
             .iter()
-            .filter_map(|scope| scope.get(ident))
+            .filter_map(|scope| scope.get(ident.value))
             .next()
             .map(|res| {
                 if res.len() == 1 {
                     Ok(res[0])
                 } else {
-                    Err(TypeError::AmbiguousReference(ident.to_string()))
+                    Err(TypeError::AmbiguousReference {
+                        span: ident.span,
+                        ident: ident.to_string(),
+                    })
                 }
             })
-            .unwrap_or_else(|| Err(TypeError::Undefined(ident.to_string())))
+            .unwrap_or_else(|| {
+                Err(TypeError::Undefined {
+                    span: ident.span,
+                    kind: "identifier",
+                    item: ident.to_string(),
+                })
+            })
     }
 
     pub fn push_locals_scope(&mut self) {
@@ -93,24 +129,21 @@ impl<'a, T: TTable> Context<'a, T> {
     }
 }
 
-pub fn check_stmt<T: TTable>(
-    stmt: &Stmt,
-    globals: &ResourcesGuard<'_, T>,
-) -> Result<(), TypeError> {
+pub fn check_stmt<T: TTable>(stmt: &Stmt, globals: &ResourcesGuard<T>) -> Result<(), TypeError> {
     let mut ctx = Context::new(globals);
 
     match stmt {
         Stmt::Select(select) => check_select(select, &mut ctx).map(|_| ()),
         Stmt::Update(update) => check_update(update, &mut ctx),
         Stmt::Delete(delete) => check_delete(delete, &mut ctx),
-        Stmt::Drop(drop) => check_drop(drop, &mut ctx),
+        Stmt::Drop(_) => Ok(()), // Nothing to do here...
         Stmt::Insert(insert) => check_insert(insert, &mut ctx),
         Stmt::CreateTable(create_table) => check_create_table(create_table, &mut ctx),
         Stmt::CreateType(create_type) => check_create_type(create_type, &mut ctx),
     }
 }
 
-fn import_table_columns<'a, T: TTable>(name: &str, ctx: &'a mut Context<'_, T>) {
+fn import_table_columns<T: TTable>(name: &str, ctx: &mut Context<T>) {
     let table = ctx.globals.read_table(name);
     let schema = table.get_schema();
 
@@ -119,10 +152,10 @@ fn import_table_columns<'a, T: TTable>(name: &str, ctx: &'a mut Context<'_, T>) 
     }
 }
 
-fn check_select<'a, T: TTable>(
-    select: &'a Select,
+fn check_select<'ast, T: TTable>(
+    select: &'ast Select<'ast>,
     ctx: &mut Context<T>,
-) -> Result<Vec<DuckType<'a>>, TypeError> {
+) -> Result<Vec<DuckType<'ast>>, TypeError> {
     if let Some(from) = &select.from {
         check_select_from(from, ctx)?;
     }
@@ -160,7 +193,12 @@ fn check_select_from<T: TTable>(from: &SelectFrom, ctx: &mut Context<T>) -> Resu
             if let Some(on_clause) = &join.on_clause {
                 let clause_type = check_expr(on_clause, ctx)?;
                 let type_map = &ctx.globals.type_map;
-                assert_type_as(clause_type, type_map.get_base_id(BaseType::Bool), type_map)?;
+                assert_type_as(
+                    clause_type,
+                    type_map.get_base_id(BaseType::Bool),
+                    on_clause.span,
+                    type_map,
+                )?;
             }
         }
     }
@@ -177,7 +215,7 @@ fn check_where_clause<T: TTable>(
             WhereItem::Expr(expr) => {
                 let expr_type = check_expr(expr, ctx)?;
                 let bool_id = type_map.get_base_id(BaseType::Bool);
-                assert_type_as(expr_type, bool_id, type_map)?;
+                assert_type_as(expr_type, bool_id, expr.span, type_map)?;
             }
             WhereItem::Pattern(ident, pattern) => {
                 let type_id = ctx.search_locals(ident)?;
@@ -189,23 +227,43 @@ fn check_where_clause<T: TTable>(
 }
 
 fn check_pattern<T: TTable>(
-    pattern: &Pattern,
+    pattern: &Spanned<Pattern>,
     type_id: TypeId,
     ctx: &mut Context<T>,
 ) -> Result<(), TypeError> {
     let type_map = &ctx.globals.type_map;
-    match pattern {
+    match &pattern.value {
         Pattern::Char(_) => {
-            assert_type_as(type_map.get_base_id(BaseType::Char), type_id, type_map)?;
+            assert_type_as(
+                type_map.get_base_id(BaseType::Char),
+                type_id,
+                pattern.span,
+                type_map,
+            )?;
         }
         Pattern::Int(_) => {
-            assert_type_as(type_map.get_base_id(BaseType::Integer), type_id, type_map)?;
+            assert_type_as(
+                type_map.get_base_id(BaseType::Integer),
+                type_id,
+                pattern.span,
+                type_map,
+            )?;
         }
         Pattern::Bool(_) => {
-            assert_type_as(type_map.get_base_id(BaseType::Bool), type_id, type_map)?;
+            assert_type_as(
+                type_map.get_base_id(BaseType::Bool),
+                type_id,
+                pattern.span,
+                type_map,
+            )?;
         }
         Pattern::Double(_) => {
-            assert_type_as(type_map.get_base_id(BaseType::Double), type_id, type_map)?;
+            assert_type_as(
+                type_map.get_base_id(BaseType::Double),
+                type_id,
+                pattern.span,
+                type_map,
+            )?;
         }
         Pattern::Ignore => {}
         Pattern::Binding(name) => ctx.push_local(name.to_string(), type_id),
@@ -214,27 +272,39 @@ fn check_pattern<T: TTable>(
             name,
             sub_patterns,
         } => {
-            let types = &ctx.globals.type_map;
+            let type_map = &ctx.globals.type_map;
             if let Some(namespace) = namespace {
-                let actual_type_id = types
-                    .get_id(namespace)
-                    .ok_or_else(|| TypeError::Undefined(namespace.to_string()))?;
+                let actual_type_id =
+                    type_map
+                        .get_id(namespace)
+                        .ok_or_else(|| TypeError::Undefined {
+                            span: namespace.span,
+                            kind: "type",
+                            item: namespace.to_string(),
+                        })?;
                 if actual_type_id != type_id {
                     return Err(TypeError::InvalidType {
-                        expected: type_id,
-                        actual: actual_type_id,
+                        span: pattern.span,
+                        expected: type_map.get_name(type_id).unwrap().to_string(),
+                        actual: type_map.get_name(actual_type_id).unwrap().to_string(),
                     });
                 }
             }
 
-            if let Type::Sum(variants) = &types[&type_id] {
+            if let Type::Sum(variants) = &type_map[&type_id] {
+                // The type we are pattern matching is a sum type
                 let (_, sub_types) = variants
                     .iter()
-                    .find(|(variant, _)| variant == name)
-                    .ok_or_else(|| TypeError::Undefined(name.to_string()))?;
+                    .find(|(variant, _)| variant == name.as_ref())
+                    .ok_or_else(|| TypeError::Undefined {
+                        span: name.span,
+                        kind: "constructor",
+                        item: name.to_string(),
+                    })?;
 
                 if sub_types.len() != sub_patterns.len() {
                     return Err(TypeError::InvalidCount {
+                        span: pattern.span,
                         expected: sub_types.len(),
                         actual: sub_patterns.len(),
                     });
@@ -244,15 +314,28 @@ fn check_pattern<T: TTable>(
                     check_pattern(p, t.clone(), ctx)?;
                 }
             } else if let Some(namespace) = namespace {
-                let actual_type_id = types
-                    .get_id(namespace)
-                    .ok_or_else(|| TypeError::Undefined(name.to_string()))?;
+                // The type we are pattern matching is NOT a sum type
+                // ...but we know what type the pattern tries to match
+                let actual_type_id =
+                    type_map
+                        .get_id(namespace)
+                        .ok_or_else(|| TypeError::Undefined {
+                            span: namespace.span,
+                            kind: "type",
+                            item: name.to_string(),
+                        })?;
                 return Err(TypeError::InvalidType {
-                    expected: type_id,
-                    actual: actual_type_id,
+                    span: pattern.span,
+                    expected: type_map.get_name(type_id).unwrap().to_string(),
+                    actual: type_map.get_name(actual_type_id).unwrap().to_string(),
                 });
             } else {
-                return Err(TypeError::NotASumType);
+                // The type we are pattern matching is NOT a sum type
+                // ...and we don't know what type this is supposed to be
+                return Err(TypeError::InvalidUnknownType {
+                    span: pattern.span,
+                    expected: type_map.get_name(type_id).unwrap().to_string(),
+                });
             }
         }
     }
@@ -267,12 +350,23 @@ fn check_update<T: TTable>(update: &Update, ctx: &mut Context<T>) -> Result<(), 
 
     for assignment in &update.ass {
         match schema.column(&assignment.col) {
-            None => return Err(TypeError::Undefined(assignment.col.to_string())),
+            None => {
+                return Err(TypeError::Undefined {
+                    span: assignment.col.span,
+                    kind: "column",
+                    item: assignment.col.to_string(),
+                })
+            }
             Some(expected_type_id) => {
                 ctx.push_local(assignment.col.to_string(), expected_type_id);
                 let expr_type = check_expr(&assignment.expr, ctx)?;
 
-                assert_type_as(expr_type, expected_type_id, &ctx.globals.type_map)?;
+                assert_type_as(
+                    expr_type,
+                    expected_type_id,
+                    assignment.expr.span,
+                    &ctx.globals.type_map,
+                )?;
             }
         }
     }
@@ -291,11 +385,6 @@ fn check_delete<T: TTable>(delete: &Delete, ctx: &mut Context<T>) -> Result<(), 
     }
 }
 
-fn check_drop<T: TTable>(_drop: &Drop, _ctx: &mut Context<T>) -> Result<(), TypeError> {
-    // no need to add stuff hihi
-    Ok(())
-}
-
 fn check_insert<T: TTable>(insert: &Insert, ctx: &mut Context<T>) -> Result<(), TypeError> {
     let table = ctx.globals.read_table(&insert.table);
     let schema = table.get_schema();
@@ -310,6 +399,7 @@ fn check_insert<T: TTable>(insert: &Insert, ctx: &mut Context<T>) -> Result<(), 
                 // ┍╌╌╌╌╌╌╌╌╌╌╌╌╌┷╌┷╌╌┑    ┍╌╌┷╌┷╌╌┑
                 if insert.columns.len() != row.len() {
                     return Err(TypeError::InvalidCount {
+                        span: row.span,
                         expected: insert.columns.len(),
                         actual: row.len(),
                     });
@@ -317,15 +407,21 @@ fn check_insert<T: TTable>(insert: &Insert, ctx: &mut Context<T>) -> Result<(), 
 
                 for (column, expr) in insert.columns.iter().zip(row.iter()) {
                     // Make sure the types of the values match the types of the columns
-                    let expected_type = schema
-                        .column(column)
-                        .ok_or_else(|| TypeError::Undefined(column.to_string()))?;
+                    let expected_type =
+                        schema.column(column).ok_or_else(|| TypeError::Undefined {
+                            span: column.span,
+                            kind: "column",
+                            item: column.to_string(),
+                        })?;
                     let actual_type = check_expr(expr, ctx)?;
-                    assert_type_as(actual_type, expected_type, &ctx.globals.type_map)?;
+                    assert_type_as(actual_type, expected_type, expr.span, &ctx.globals.type_map)?;
 
                     // Make sure the user doesn't assign to the same column twice
                     if !populated_columns.insert(column) {
-                        return Err(TypeError::AlreadyDefined);
+                        return Err(TypeError::AlreadyDefined {
+                            span: column.span,
+                            ident: column.to_string(),
+                        });
                     }
                 }
 
@@ -333,7 +429,10 @@ fn check_insert<T: TTable>(insert: &Insert, ctx: &mut Context<T>) -> Result<(), 
                 for (column, _) in &table.get_schema().columns {
                     if populated_columns.get(column.as_str()).is_none() {
                         // TODO: Support for default values
-                        return Err(TypeError::MissingColumn(column.clone()));
+                        return Err(TypeError::MissingColumn {
+                            span: insert.columns.span,
+                            name: column.to_string(),
+                        });
                     }
                 }
                 populated_columns.clear();
@@ -346,6 +445,7 @@ fn check_insert<T: TTable>(insert: &Insert, ctx: &mut Context<T>) -> Result<(), 
             // Make sure there is a value for every specified column
             if insert.columns.len() != types.len() {
                 return Err(TypeError::InvalidCount {
+                    span: select.span,
                     expected: insert.columns.len(),
                     actual: types.len(),
                 });
@@ -353,15 +453,25 @@ fn check_insert<T: TTable>(insert: &Insert, ctx: &mut Context<T>) -> Result<(), 
 
             for (column, actual_type) in insert.columns.iter().zip(types.into_iter()) {
                 // Make sure the types of the values match the types of the columns
-                let expected_type = schema
-                    .column(column)
-                    .ok_or_else(|| TypeError::Undefined(column.to_string()))?;
+                let expected_type = schema.column(column).ok_or_else(|| TypeError::Undefined {
+                    span: column.span,
+                    kind: "column",
+                    item: column.to_string(),
+                })?;
 
-                assert_type_as(actual_type, expected_type, &ctx.globals.type_map)?;
+                assert_type_as(
+                    actual_type,
+                    expected_type,
+                    select.span,
+                    &ctx.globals.type_map,
+                )?;
 
                 // Make sure the user doesn't assign to the same column twice
                 if !populated_columns.insert(column) {
-                    return Err(TypeError::AlreadyDefined);
+                    return Err(TypeError::AlreadyDefined {
+                        span: column.span,
+                        ident: column.to_string(),
+                    });
                 }
             }
 
@@ -369,7 +479,10 @@ fn check_insert<T: TTable>(insert: &Insert, ctx: &mut Context<T>) -> Result<(), 
             for (column, _) in &table.get_schema().columns {
                 if populated_columns.get(column.as_str()).is_none() {
                     // TODO: Support for default values
-                    return Err(TypeError::MissingColumn(column.clone()));
+                    return Err(TypeError::MissingColumn {
+                        span: insert.columns.span,
+                        name: column.to_string(),
+                    });
                 }
             }
             populated_columns.clear();
@@ -390,14 +503,22 @@ fn check_create_table<T: TTable>(
     let columns = &create_table.columns;
     for (_, column_type) in columns {
         if ctx.globals.type_map.get(column_type).is_none() {
-            return Err(TypeError::Undefined(column_type.to_string()));
+            return Err(TypeError::Undefined {
+                span: column_type.span,
+                kind: "type",
+                item: column_type.to_string(),
+            });
         }
     }
 
-    for i in 0..columns.len() {
-        for j in 0..i {
-            if columns[i] == columns[j] {
-                return Err(TypeError::AlreadyDefined);
+    // Make sure no two columns has the same name
+    for (i, (col_a, _)) in columns.iter().enumerate() {
+        for (col_b, _) in columns[0..i].iter() {
+            if col_a.as_ref() == col_b.as_ref() {
+                return Err(TypeError::AlreadyDefined {
+                    span: col_a.span,
+                    ident: col_a.to_string(),
+                });
             }
         }
     }
@@ -415,15 +536,22 @@ fn check_create_type<T: TTable>(
     // as well ass that Type{A,B,C} exists
     // TODO: recursive types
     match create {
-        CreateType::Variant(name, variants) => {
+        CreateType::Variant { name, variants } => {
             if ctx.globals.type_map.get_id(name).is_some() {
-                return Err(TypeError::AlreadyDefined);
+                return Err(TypeError::AlreadyDefined {
+                    span: name.span,
+                    ident: name.to_string(),
+                });
             }
 
             for (_variant, types) in variants {
                 for t_name in types {
                     if ctx.globals.type_map.get_id(t_name).is_none() {
-                        return Err(TypeError::Undefined(t_name.to_string()));
+                        return Err(TypeError::Undefined {
+                            span: t_name.span,
+                            kind: "type",
+                            item: t_name.to_string(),
+                        });
                     }
                 }
             }
@@ -432,61 +560,69 @@ fn check_create_type<T: TTable>(
     Ok(())
 }
 
-fn check_expr<'a, T: TTable>(expr: &'a Expr, ctx: &Context<T>) -> Result<DuckType<'a>, TypeError> {
+fn check_expr<'ast, T: TTable>(
+    expr: &'ast Spanned<Expr<'ast>>,
+    ctx: &Context<T>,
+) -> Result<DuckType<'ast>, TypeError> {
     let type_map = &ctx.globals.type_map;
-    match expr {
+    match &expr.value {
         Expr::Ident(ident) => Ok(ctx.search_locals(ident)?.into()),
 
-        Expr::Value(value) => type_of_value(&value, type_map),
+        Expr::Value(value) => type_of_value(&value, expr.span, type_map),
 
         // All types are currently Eq and Ord
-        Expr::Equals(e1, e2)
-        | Expr::NotEquals(e1, e2)
-        | Expr::LessEquals(e1, e2)
-        | Expr::LessThan(e1, e2)
-        | Expr::GreaterEquals(e1, e2)
-        | Expr::GreaterThan(e1, e2) => {
+        Expr::Eql(box (e1, e2))
+        | Expr::NEq(box (e1, e2))
+        | Expr::LEq(box (e1, e2))
+        | Expr::LTh(box (e1, e2))
+        | Expr::GEq(box (e1, e2))
+        | Expr::GTh(box (e1, e2)) => {
             let type_1 = check_expr(e1, ctx)?;
             let type_2 = check_expr(e2, ctx)?;
-            assert_type_eq(type_1, type_2, type_map)?;
+            assert_type_eq(type_1, type_2, expr.span, type_map)?;
 
             Ok(type_map.get_base_id(BaseType::Bool).into())
         }
 
-        Expr::And(e1, e2) | Expr::Or(e1, e2) => {
+        Expr::And(box (e1, e2)) | Expr::Or(box (e1, e2)) => {
             let type_1 = check_expr(e1, ctx)?;
             let type_2 = check_expr(e2, ctx)?;
 
             let bool_id = type_map.get_base_id(BaseType::Bool);
 
-            assert_type_as(type_1, bool_id, type_map)?;
-            assert_type_as(type_2, bool_id, type_map)?;
+            assert_type_as(type_1, bool_id, e1.span, type_map)?;
+            assert_type_as(type_2, bool_id, e2.span, type_map)?;
 
             Ok(bool_id.into())
         }
     }
 }
 
-fn assert_type_eq<'a, T1, T2>(
+fn assert_type_eq<'ast, T1, T2>(
     type_1: T1,
     type_2: T2,
+    span: Option<Span>,
     type_map: &TypeMap,
-) -> Result<DuckType<'a>, TypeError>
+) -> Result<DuckType<'ast>, TypeError>
 where
-    DuckType<'a>: From<T1>,
-    DuckType<'a>: From<T2>,
+    DuckType<'ast>: From<T1>,
+    DuckType<'ast>: From<T2>,
 {
     let (type_1, type_2) = (DuckType::from(type_1), DuckType::from(type_2));
     use DuckType::*;
     match (type_1, type_2) {
         (Concrete(type_1), Concrete(type_2)) => {
             if type_1 != type_2 {
-                return Err(TypeError::MismatchingTypes { type_1, type_2 });
+                return Err(TypeError::MismatchingTypes {
+                    span,
+                    type_1: type_map.get_name(type_1).unwrap().to_string(),
+                    type_2: type_map.get_name(type_2).unwrap().to_string(),
+                });
             }
         }
         (Concrete(concrete_type), variant @ Variant(_, _))
         | (variant @ Variant(_, _), Concrete(concrete_type)) => {
-            return assert_type_as(variant, concrete_type, type_map).map(Into::into);
+            return assert_type_as(variant, concrete_type, span, type_map).map(Into::into);
         }
         (_, _) => unimplemented!("Comparing, duck-types"),
     }
@@ -494,18 +630,23 @@ where
     Ok(type_1)
 }
 
-fn assert_type_as<'a, T>(
+fn assert_type_as<'ast, T>(
     actual: T,
     expected: TypeId,
+    span: Option<Span>,
     type_map: &TypeMap,
 ) -> Result<TypeId, TypeError>
 where
-    T: Into<DuckType<'a>>,
+    T: Into<DuckType<'ast>>,
 {
     match actual.into() {
         DuckType::Concrete(actual) => {
             if actual != expected {
-                return Err(TypeError::InvalidType { actual, expected });
+                return Err(TypeError::InvalidType {
+                    span,
+                    actual: type_map.get_name(actual).unwrap().to_string(),
+                    expected: type_map.get_name(expected).unwrap().to_string(),
+                });
             }
         }
         DuckType::Variant(variant_name, sub_values) => {
@@ -515,21 +656,29 @@ where
                 let (_, sub_types) = variants
                     .iter()
                     .find(|(name, _)| name == variant_name)
-                    .ok_or_else(|| TypeError::Undefined(variant_name.to_string()))?;
+                    .ok_or_else(|| TypeError::Undefined {
+                        span,
+                        kind: "constructor",
+                        item: variant_name.to_string(),
+                    })?;
 
                 if sub_types.len() != sub_values.len() {
                     return Err(TypeError::InvalidCount {
+                        span,
                         expected: sub_types.len(),
                         actual: sub_values.len(),
                     });
                 }
 
                 for (sub_type, sub_value) in sub_types.iter().zip(sub_values.iter()) {
-                    let vt = type_of_value(sub_value, type_map)?;
-                    assert_type_as(vt, *sub_type, type_map)?;
+                    let vt = type_of_value(sub_value, span, type_map)?;
+                    assert_type_as(vt, *sub_type, span, type_map)?;
                 }
             } else {
-                return Err(TypeError::NotASumType);
+                return Err(TypeError::InvalidUnknownType {
+                    span,
+                    expected: type_map.get_name(expected).unwrap().to_string(),
+                });
             }
         }
     }
@@ -537,7 +686,11 @@ where
     Ok(expected)
 }
 
-pub fn type_of_value<'a>(value: &'a Value, types: &TypeMap) -> Result<DuckType<'a>, TypeError> {
+pub fn type_of_value<'ast>(
+    value: &'ast Value<'ast>,
+    span: Option<Span>,
+    types: &TypeMap,
+) -> Result<DuckType<'ast>, TypeError> {
     match value {
         Value::Char(_) => Ok(types.get_base_id(BaseType::Char).into()),
         Value::Integer(_) => Ok(types.get_base_id(BaseType::Integer).into()),
@@ -547,9 +700,18 @@ pub fn type_of_value<'a>(value: &'a Value, types: &TypeMap) -> Result<DuckType<'
             if let Some(namespace) = namespace {
                 let type_id = types
                     .get_id(namespace)
-                    .ok_or_else(|| TypeError::Undefined(namespace.clone().into_owned()))?;
+                    .ok_or_else(|| TypeError::Undefined {
+                        span,
+                        kind: "type",
+                        item: namespace.to_string(),
+                    })?;
 
-                assert_type_as(DuckType::Variant(variant_name, sub_values), type_id, types)?;
+                assert_type_as(
+                    DuckType::Variant(variant_name, sub_values),
+                    type_id,
+                    span,
+                    types,
+                )?;
 
                 Ok(DuckType::Concrete(type_id))
             } else {
@@ -563,7 +725,7 @@ pub fn type_of_value<'a>(value: &'a Value, types: &TypeMap) -> Result<DuckType<'
 mod tests {
     use super::*;
     use crate::ast::Expr;
-    use crate::local::{Resource, ResourcesGuard};
+    use crate::state::{Resource, ResourcesGuard};
     use crate::table::{tests::create_type_map, Table};
     use futures::executor::block_on;
     use std::sync::Arc;
@@ -583,44 +745,45 @@ mod tests {
         };
 
         let valid_examples = vec![
-            Expr::Equals(
-                box Expr::Value(Value::Integer(3)),
-                box Expr::Value(Value::Integer(2)),
-            ),
-            Expr::Equals(
-                box Expr::Value(Value::Bool(true)),
-                box Expr::Value(Value::Bool(true)),
-            ),
-            Expr::Equals(
-                box Expr::Value(Value::Double(0.0)),
-                box Expr::Value(Value::Double(0.1)),
-            ),
-            Expr::And(
-                box Expr::Value(Value::Bool(false)),
-                box Expr::GreaterThan(
-                    box Expr::Value(Value::Integer(42)),
-                    box Expr::Value(Value::Integer(0)),
-                ),
-            ),
+            Expr::Eql(box (
+                Expr::Value(Value::Integer(3).into()).into(),
+                Expr::Value(Value::Integer(2).into()).into(),
+            )),
+            Expr::Eql(box (
+                Expr::Value(Value::Bool(true).into()).into(),
+                Expr::Value(Value::Bool(true).into()).into(),
+            )),
+            Expr::Eql(box (
+                Expr::Value(Value::Double(0.0).into()).into(),
+                Expr::Value(Value::Double(0.1).into()).into(),
+            )),
+            Expr::And(box (
+                Expr::Value(Value::Bool(false).into()).into(),
+                Expr::GTh(box (
+                    Expr::Value(Value::Integer(42).into()).into(),
+                    Expr::Value(Value::Integer(0).into()).into(),
+                ))
+                .into(),
+            )),
         ];
 
         let invalid_examples = vec![
-            Expr::Equals(
-                box Expr::Value(Value::Bool(false)),
-                box Expr::Value(Value::Integer(2)),
-            ),
-            Expr::And(
-                box Expr::Value(Value::Integer(0)),
-                box Expr::Value(Value::Integer(0)),
-            ),
+            Expr::Eql(box (
+                Expr::Value(Value::Bool(false).into()).into(),
+                Expr::Value(Value::Integer(2).into()).into(),
+            )),
+            Expr::And(box (
+                Expr::Value(Value::Integer(0).into()).into(),
+                Expr::Value(Value::Integer(0).into()).into(),
+            )),
         ];
 
         for example in valid_examples {
-            check_expr(&example, &dummy_ctx).unwrap();
+            check_expr(&example.into(), &dummy_ctx).unwrap();
         }
 
         for example in invalid_examples {
-            check_expr(&example, &dummy_ctx).unwrap_err();
+            check_expr(&example.into(), &dummy_ctx).unwrap_err();
         }
     }
 }

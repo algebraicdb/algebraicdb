@@ -2,9 +2,10 @@ mod iter;
 
 use self::iter::*;
 use crate::ast::*;
-use crate::local::{DbState, DbmsState, ResourcesGuard};
+use crate::error_message::ErrorMessage;
 use crate::persistence::WriteToWal;
 use crate::pre_typechecker;
+use crate::state::{DbState, DbmsState, ResourcesGuard};
 use crate::table::{Cell, Schema, Table};
 use crate::typechecker;
 use crate::types::{Type, TypeId, TypeMap, Value};
@@ -25,7 +26,10 @@ pub(crate) async fn execute_query(
     let result: Result<Stmt, _> = StmtParser::new().parse(&input);
     let ast = match result {
         Ok(ast) => ast,
-        Err(e) => return Ok(w.write_all(format!("{:#?}\n", e).as_bytes()).await?),
+        Err(e) => {
+            w.write_all(e.display(input).as_bytes()).await?;
+            return Ok(());
+        }
     };
 
     // 2. determine resources
@@ -37,7 +41,7 @@ pub(crate) async fn execute_query(
         Ok(resources) => resources,
         Err(name) => {
             return Ok(w
-                .write_all(format!("No such table: {}\n", name).as_bytes())
+                .write_all(format!("no such table: \"{}\"\n", name).as_bytes())
                 .await?)
         }
     };
@@ -46,7 +50,10 @@ pub(crate) async fn execute_query(
     // 4. typecheck
     match typechecker::check_stmt(&ast, &resources) {
         Ok(()) => {}
-        Err(e) => return Ok(w.write_all(format!("{:#?}\n", e).as_bytes()).await?),
+        Err(e) => {
+            w.write_all(e.display(input).as_bytes()).await?;
+            return Ok(());
+        }
     }
 
     // 5. Execute query
@@ -67,7 +74,7 @@ pub(crate) async fn execute_replay_query<'a>(
         Ok(resources) => resources,
         Err(name) => {
             return Ok(w
-                .write_all(format!("No such table: {}\n", name).as_bytes())
+                .write_all(format!("no such table: \"{}\"\n", name).as_bytes())
                 .await?)
         }
     };
@@ -92,7 +99,7 @@ async fn execute_stmt(
             | Stmt::Delete(_)
             | Stmt::Update(_)
             | Stmt::Drop(_)
-            | Stmt::Insert(_) => wal.write(&ast).await,
+            | Stmt::Insert(_) => wal.write(&ast).await?,
             Stmt::Select(_) => { /* We're only reading, so no logging required*/ }
         }
     }
@@ -107,7 +114,9 @@ async fn execute_stmt(
             let table = execute_select(&select, &resources);
             print_table(table.iter(type_map), w).await
         }
-        _ => unimplemented!("Not implemented: {:?}", ast),
+        Stmt::Drop(drop) => execute_drop_table(drop, s, w).await,
+        ast @ Stmt::Delete(_) => unimplemented!("Not implemented: {:?}", ast),
+        ast @ Stmt::Update(_) => unimplemented!("Not implemented: {:?}", ast),
     }
 }
 
@@ -120,7 +129,6 @@ async fn print_table(
     let mut fmt_buf = String::new();
 
     for row in table {
-        dbg!("i now do the write bro");
         w.write_all(b"[").await?;
         let mut first = true;
 
@@ -196,10 +204,12 @@ pub fn execute_select_from<'a>(
 
             let mut table_out = Table::new(table_a.schema().union(&table_b.schema()), type_map);
 
+            let default_expr = Expr::Value(Spanned::from(Value::Bool(true)));
             let on_expr = join
                 .on_clause
                 .as_ref()
-                .unwrap_or(&Expr::Value(Value::Bool(true)));
+                .map(|e| &e.value)
+                .unwrap_or(&default_expr);
 
             let mut row_buf: Vec<u8> = vec![];
 
@@ -279,8 +289,14 @@ async fn execute_create_table(
     let table = Table::new(schema, &resources.type_map);
 
     match s.create_table(create_table.table.to_string(), table).await {
-        Ok(()) => w.write_all(b"Table created\n").await?,
-        Err(()) => w.write_all(b"Table already exists\n").await?,
+        Ok(()) => {
+            w.write_all(format!("table created: \"{}\"\n", create_table.table).as_bytes())
+                .await?
+        }
+        Err(()) => {
+            w.write_all(format!("table already exists: \"{}\"\n", create_table.table).as_bytes())
+                .await?
+        }
     };
     Ok(())
 }
@@ -293,7 +309,7 @@ async fn execute_create_type(
     let types = &mut resources.type_map;
 
     match create_type {
-        CreateType::Variant(name, variants) => {
+        CreateType::Variant { name, variants } => {
             let variant_types: Vec<_> = variants
                 .into_iter()
                 .map(|(constructor, subtypes)| {
@@ -306,10 +322,28 @@ async fn execute_create_type(
                 })
                 .collect();
 
-            w.write_all(b"Type ").await?;
+            w.write_all(b"type ").await?;
             w.write_all(name.as_bytes()).await?;
-            w.write_all(b" created \n").await?;
-            types.insert(name, Type::Sum(variant_types));
+            w.write_all(b" created\n").await?;
+            types.insert(name.value, Type::Sum(variant_types));
+        }
+    }
+    Ok(())
+}
+
+async fn execute_drop_table(
+    drop: Drop<'_>,
+    s: &DbmsState,
+    w: &mut (dyn AsyncWrite + Send + Unpin),
+) -> Result<(), Box<dyn Error>> {
+    match s.drop_table(drop.table).await {
+        Ok(()) => {
+            w.write_all(format!("table dropped: \"{}\"\n", drop.table).as_bytes())
+                .await?
+        }
+        Err(()) => {
+            w.write_all(format!("no such table: \"{}\"\n", drop.table).as_bytes())
+                .await?
         }
     }
     Ok(())
@@ -376,25 +410,25 @@ where
 
     match expr {
         Expr::Value(v) => v.deep_clone(),
-        Expr::Equals(e1, e2) => cmp(e1, e2, bs, |v1, v2| v1 == v2),
-        Expr::NotEquals(e1, e2) => cmp(e1, e2, bs, |v1, v2| v1 != v2),
-        Expr::LessEquals(e1, e2) => cmp(e1, e2, bs, |v1, v2| v1 <= v2),
-        Expr::LessThan(e1, e2) => cmp(e1, e2, bs, |v1, v2| v1 < v2),
-        Expr::GreaterThan(e1, e2) => cmp(e1, e2, bs, |v1, v2| v1 > v2),
-        Expr::GreaterEquals(e1, e2) => cmp(e1, e2, bs, |v1, v2| v1 >= v2),
-        Expr::And(e1, e2) => match execute_expr(e1, bs.clone()) {
+        Expr::Eql(box (e1, e2)) => cmp(e1, e2, bs, |v1, v2| v1 == v2),
+        Expr::NEq(box (e1, e2)) => cmp(e1, e2, bs, |v1, v2| v1 != v2),
+        Expr::LEq(box (e1, e2)) => cmp(e1, e2, bs, |v1, v2| v1 <= v2),
+        Expr::LTh(box (e1, e2)) => cmp(e1, e2, bs, |v1, v2| v1 < v2),
+        Expr::GTh(box (e1, e2)) => cmp(e1, e2, bs, |v1, v2| v1 > v2),
+        Expr::GEq(box (e1, e2)) => cmp(e1, e2, bs, |v1, v2| v1 >= v2),
+        Expr::And(box (e1, e2)) => match execute_expr(e1, bs.clone()) {
             Value::Bool(true) => execute_expr(e2, bs),
             Value::Bool(false) => Value::Bool(false),
             v => unreachable!("Non-boolean expression in Expr::And: {:?}", v),
         },
-        Expr::Or(e1, e2) => match execute_expr(e1, bs.clone()) {
+        Expr::Or(box (e1, e2)) => match execute_expr(e1, bs.clone()) {
             Value::Bool(true) => Value::Bool(true),
             Value::Bool(false) => execute_expr(e2, bs),
             v => unreachable!("Non-boolean expression in Expr::And: {:?}", v),
         },
         Expr::Ident(ident) => {
             let (_, cell) = bs
-                .find(|(name, _)| name == ident)
+                .find(|(name, _)| name == ident.as_ref())
                 .unwrap_or_else(|| unreachable!("Ident did not exist"));
 
             let t: &Type = cell.type_map.get_by_id(cell.type_id());
