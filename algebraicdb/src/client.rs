@@ -10,11 +10,7 @@ pub type State = local::DbmsState;
 #[cfg(feature = "wrapper")]
 pub type State = local::PgWrapperState;
 
-pub(crate) async fn client<R, W>(
-    mut reader: R,
-    writer: W,
-    mut state: State,
-) -> Result<(), Box<dyn Error>>
+pub async fn client<R, W>(mut reader: R, writer: W, mut state: State) -> Result<(), Box<dyn Error>>
 where
     R: AsyncRead + Unpin + Send,
     W: AsyncWrite + Unpin + Send,
@@ -35,9 +31,10 @@ where
     .expect("Invalid regex");
 
     loop {
-        let _n: usize = match reader.read_buf(&mut buf).await? {
+        dbg!("client: reading");
+        let _n: usize = match dbg!(reader.read_buf(&mut buf).await?) {
             // No bytes read means EOF was reached
-            0 => return Ok(()),
+            0 => return dbg!(Ok(())),
             // Read n bytes
             n => n,
         };
@@ -50,7 +47,7 @@ where
         loop {
             // Validate bytes as utf-8 string
             let input = match std::str::from_utf8(&buf[..]) {
-                Ok(input) => input,
+                Ok(input) => dbg!(input),
                 Err(e) => {
                     writer
                         .write_all(format!("Error: {}\n", e).as_bytes())
@@ -73,7 +70,9 @@ where
             let input = &input[..end];
 
             // Exectue the (semicolon-terminated) string as a query
-            execute_query(input, &mut state, &mut writer).await?;
+            execute_query(dbg!(input), &mut state, &mut writer).await?;
+
+            dbg!("done executing query");
 
             writer.flush().await?;
 

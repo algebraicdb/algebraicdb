@@ -120,6 +120,7 @@ async fn print_table(
     let mut fmt_buf = String::new();
 
     for row in table {
+        dbg!("i now do the write bro");
         w.write_all(b"[").await?;
         let mut first = true;
 

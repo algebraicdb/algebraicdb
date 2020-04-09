@@ -15,7 +15,6 @@ fn lalrpop_parse_benchmark(c: &mut Criterion) {
 criterion_group!(benches, lalrpop_parse_benchmark);
 criterion_main!(benches);
 
-
 /**** EXAMPLE QUERIES ****/
 const SMALL_EXAMPLE: &str = r#"SELECT col FROM t1 LEFT JOIN t2;"#;
 

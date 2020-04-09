@@ -3,8 +3,9 @@ use std::io;
 use std::net::Shutdown;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::net::UnixStream;
-use tokio::runtime::{self, Runtime};
 use tokio::stream::StreamExt;
+
+use benches::rt;
 
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
 
@@ -23,11 +24,7 @@ fn integration_tests_benchmark(c: &mut Criterion) {
             let mut rt = rt();
 
             group.bench_function(
-                format!(
-                    "Test: {}",
-                    entry.file_name().into_string().unwrap()
-                )
-                .as_str(),
+                format!("Test: {}", entry.file_name().into_string().unwrap()).as_str(),
                 |b| {
                     b.iter(|| {
                         rt.block_on(async {
@@ -38,15 +35,6 @@ fn integration_tests_benchmark(c: &mut Criterion) {
             );
         }
     }
-}
-
-fn rt() -> Runtime {
-    runtime::Builder::new()
-        .threaded_scheduler()
-        .core_threads(2)
-        .enable_all()
-        .build()
-        .unwrap()
 }
 
 async fn run_example_query(input: String) -> io::Result<Result<(), ()>> {

@@ -3,5 +3,6 @@ members = [
     "algebraicdb",
     "adbcat",
     "benches",
+    "channel_stream",
     ]
 default-members= ["algebraicdb", "benches"]
