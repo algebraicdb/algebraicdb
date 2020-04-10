@@ -1,23 +1,22 @@
 use crate::state::DbmsState;
 use crate::client::client;
 use std::error::Error;
-use tokio::net::TcpListener;
+use tokio::net::UnixListener;
 
-/// Start an instance of the dbms which binds itself to a tcp socket
-pub async fn create_tcp_server(
-    address: &str,
-    port: u16,
+pub async fn create_uds_server(
+    path: &str,
     state: &DbmsState,
 ) -> Result<!, Box<dyn Error>> {
+    
 
-    let mut listener = TcpListener::bind((address, port)).await?;
+    let mut listener = UnixListener::bind(path)?;
 
-    info!("listening on {}:{}", address, port);
+    info!("listening on socket: {}", path);
 
     loop {
         match listener.accept().await {
             Ok((mut socket, client_address)) => {
-                info!("new client [{}] connected", client_address);
+                info!("new client [{:?}] connected", client_address);
 
                 // Copy state accessor, not the state itself.
                 let state = state.clone();
@@ -26,10 +25,10 @@ pub async fn create_tcp_server(
                     let (reader, writer) = socket.split();
                     match client(reader, writer, state).await {
                         Ok(()) => {
-                            info!("client [{}] socket closed", client_address);
+                            info!("client [{:?}] socket closed", client_address);
                         }
                         Err(e) => {
-                            info!("client [{}] errored: {}", client_address, e);
+                            info!("client [{:?}] errored: {}", client_address, e);
                         }
                     }
                 });
