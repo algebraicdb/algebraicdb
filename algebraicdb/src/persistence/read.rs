@@ -6,11 +6,11 @@ use std::collections::HashMap;
 use std::io;
 use std::path::PathBuf;
 use std::sync::Arc;
-use tokio::fs::{self, read_dir, remove_file, remove_dir_all, read_to_string};
+use tokio::fs::{self, read_dir, read_to_string, remove_dir_all, remove_file};
 use tokio::stream::StreamExt;
 use tokio::sync::RwLock;
 
-use super::{DATA_DIR_FILES, TNUM_FILE_NAME, TMP_EXTENSION, TABLES_DIR_NAME, TYPE_MAP_FILE_NAME};
+use super::{DATA_DIR_FILES, TABLES_DIR_NAME, TMP_EXTENSION, TNUM_FILE_NAME, TYPE_MAP_FILE_NAME};
 
 /// Load DbData from an initialized data directory
 ///

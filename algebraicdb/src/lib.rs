@@ -14,8 +14,7 @@ extern crate log;
 
 mod api;
 pub mod ast;
-pub mod client
-;
+pub mod client;
 mod error_message;
 pub mod executor;
 pub mod grammar;

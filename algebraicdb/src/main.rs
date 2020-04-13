@@ -1,14 +1,13 @@
 #![feature(never_type)]
 
-use algebraicdb::{create_tcp_server, create_uds_server};
+use algebraicdb::state::DbmsState;
 use algebraicdb::DbmsConfig;
+use algebraicdb::{create_tcp_server, create_uds_server};
+use log::{debug, info, LevelFilter};
 use std::error::Error;
-use algebraicdb::client::State;
+use std::path::PathBuf;
 use structopt::StructOpt;
-use log::{info, debug, LevelFilter};
-use tokio::try_join;
-
-
+use tokio::signal::ctrl_c;
 
 #[derive(StructOpt)]
 struct Config {
@@ -40,12 +39,22 @@ async fn main() -> Result<(), Box<dyn Error>> {
     }
     info!("setting up server");
 
-    let state = State::new(config.dbms_config).await;
-    
-    try_join!(
-    create_tcp_server(&config.address, config.port, &state),
-    create_uds_server(&config.uds_address, &state)).unwrap();
+    let state: DbmsState = DbmsState::new(config.dbms_config).await;
+    let uds_state = state.clone();
+    let (address, port, uds_address) = (config.address, config.port, config.uds_address);
 
+    tokio::spawn(async move {
+        create_tcp_server(address.as_str(), port, state)
+            .await
+            .unwrap()
+    });
+    tokio::spawn(async move {
+        create_uds_server(PathBuf::from(uds_address), uds_state)
+            .await
+            .unwrap()
+    });
+
+    ctrl_c().await.unwrap();
+    info!("Shutting down...");
     Ok(())
-
 }

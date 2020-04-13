@@ -33,10 +33,12 @@ async fn manager(
 
             assert!(current >= last_snapshotted);
             if current > last_snapshotted {
-                last_snapshotted = snapshot(&data_dir, last_snapshotted, &mut dbms).await.unwrap_or_else(|err| {
-                    error!("failed to write snapshot: {:?}\n", err);
-                    last_snapshotted
-                });
+                last_snapshotted = snapshot(&data_dir, last_snapshotted, &mut dbms)
+                    .await
+                    .unwrap_or_else(|err| {
+                        error!("failed to write snapshot: {:?}\n", err);
+                        last_snapshotted
+                    });
 
                 if let Err(e) = wal.truncate_wal(last_snapshotted).await {
                     error!("failed to truncate wal: {:?}", e);

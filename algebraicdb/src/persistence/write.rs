@@ -6,13 +6,12 @@ use futures::future::join_all;
 use std::io;
 use std::ops::Deref;
 use std::path::PathBuf;
-use tokio::fs::{read_dir, remove_dir_all, create_dir, rename, File, OpenOptions};
+use tokio::fs::{create_dir, read_dir, remove_dir_all, rename, File, OpenOptions};
 use tokio::io::AsyncWriteExt;
 use tokio::stream::StreamExt;
 
 use super::{
-    TransactionNumber, TNUM_FILE_NAME, TABLES_DIR_NAME, TMP_EXTENSION,
-    TYPE_MAP_FILE_NAME,
+    TransactionNumber, TABLES_DIR_NAME, TMP_EXTENSION, TNUM_FILE_NAME, TYPE_MAP_FILE_NAME,
 };
 
 pub async fn initialize_data_dir(data_dir: &PathBuf) -> io::Result<()> {
@@ -36,7 +35,6 @@ pub async fn initialize_data_dir(data_dir: &PathBuf) -> io::Result<()> {
 
     write_tnum(data_dir, 0).await
 }
-
 
 /// Write the current database state to a temporary folder, and then atomically replace the active data folder
 pub(super) async fn snapshot(
@@ -99,19 +97,11 @@ async fn write_tnum(data_dir: &PathBuf, tnum: TransactionNumber) -> io::Result<(
     let mut tmp_tnum_path = cur_tnum_path.clone();
     tmp_tnum_path.set_extension(TMP_EXTENSION);
 
-    flush_to_file(
-        &tmp_tnum_path,
-        tnum.to_string().as_bytes(),
-        false,
-    )
-    .await?;
+    flush_to_file(&tmp_tnum_path, tnum.to_string().as_bytes(), false).await?;
 
     // Rename the file, and make sure the rename gets synced to disk
     rename(&tmp_tnum_path, &cur_tnum_path).await?;
-    File::open(&cur_tnum_path)
-        .await?
-        .sync_all()
-        .await?;
+    File::open(&cur_tnum_path).await?.sync_all().await?;
 
     Ok(())
 }

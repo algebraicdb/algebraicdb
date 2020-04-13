@@ -60,7 +60,7 @@ lazy_static! {
         .unwrap() as usize
     };
     static ref ENTRY_END_SIZE: usize =
-        bincode::serialized_size(&EntryEnd { checksum: 0 }).unwrap() as usize ;
+        bincode::serialized_size(&EntryEnd { checksum: 0 }).unwrap() as usize;
 }
 
 impl WriteAheadLog {

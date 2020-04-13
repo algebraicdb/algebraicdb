@@ -1,12 +1,12 @@
 use algebraicdb::client::client;
+use algebraicdb::create_uds_server;
 use algebraicdb::Timing;
 use algebraicdb::{state::DbmsState, DbmsConfig};
 use channel_stream::{pair, Reader, Writer};
 use std::error::Error;
+use std::path::PathBuf;
 use tokio::fs::{create_dir_all, remove_dir_all, remove_file};
 use tokio::net::UnixStream;
-use algebraicdb::create_uds_server;
-
 
 pub fn connect2(state: DbmsState) -> (Writer, Reader) {
     // use custom channel stream for communicating with database
@@ -25,7 +25,6 @@ pub fn connect(state: DbmsState) -> Result<UnixStream, Box<dyn Error>> {
     // use unix-pipe for communicating with database
     let (mut db_stream, our_stream) = UnixStream::pair().unwrap();
 
-
     // Spawn a database
     tokio::spawn(async move {
         let (reader, writer) = db_stream.split();
@@ -38,9 +37,10 @@ pub fn connect(state: DbmsState) -> Result<UnixStream, Box<dyn Error>> {
 pub async fn start_uds_server() {
     let state = startup_with_wal().await.unwrap();
     remove_file("/tmp/adbench/socket").await.unwrap_or(());
-    create_uds_server("/tmp/adbench/socket", &state).await.unwrap();
+    create_uds_server(PathBuf::from("/tmp/adbench/socket"), state)
+        .await
+        .unwrap();
 }
-
 
 pub async fn startup_no_wal() -> Result<DbmsState, Box<dyn Error>> {
     let config = DbmsConfig::testing_config();
