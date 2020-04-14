@@ -112,7 +112,7 @@ impl DbmsState {
                 Ok(state) => state,
                 Err(e) => {
                     info!(
-                        "Failed to read stored data from disk, is this a fresh instance? {}",
+                        "failed to read stored data from disk, is this a fresh instance? {}",
                         e
                     );
                     initialize_data_dir(&config.data_dir)
