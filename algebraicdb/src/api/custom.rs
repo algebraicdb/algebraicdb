@@ -1,5 +1,5 @@
 use crate::api::config::DbmsConfig;
-use crate::client::{client, State};
+use crate::{client::client, state::DbmsState};
 use std::error::Error;
 use tokio::io::{AsyncRead, AsyncWrite};
 
@@ -13,6 +13,6 @@ where
     R: AsyncRead + Unpin + Send,
     W: AsyncWrite + Unpin + Send,
 {
-    let state = State::new(dbms_config).await;
+    let state = DbmsState::new(dbms_config).await;
     client(reader, writer, state).await
 }

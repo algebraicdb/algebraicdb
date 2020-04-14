@@ -1,14 +1,8 @@
 use crate::executor::execute_query;
-use crate::state;
+use crate::state::DbmsState;
 use regex::Regex;
 use std::error::Error;
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, BufWriter};
-
-#[cfg(not(feature = "wrapper"))]
-pub type State = state::DbmsState;
-
-#[cfg(feature = "wrapper")]
-pub type State = state::PgWrapperState;
 
 lazy_static! {
     // This regex tokenizes the input string, and lets
@@ -23,7 +17,11 @@ lazy_static! {
     ).expect("invalid regex");
 }
 
-pub async fn client<R, W>(mut reader: R, writer: W, mut state: State) -> Result<(), Box<dyn Error>>
+pub async fn client<R, W>(
+    mut reader: R,
+    writer: W,
+    mut state: DbmsState,
+) -> Result<(), Box<dyn Error>>
 where
     R: AsyncRead + Unpin + Send,
     W: AsyncWrite + Unpin + Send,

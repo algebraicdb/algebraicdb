@@ -25,7 +25,6 @@ struct Config {
 }
 
 #[tokio::main]
-#[allow(unreachable_code)]
 async fn main() -> Result<(), Box<dyn Error>> {
     let config = Config::from_args();
 
