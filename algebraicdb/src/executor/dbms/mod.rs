@@ -173,8 +173,8 @@ fn full_table_scan<'a>(table: &'a Table, type_map: &'a TypeMap) -> RowIter<'a> {
         .collect();
 
     RowIter {
-        bindings,
-        matches: Arc::new([]),
+        bindings: Arc::new(bindings),
+        matches: Arc::new(vec![]),
         type_map,
         row: Some(0),
     }

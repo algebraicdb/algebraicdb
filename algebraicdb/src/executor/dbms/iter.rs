@@ -87,10 +87,10 @@ impl<'a> Rows<'a> {
 pub struct RowIter<'a> {
     // FIXME: Avoid using Arc:s
     /// The actual data cells iterated over
-    pub bindings: Arc<[CellRef<'a>]>,
+    pub bindings: Arc<Vec<CellRef<'a>>>,
 
     /// Filter rows
-    pub matches: Arc<[CellFilter<'a>]>,
+    pub matches: Arc<Vec<CellFilter<'a>>>,
 
     pub type_map: &'a TypeMap,
 
@@ -101,7 +101,7 @@ pub struct RowIter<'a> {
 #[derive(Clone)]
 pub struct CellIter<'a> {
     pub type_map: &'a TypeMap,
-    pub bindings: Arc<[CellRef<'a>]>,
+    pub bindings: Arc<Vec<CellRef<'a>>>,
     pub row: usize,
     pub cell: usize,
 }
@@ -237,12 +237,12 @@ impl<'a> RowIter<'a> {
             type_id: TypeId,
             data: &'a [u8],
             row_size: usize,
-            bindings: &mut Vec<CellRef<'a>>,
-            matches: &mut Vec<CellFilter<'a>>,
+            bindings: &mut Arc<Vec<CellRef<'a>>>,
+            matches: &mut Arc<Vec<CellFilter<'a>>>,
         ) {
             match pattern {
                 Pattern::Char(v) => {
-                    matches.push(CellFilter {
+                    Arc::make_mut(matches).push(CellFilter {
                         source: data,
                         row_size,
                         offset: byte_index,
@@ -250,7 +250,7 @@ impl<'a> RowIter<'a> {
                     });
                 }
                 Pattern::Int(v) => {
-                    matches.push(CellFilter {
+                    Arc::make_mut(matches).push(CellFilter {
                         source: data,
                         row_size,
                         offset: byte_index,
@@ -258,7 +258,7 @@ impl<'a> RowIter<'a> {
                     });
                 }
                 Pattern::Bool(v) => {
-                    matches.push(CellFilter {
+                    Arc::make_mut(matches).push(CellFilter {
                         source: data,
                         row_size,
                         offset: byte_index,
@@ -266,7 +266,7 @@ impl<'a> RowIter<'a> {
                     });
                 }
                 Pattern::Double(v) => {
-                    matches.push(CellFilter {
+                    Arc::make_mut(matches).push(CellFilter {
                         source: data,
                         row_size,
                         offset: byte_index,
@@ -276,7 +276,7 @@ impl<'a> RowIter<'a> {
                 Pattern::Ignore => {}
                 Pattern::Binding(ident) => {
                     let t = type_map.get_by_id(type_id);
-                    bindings.push(CellRef {
+                    Arc::make_mut(bindings).push(CellRef {
                         source: data,
                         name: ident,
                         type_id,
@@ -297,7 +297,7 @@ impl<'a> RowIter<'a> {
                             .find(|(_, (variant, _))| variant == name.as_ref())
                             .unwrap();
 
-                        matches.push(CellFilter {
+                        Arc::make_mut(matches).push(CellFilter {
                             source: data,
                             row_size,
                             offset: byte_index,
@@ -320,14 +320,13 @@ impl<'a> RowIter<'a> {
             }
         }
 
-        let mut bindings: Vec<CellRef> = vec![];
-        let mut matches: Vec<CellFilter> = vec![];
-
         for select_item in patterns {
             match select_item {
                 WhereItem::Expr(_) => {} // Ignore expressions for now
                 WhereItem::Pattern(name, pattern) => {
-                    for cell_ref in self.bindings.iter() {
+                    let mut i = 0;
+                    while let Some(cell_ref) = self.bindings.get(i) {
+                        i += 1;
                         if &cell_ref.name == name.as_ref() {
                             let byte_index = cell_ref.offset;
                             let type_id = cell_ref.type_id;
@@ -341,23 +340,13 @@ impl<'a> RowIter<'a> {
                                 type_id,
                                 data,
                                 row_size,
-                                &mut bindings,
-                                &mut matches,
+                                &mut self.bindings,
+                                &mut self.matches,
                             );
                         }
                     }
                 }
             }
-        }
-
-        if bindings.len() > 0 {
-            bindings.extend(self.bindings.into_iter());
-            self.bindings = bindings.into();
-        }
-
-        if matches.len() > 0 {
-            matches.extend_from_slice(&self.matches);
-            self.matches = matches.into();
         }
     }
 }
