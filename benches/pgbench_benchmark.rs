@@ -1,4 +1,3 @@
-#![feature(async_closure)]
 
 use benches::tps::simplebench::start_uds_server;
 use benches::{brt, srt};
