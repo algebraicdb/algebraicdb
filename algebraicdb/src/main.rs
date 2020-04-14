@@ -55,6 +55,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
     });
 
     ctrl_c().await.unwrap();
-    info!("Shutting down...");
+    info!("shutting down...");
     Ok(())
 }
