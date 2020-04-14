@@ -6,12 +6,17 @@ use crate::tokenizer::{TokenType, Tokenizer};
 use futures::executor::block_on;
 use futures::{select, FutureExt};
 use std::error::Error;
-use std::io::{stdin, stdout};
 use std::thread;
+use std::{
+    io::{stdin, stdout},
+    path::PathBuf,
+};
 use structopt::StructOpt;
 use termion::event::Key;
 use termion::input::TermRead;
 use termion::raw::IntoRawMode;
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::net::{TcpStream, UnixStream};
 use tokio::prelude::*;
 use tokio::sync::mpsc;
 use tui::backend::TermionBackend;
@@ -22,14 +27,22 @@ use tui::Terminal;
 
 #[derive(StructOpt, Debug)]
 #[structopt(name = "basic")]
-struct Opt {
-    /// The host address to connect to
-    #[structopt(short, long, default_value = "localhost")]
-    host: String,
+enum Opt {
+    Tcp {
+        /// The host address to connect to
+        #[structopt(short, long, default_value = "localhost")]
+        host: String,
 
-    /// The port of the host to connect to
-    #[structopt(short, long, default_value = "2345")]
-    port: u16,
+        /// The port of the host to connect to
+        #[structopt(short, long, default_value = "2345")]
+        port: u16,
+    },
+
+    Uds {
+        /// Unix domain socket
+        #[structopt(short, long, default_value = "/tmp/adbsocket")]
+        socket: PathBuf,
+    },
 }
 
 fn input_handler(mut sender: mpsc::Sender<Key>) -> Result<(), Box<dyn Error>> {
@@ -60,14 +73,27 @@ fn highlight_syntax<'a>(input: &'a str) -> impl Iterator<Item = Text<'static>> +
 async fn main() -> Result<(), Box<dyn Error>> {
     // Command-line arguments
     let opt = Opt::from_args();
+    match &opt {
+        Opt::Tcp { host, port } => {
+            let stream = TcpStream::connect((host.as_str(), *port)).await?;
+            run(stream, &opt).await
+        }
+        Opt::Uds { socket } => {
+            let stream = UnixStream::connect(socket).await?;
+            run(stream, &opt).await
+        }
+    }
+}
 
+async fn run<S: AsyncRead + AsyncWrite + Unpin>(
+    mut stream: S,
+    opt: &Opt,
+) -> Result<(), Box<dyn Error>> {
     // Terminal output
     let stdout = stdout().into_raw_mode()?;
     let backend = TermionBackend::new(stdout);
     let mut terminal = Terminal::new(backend)?;
 
-    // Network stream
-    let mut stream = tokio::net::TcpStream::connect((opt.host.as_str(), opt.port)).await?;
     let mut stream_buf = [0u8; 4096];
 
     // The current input line
@@ -115,7 +141,13 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 .wrap(false) // FIXME: wrapping doesn't work with the scrollback logic
                 .block(
                     Block::default()
-                        .title(&format!("Connected to {}:{}", opt.host, opt.port))
+                        .title(&format!(
+                            "Connected to {}",
+                            match opt {
+                                Opt::Tcp { host, port } => format!("address: {}:{}", host, port),
+                                Opt::Uds { socket } => format!("socket: {:?}", socket),
+                            }
+                        ))
                         .borders(Borders::ALL),
                 )
                 // When the console screen fills up, we scroll to the bottom so that the latest

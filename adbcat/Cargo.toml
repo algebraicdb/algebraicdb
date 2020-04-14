@@ -1,7 +1,9 @@
 [package]
 name = "adbcat"
 version = "0.1.0"
-authors = ["Joakim Hulthe <joakim@hulthe.net>"]
+authors = [
+    "Joakim Hulthe <joakim@hulthe.net>",
+    "feffe <feffe@feffe.dev>"]
 edition = "2018"
 
 [dependencies]
