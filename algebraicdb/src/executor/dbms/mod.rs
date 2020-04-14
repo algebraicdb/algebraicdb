@@ -3,6 +3,7 @@ mod iter;
 use self::iter::*;
 use crate::ast::*;
 use crate::error_message::ErrorMessage;
+use crate::grammar::StmtParser;
 use crate::persistence::WriteToWal;
 use crate::pre_typechecker;
 use crate::state::{DbState, DbmsState, ResourcesGuard};
@@ -15,15 +16,17 @@ use std::iter::empty;
 use std::sync::Arc;
 use tokio::io::{AsyncWrite, AsyncWriteExt};
 
+lazy_static! {
+    static ref PARSER: StmtParser = StmtParser::new();
+}
+
 pub(crate) async fn execute_query(
     input: &str,
     s: &mut DbmsState,
     w: &mut (dyn AsyncWrite + Send + Unpin),
 ) -> Result<(), Box<dyn Error>> {
     // 1. parse
-    use crate::grammar::StmtParser;
-
-    let result: Result<Stmt, _> = StmtParser::new().parse(&input);
+    let result: Result<Stmt, _> = PARSER.parse(&input);
     let ast = match result {
         Ok(ast) => ast,
         Err(e) => {

@@ -1,6 +1,5 @@
-use crate::api::config::DbmsConfig;
 use crate::client::client;
-use crate::client::State;
+use crate::state::DbmsState;
 use std::error::Error;
 use tokio::net::TcpListener;
 
@@ -8,10 +7,8 @@ use tokio::net::TcpListener;
 pub async fn create_tcp_server(
     address: &str,
     port: u16,
-    dbms_config: DbmsConfig,
+    state: DbmsState,
 ) -> Result<!, Box<dyn Error>> {
-    let state = State::new(dbms_config).await;
-
     let mut listener = TcpListener::bind((address, port)).await?;
 
     info!("listening on {}:{}", address, port);

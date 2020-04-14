@@ -3,7 +3,7 @@ use super::*;
 use crate::api::config::DbmsConfig;
 use crate::executor::execute_replay_query;
 use crate::persistence::TransactionNumber;
-use crate::persistence::{load_db_data, initialize_data_dir, spawn_snapshotter, WriteAheadLog};
+use crate::persistence::{initialize_data_dir, load_db_data, spawn_snapshotter, WriteAheadLog};
 use crate::table::Table;
 use crate::types::TypeMap;
 use async_trait::async_trait;
@@ -111,8 +111,12 @@ impl DbmsState {
             let db_data = match load_db_data(&config.data_dir).await {
                 Ok(state) => state,
                 Err(e) => {
-                    info!("Failed to read stored data from disk, is this a fresh instance? {}", e);
-                    initialize_data_dir(&config.data_dir).await
+                    info!(
+                        "failed to read stored data from disk, is this a fresh instance? {}",
+                        e
+                    );
+                    initialize_data_dir(&config.data_dir)
+                        .await
                         .expect("Failed to initialize data directory");
                     DbData::default()
                 }

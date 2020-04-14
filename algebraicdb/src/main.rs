@@ -1,15 +1,21 @@
 #![feature(never_type)]
 
-use algebraicdb::create_tcp_server;
+use algebraicdb::state::DbmsState;
 use algebraicdb::DbmsConfig;
+use algebraicdb::{create_tcp_server, create_uds_server};
+use log::{debug, info, LevelFilter};
 use std::error::Error;
+use std::path::PathBuf;
 use structopt::StructOpt;
-use log::{info, debug, LevelFilter};
+use tokio::signal::ctrl_c;
 
 #[derive(StructOpt)]
 struct Config {
     #[structopt(short, long, default_value = "localhost")]
     address: String,
+
+    #[structopt(short, long, default_value = "/tmp/adbsocket")]
+    uds_address: String,
 
     #[structopt(short, long, default_value = "2345")]
     port: u16,
@@ -19,7 +25,7 @@ struct Config {
 }
 
 #[tokio::main]
-async fn main() -> Result<!, Box<dyn Error>> {
+async fn main() -> Result<(), Box<dyn Error>> {
     let config = Config::from_args();
 
     if cfg!(debug_assertions) {
@@ -32,5 +38,22 @@ async fn main() -> Result<!, Box<dyn Error>> {
     }
     info!("setting up server");
 
-    create_tcp_server(&config.address, config.port, config.dbms_config).await
+    let state: DbmsState = DbmsState::new(config.dbms_config).await;
+    let uds_state = state.clone();
+    let (address, port, uds_address) = (config.address, config.port, config.uds_address);
+
+    tokio::spawn(async move {
+        create_tcp_server(address.as_str(), port, state)
+            .await
+            .unwrap()
+    });
+    tokio::spawn(async move {
+        create_uds_server(PathBuf::from(uds_address), uds_state)
+            .await
+            .unwrap()
+    });
+
+    ctrl_c().await.unwrap();
+    info!("shutting down...");
+    Ok(())
 }

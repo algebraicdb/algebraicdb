@@ -1,19 +1,26 @@
 use crate::executor::execute_query;
-use crate::state;
+use crate::state::DbmsState;
 use regex::Regex;
 use std::error::Error;
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, BufWriter};
 
-#[cfg(not(feature = "wrapper"))]
-pub type State = state::DbmsState;
+lazy_static! {
+    // This regex tokenizes the input string, and lets
+    // us find the first non-quoted non-commented semicolon
+    static ref TOKENIZER_REGEX: Regex = Regex::new(
+        r#"(?mx)
+          (?P<string>    "([^"]|(\\.))*"?)
+        | (?P<comment>   --.*$)
+        | (?P<semicolon> ;)
+        | (?P<other>     .)
+        "#
+    ).expect("invalid regex");
+}
 
-#[cfg(feature = "wrapper")]
-pub type State = state::PgWrapperState;
-
-pub(crate) async fn client<R, W>(
+pub async fn client<R, W>(
     mut reader: R,
     writer: W,
-    mut state: State,
+    mut state: DbmsState,
 ) -> Result<(), Box<dyn Error>>
 where
     R: AsyncRead + Unpin + Send,
@@ -21,18 +28,6 @@ where
 {
     let mut writer = BufWriter::new(writer);
     let mut buf = vec![];
-
-    // This regex tokenizes the input string, and lets
-    // us find the first non-quoted non-commented semicolon
-    let r = Regex::new(
-        r#"(?mx)
-          (?P<string>    "([^"]|(\\.))*"?)
-        | (?P<comment>   --.*$)
-        | (?P<semicolon> ;)
-        | (?P<other>     .)
-    "#,
-    )
-    .expect("Invalid regex");
 
     loop {
         let _n: usize = match reader.read_buf(&mut buf).await? {
@@ -61,7 +56,7 @@ where
             };
 
             // Find the first semicolon, and take the entire string up to that character.
-            let end = if let Some(semicolon) = r
+            let end = if let Some(semicolon) = TOKENIZER_REGEX
                 .captures_iter(input)
                 .flat_map(|c| c.name("semicolon"))
                 .next()

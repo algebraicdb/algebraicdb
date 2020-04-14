@@ -1,0 +1,13 @@
+[package]
+name = "channel_stream"
+version = "0.1.0"
+authors = ["Joakim Hulthe <joakim@hulthe.net>"]
+edition = "2018"
+
+[dependencies]
+pin-utils = "0.1.0-alpha.4"
+staticvec = "0.9.2"
+
+[dependencies.tokio]
+version = "0.2.16"
+features = ["full"]

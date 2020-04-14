@@ -5,8 +5,9 @@ use algebraicdb::table::{Schema, Table};
 use algebraicdb::types::{BaseType, TypeMap, Value};
 
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
-use tokio::runtime::{self, Runtime};
 use tokio::sync::RwLock;
+
+use benches::rt;
 
 fn execute_select_from_benchmark(c: &mut Criterion) {
     // Create the table
@@ -42,15 +43,6 @@ fn execute_select_from_benchmark(c: &mut Criterion) {
                 .for_each(|_row| ());
         })
     });
-}
-
-fn rt() -> Runtime {
-    runtime::Builder::new()
-        .threaded_scheduler()
-        .core_threads(2)
-        .enable_all()
-        .build()
-        .unwrap()
 }
 
 criterion_group!(benches, execute_select_from_benchmark);
