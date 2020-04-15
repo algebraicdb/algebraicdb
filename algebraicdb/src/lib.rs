@@ -7,7 +7,7 @@
 
 mod api;
 pub mod ast;
-mod client;
+pub mod client;
 pub mod executor;
 pub mod grammar;
 pub mod local;
@@ -20,3 +20,4 @@ pub mod types;
 
 pub use api::custom::create_with_writers;
 pub use api::tcp_api::create_tcp_server;
+pub use api::uds_api::create_uds_server;

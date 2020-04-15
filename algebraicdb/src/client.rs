@@ -6,11 +6,7 @@ use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, BufWriter};
 
 pub type State = local::WrapperState;
 
-pub(crate) async fn client<R, W>(
-    mut reader: R,
-    writer: W,
-    state: State,
-) -> Result<(), Box<dyn Error>>
+pub async fn client<R, W>(mut reader: R, writer: W, state: State) -> Result<(), Box<dyn Error>>
 where
     R: AsyncRead + Unpin + Send,
     W: AsyncWrite + Unpin + Send,

@@ -1,0 +1,31 @@
+[package]
+name = "benches"
+version = "0.0.0"
+publish = false
+edition = "2018"
+
+
+
+[dependencies]
+algebraicdb = {path = "../algebraicdb"}
+criterion = "0.3"
+tokio = { version = "0.2.16", features = ["full"] }
+futures = "0.3.4"
+# Benchmarks
+
+
+
+[[bench]]
+name = "parsing_benchmark"
+path = "parsing_benchmark.rs"
+harness = false
+
+[[bench]]
+name = "integration_tests_benchmark"
+path = "integration_tests_benchmark.rs"
+harness = false
+
+[[bench]]
+name = "pgbench_benchmark"
+path = "pgbench_benchmark.rs"
+harness = false

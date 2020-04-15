@@ -3,9 +3,7 @@ use crate::client::State;
 use std::error::Error;
 use tokio::net::TcpListener;
 /// Start an instance of the dbms which binds itself to a tcp socket
-pub async fn create_tcp_server(address: &str) -> Result<!, Box<dyn Error>> {
-    let state = State::new().await;
-
+pub async fn create_tcp_server(address: &str, state: &State) -> Result<!, Box<dyn Error>> {
     let mut listener = TcpListener::bind(address).await?;
     println!("Listening to {}", address);
 

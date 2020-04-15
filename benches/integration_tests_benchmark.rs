@@ -3,13 +3,14 @@ use std::io;
 use std::net::Shutdown;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::net::UnixStream;
-use tokio::runtime::{self, Runtime};
 use tokio::stream::StreamExt;
+
+use benches::rt;
 
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
 
 fn integration_tests_benchmark(c: &mut Criterion) {
-    let mut dir = std::fs::read_dir("test_queries/").unwrap();
+    let mut dir = std::fs::read_dir("../algebraicdb/test_queries/").unwrap();
     let mut group = c.benchmark_group("Integration Tests");
     group.sample_size(10);
     while let Some(Ok(entry)) = dir.next() {
@@ -34,15 +35,6 @@ fn integration_tests_benchmark(c: &mut Criterion) {
             );
         }
     }
-}
-
-fn rt() -> Runtime {
-    runtime::Builder::new()
-        .threaded_scheduler()
-        .core_threads(2)
-        .enable_all()
-        .build()
-        .unwrap()
 }
 
 async fn run_example_query(input: String) -> io::Result<Result<(), ()>> {
