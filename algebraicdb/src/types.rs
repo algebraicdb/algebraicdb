@@ -135,7 +135,7 @@ pub enum Value<'a> {
     Integer(i32),
     Double(f64),
     Bool(bool),
-    Sum(Option<Cow<'a, str>>, Cow<'a, str>, Vec<Value<'a>>),
+    Sum(Option<Cow<'a ,str>>, Cow<'a, str>, Vec<Value<'a>>),
 }
 
 impl Display for Value<'_> {

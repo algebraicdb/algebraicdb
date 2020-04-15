@@ -34,7 +34,7 @@ fn execute_select_from_benchmark(c: &mut Criterion) {
         })
     };
 
-    let s_from = SelectFrom::Table("tab");
+    let s_from = SelectFrom::Table("tab".to_string());
 
     c.bench_function("Executor Benchmark: execute_select_from size 1", |b| {
         b.iter(|| {

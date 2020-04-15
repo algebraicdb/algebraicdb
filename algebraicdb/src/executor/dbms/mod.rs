@@ -20,6 +20,49 @@ lazy_static! {
     static ref PARSER: StmtParser = StmtParser::new();
 }
 
+pub(crate) async fn execute_transaction(
+    input: &str,
+    transaction: Vec<Stmt>,
+    s: &mut DbmsState,
+    w: &mut (dyn AsyncWrite + Send + Unpin),
+) -> Result<(), Box<dyn Error>> {
+    // 1. check for disallowed statements
+    // if transaction.len() > 1 { /* check for CreateType, etc... */ }
+
+    // 2. determine resources
+    // TODO: determine resources for ALL statements (in order)
+    let request = unimplemented!();
+
+    // 3. acquire resources
+    let response = s.acquire_resources(request).await;
+    let mut resources = match response {
+        Ok(resources) => resources,
+        Err(name) => {
+            return Ok(w
+                .write_all(format!("no such table: \"{}\"\n", name).as_bytes())
+                .await?)
+        }
+    };
+    let resources = resources.take().await;
+
+    // 4. typecheck
+    for stmt in transaction.iter() {
+        match typechecker::check_stmt(stmt, &resources) {
+            Ok(()) => {}
+            Err(e) => {
+                w.write_all(e.display(input).as_bytes()).await?;
+                return Ok(());
+            }
+        }
+    }
+
+    // 5. Execute query
+    for stmt in transaction {
+        execute_stmt(stmt, s, resources, WriteToWal::Yes, w).await?;
+    }
+    Ok(())
+}
+
 pub(crate) async fn execute_query(
     input: &str,
     s: &mut DbmsState,
@@ -63,8 +106,8 @@ pub(crate) async fn execute_query(
     execute_stmt(ast, s, resources, WriteToWal::Yes, w).await
 }
 
-pub(crate) async fn execute_replay_query<'a>(
-    ast: Stmt<'a>,
+pub(crate) async fn execute_replay_query(
+    ast: Stmt,
     s: &mut DbmsState,
     w: &mut (dyn AsyncWrite + Send + Unpin),
 ) -> Result<(), Box<dyn Error>> {
@@ -89,7 +132,7 @@ pub(crate) async fn execute_replay_query<'a>(
 }
 
 async fn execute_stmt(
-    ast: Stmt<'_>,
+    ast: Stmt,
     s: &mut DbmsState,
     resources: ResourcesGuard<'_, Table>,
     write_to_wal: WriteToWal,
@@ -184,7 +227,7 @@ fn full_table_scan<'a>(table: &'a Table, type_map: &'a TypeMap) -> RowIter<'a> {
 }
 
 pub fn execute_select_from<'a>(
-    from: &'a SelectFrom<'a>,
+    from: &'a SelectFrom,
     resources: &'a ResourcesGuard<'a, Table>,
 ) -> Rows<'a> {
     let type_map = &resources.type_map;
@@ -246,7 +289,7 @@ pub fn execute_select_from<'a>(
 }
 
 fn execute_select<'a>(
-    select: &'a Select<'a>,
+    select: &'a Select,
     resources: &'a ResourcesGuard<'a, Table>,
 ) -> Rows<'a> {
     let type_map = &resources.type_map;
@@ -271,7 +314,7 @@ fn execute_select<'a>(
 }
 
 async fn execute_create_table(
-    create_table: CreateTable<'_>,
+    create_table: CreateTable,
     s: &DbmsState,
     resources: ResourcesGuard<'_, Table>,
     w: &mut (dyn AsyncWrite + Send + Unpin),
@@ -305,7 +348,7 @@ async fn execute_create_table(
 }
 
 async fn execute_create_type(
-    create_type: CreateType<'_>,
+    create_type: CreateType,
     mut resources: ResourcesGuard<'_, Table>,
     w: &mut (dyn AsyncWrite + Send + Unpin),
 ) -> Result<(), Box<dyn Error>> {
@@ -335,11 +378,11 @@ async fn execute_create_type(
 }
 
 async fn execute_drop_table(
-    drop: Drop<'_>,
+    drop: Drop,
     s: &DbmsState,
     w: &mut (dyn AsyncWrite + Send + Unpin),
 ) -> Result<(), Box<dyn Error>> {
-    match s.drop_table(drop.table).await {
+    match s.drop_table(&drop.table).await {
         Ok(()) => {
             w.write_all(format!("table dropped: \"{}\"\n", drop.table).as_bytes())
                 .await?
@@ -353,7 +396,7 @@ async fn execute_drop_table(
 }
 
 async fn execute_insert(
-    insert: Insert<'_>,
+    insert: Insert,
     mut resources: ResourcesGuard<'_, Table>,
     w: &mut (dyn AsyncWrite + Send + Unpin),
 ) -> Result<(), Box<dyn Error>> {
@@ -363,7 +406,7 @@ async fn execute_insert(
             let (table, type_map) = resources.write_table(&insert.table);
             let row_count = rows.len();
             let mut values = vec![];
-            for row in rows.into_iter() {
+            for row in rows.iter() {
                 row.iter()
                     .map(|e| execute_expr(e, empty()))
                     .for_each(|v| values.push(v));
@@ -397,13 +440,13 @@ async fn execute_insert(
     Ok(())
 }
 
-fn execute_expr<'a, I>(expr: &Expr<'_>, mut bs: I) -> Value<'static>
+fn execute_expr<'a, I>(expr: &Expr, mut bs: I) -> Value<'a>
 where
     I: Iterator<Item = (&'a str, Cell<'a, 'a>)> + Clone,
 {
-    fn cmp<'a, I, F>(e1: &Expr, e2: &Expr, bs: I, f: F) -> Value<'static>
+    fn cmp<'a, I, F>(e1: &Expr, e2: &Expr, bs: I, f: F) -> Value<'a>
     where
-        F: for<'l, 'r> FnOnce(&'l Value<'l>, &'r Value<'r>) -> bool,
+        F: for<'l, 'r> FnOnce(&'l Value, &'r Value) -> bool,
         I: Iterator<Item = (&'a str, Cell<'a, 'a>)> + Clone,
     {
         let v1 = execute_expr(e1, bs.clone());

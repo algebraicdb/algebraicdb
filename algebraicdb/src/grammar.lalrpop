@@ -8,6 +8,10 @@ grammar;
 // Terminals within the same block have the same precedence except that regexes have lower.
 // Terminals in else-blocks have lower precedence than the blocks before.
 match {
+    "BEGIN" => BEGIN,
+    "END" => END,
+    "COMMIT" => COMMIT,
+    "TRANSACTION" => TRANSACTION,
     "SELECT" => SELECT,
     "FROM" => FROM,
     "WHERE" => WHERE,
@@ -60,8 +64,7 @@ match {
     r"--[^\n\r]*[\n\r]*" => {}, // `-- comment`
 }
 
-// Main production
-pub Stmt: Stmt<'input> = {
+pub Stmt: Stmt = {
     <Select> ";" => Stmt::Select(<>),
     <Insert> ";" => Stmt::Insert(<>),
     <Delete> ";" => Stmt::Delete(<>),
@@ -69,16 +72,19 @@ pub Stmt: Stmt<'input> = {
     <Update> ";" => Stmt::Update(<>),
     <CreateType> ";" => Stmt::CreateType(<>),
     <Drop> ";" => Stmt::Drop(<>),
+    //BEGIN TRANSACTION? ";" => Stmt::BeginTransaction(),
+    //END TRANSACTION? ";" => Stmt::CommitTransaction(),
+    //COMMIT ";" => Stmt::CommitTransaction(),
 }
 
-Delete: Delete<'input> = {
+Delete: Delete = {
     DELETE FROM <table:Ident> <where_clause:(WhereClause?)> => Delete {
         table,
         where_clause,
     },
 }
 
-Drop: Drop<'input> = {
+Drop: Drop = {
     DROP TABLE
     <table:Ident> => Drop {
         table,
@@ -86,7 +92,7 @@ Drop: Drop<'input> = {
     },
 }
 
-Update: Update<'input> = {
+Update: Update = {
     UPDATE
     <table:Ident> SET
     <ass:Comma<Ass>>
@@ -98,7 +104,7 @@ Update: Update<'input> = {
     },
 }
 
-Select: Select<'input> = {
+Select: Select = {
     SELECT
         <items:Comma<Expr>>
         <from:(FROM <SelectFrom>)?>
@@ -110,7 +116,7 @@ Select: Select<'input> = {
     },
 }
 
-SelectFrom: SelectFrom<'input> = {
+SelectFrom: SelectFrom = {
     <table_a:SelectFrom>
         <join_type:JoinType>
         <table_b:SelectFrom2>
@@ -124,24 +130,24 @@ SelectFrom: SelectFrom<'input> = {
     SelectFrom2,
 }
 
-SelectFrom2: SelectFrom<'input> = {
+SelectFrom2: SelectFrom = {
     "(" <Select> ")" => SelectFrom::Select(box <>),
     Ident => SelectFrom::Table(<>),
     "(" <SelectFrom> ")",
 }
 
-WhereClause: WhereClause<'input> = {
+WhereClause: WhereClause = {
     WHERE <Comma<WhereItem>> => WhereClause{
         items: <>,
     },
 }
 
-WhereItem: WhereItem<'input> = {
+WhereItem: WhereItem = {
     <col:Spanned<Ident>> ":" <pattern:Spanned<Pattern>> => (WhereItem::Pattern(col, pattern)),
     Expr => WhereItem::Expr(<>),
 }
 
-CreateTable: CreateTable<'input> = {
+CreateTable: CreateTable = {
     CREATE TABLE <table:Ident>
         <columns:("(" <Comma<(Spanned<Ident> Spanned<Ident>)>> ")")>
     => CreateTable {
@@ -150,7 +156,7 @@ CreateTable: CreateTable<'input> = {
     }
 }
 
-Insert: Insert<'input> = {
+Insert: Insert = {
     INSERT INTO <table:Ident>
         <columns:("(" <Spanned<Comma<Spanned<Ident>>>> ")")?>
         <from:InsertFrom>
@@ -162,7 +168,7 @@ Insert: Insert<'input> = {
     }
 }
 
-InsertFrom: InsertFrom<'input> = {
+InsertFrom: InsertFrom = {
     VALUES <Comma<Spanned<("(" <Comma<Expr>> ")")>>> => InsertFrom::Values(<>),
     Spanned<Select> => InsertFrom::Select(<>)
 }
@@ -174,12 +180,12 @@ JoinType: JoinType = {
     INNER? JOIN => JoinType::Inner,
 }
 
-VarDef: (Spanned<&'input str>, Vec<Spanned<&'input str>>) = {
+VarDef: (Spanned<String>, Vec<Spanned<String>>) = {
     <name:Spanned<Ident>> "(" <variants:Comma<Spanned<Ident>>> ")"
         => (name, variants),
 }
 
-CreateType: CreateType<'input> = {
+CreateType: CreateType = {
     CREATE TYPE
         <name:Spanned<Ident>>
         AS VARIANT
@@ -189,11 +195,11 @@ CreateType: CreateType<'input> = {
         },
 }
 
-Namespace: Spanned<&'input str> = {
+Namespace: Spanned<String> = {
     <Spanned<Ident>> "::",
 }
 
-Value: Value<'input> = {
+Value: Value<'static> = {
     Char => Value::Char(<>),
     Integer => Value::Integer(<>),
     Double => Value::Double(<>),
@@ -210,13 +216,13 @@ Value: Value<'input> = {
     ),
 }
 
-Expr3: Expr<'input> = {
+Expr3: Expr = {
     Spanned<Ident> => Expr::Ident(<>),
     Spanned<Value> => Expr::Value(<>),
     "(" <Expr0> ")",
 }
 
-Expr2: Expr<'input> = {
+Expr2: Expr = {
     <e1:Spanned<Expr2>> "="  <e2:Spanned<Expr3>> => Expr::Eql(box (e1, e2)),
     <e1:Spanned<Expr2>> "!=" <e2:Spanned<Expr3>> => Expr::NEq(box (e1, e2)),
     <e1:Spanned<Expr2>> "<=" <e2:Spanned<Expr3>> => Expr::LEq(box (e1, e2)),
@@ -226,27 +232,27 @@ Expr2: Expr<'input> = {
     Expr3,
 }
 
-Expr1: Expr<'input> = {
+Expr1: Expr = {
     <e1:Spanned<Expr1>> AND <e2:Spanned<Expr2>> => Expr::And(box (e1, e2)),
     Expr2
 }
 
-Expr0: Expr<'input> = {
+Expr0: Expr = {
     <e1:Spanned<Expr0>> OR <e2:Spanned<Expr1>> => Expr::Or(box (e1, e2)),
     Expr1,
 
 }
 
-Expr: Spanned<Expr<'input>> = <Spanned<Expr0>>;
+Expr: Spanned<Expr> = <Spanned<Expr0>>;
 
-Ass: Ass<'input> = {
+Ass: Ass = {
     <col:Spanned<Ident>> "=" <expr:Expr> => Ass {
         col,
         expr,
     }
 }
 
-pub Pattern: Pattern<'input> = {
+pub Pattern: Pattern = {
     "_" => Pattern::Ignore,
     Char => Pattern::Char(<>),
     Integer => Pattern::Int(<>),
@@ -263,14 +269,12 @@ pub Pattern: Pattern<'input> = {
     },
 }
 
-Ident: &'input str = {
-    //IDENT => String::from(<>),
-    IDENT,
+Ident: String = {
+    IDENT => String::from(<>),
 }
 
-Str: &'input str = {
-    //STR => String::from(<>.strip_prefix('"').unwrap().strip_suffix('"').unwrap()),
-    STR => <>.strip_prefix('"').unwrap().strip_suffix('"').unwrap(),
+Str: String = {
+    STR => String::from(<>.strip_prefix('"').unwrap().strip_suffix('"').unwrap()),
 }
 
 Char: char = {

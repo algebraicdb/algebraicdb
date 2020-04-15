@@ -2,7 +2,7 @@ use crate::ast::Spanned;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize, Deserialize)]
-pub enum Pattern<'a> {
+pub enum Pattern {
     /// Char literal
     Char(char),
 
@@ -17,16 +17,16 @@ pub enum Pattern<'a> {
 
     /// Actual pattern matching
     Variant {
-        namespace: Option<Spanned<&'a str>>,
-        name: Spanned<&'a str>,
-        sub_patterns: Vec<Spanned<Pattern<'a>>>,
+        namespace: Option<Spanned<String>>,
+        name: Spanned<String>,
+        sub_patterns: Vec<Spanned<Pattern>>,
     },
 
     /// _
     Ignore,
 
     /// Binding a value to a new identifier
-    Binding(&'a str),
+    Binding(String),
 }
 
 #[test]

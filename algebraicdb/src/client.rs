@@ -1,5 +1,7 @@
-use crate::executor::execute_query;
+use crate::executor::{execute_query, execute_transaction};
 use crate::state::DbmsState;
+use crate::ast::Stmt;
+use crate::grammar::{StmtParser};
 use regex::Regex;
 use std::error::Error;
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, BufWriter};
@@ -17,6 +19,10 @@ lazy_static! {
     ).expect("invalid regex");
 }
 
+lazy_static! {
+    static ref PARSER: StmtParser = StmtParser::new();
+}
+
 pub async fn client<R, W>(
     mut reader: R,
     writer: W,
@@ -28,6 +34,8 @@ where
 {
     let mut writer = BufWriter::new(writer);
     let mut buf = vec![];
+    let mut parsing_transaction: bool = false;
+    let mut transaction: Vec<Stmt> = vec![];
 
     loop {
         let _n: usize = match reader.read_buf(&mut buf).await? {
@@ -66,6 +74,29 @@ where
                 break;
             };
             let input = input[..end].trim();
+            //let stmt: Stmt = PARSER.parse(input).expect("lmao yeet");
+
+            /*
+            match stmt {
+                Stmt::BeginTransaction() => {
+                    assert!(!parsing_transaction); // TODO: error
+                    parsing_transaction = true;
+                }
+                Stmt::EndTransaction() => {
+                    assert!(parsing_transaction); // TODO: error
+                    parsing_transaction = false;
+
+                    execute_transaction("no input fuck u", transaction, &mut state, &mut writer).await?;
+                    transaction.clear();
+                }
+                _ if parsing_transaction => transaction.push(stmt),
+                _ => {
+                    assert_eq!(transaction.len(), 0);
+                    transaction.push(stmt);
+                    execute_transaction(input, transaction, &mut state, &mut writer).await?;
+                    transaction.clear();
+                }
+            }*/
 
             debug!("executing query:\n{}\n", input);
 

@@ -6,8 +6,8 @@ use std::cmp::Ordering;
 use std::sync::Arc;
 
 pub enum ModIter<'a> {
-    Select(&'a [Spanned<Expr<'a>>]),
-    Where(&'a [WhereItem<'a>]),
+    Select(&'a [Spanned<Expr>]),
+    Where(&'a [WhereItem]),
 }
 
 pub enum Rows<'a> {
@@ -211,9 +211,9 @@ impl<'a> Iterator for CellIter<'a> {
 impl<'a> RowIter<'a> {
     pub fn select(&mut self, items: &'a [Spanned<Expr>]) {
         let mut bindings = vec![];
-        'outer: for item in items {
-            match item.as_ref() {
-                &Expr::Ident(name) => {
+        'outer: for item in items.iter() {
+            match &item.value {
+                Expr::Ident(name) => {
                     for &binding in self.bindings.iter() {
                         if &binding.name == name.as_ref() {
                             bindings.push(binding);

@@ -72,10 +72,10 @@ impl<'ast, T: TTable> Context<'ast, T> {
         }
     }
 
-    pub fn search_locals(&self, ident: &Spanned<&str>) -> Result<TypeId, TypeError> {
+    pub fn search_locals(&self, ident: &Spanned<String>) -> Result<TypeId, TypeError> {
         self.locals
             .iter()
-            .filter_map(|scope| scope.get(ident.value))
+            .filter_map(|scope| scope.get(&ident.value))
             .next()
             .map(|res| {
                 if res.len() == 1 {
@@ -140,6 +140,7 @@ pub fn check_stmt<T: TTable>(stmt: &Stmt, globals: &ResourcesGuard<T>) -> Result
         Stmt::Insert(insert) => check_insert(insert, &mut ctx),
         Stmt::CreateTable(create_table) => check_create_table(create_table, &mut ctx),
         Stmt::CreateType(create_type) => check_create_type(create_type, &mut ctx),
+        _ => unimplemented!(),
     }
 }
 
@@ -153,7 +154,7 @@ fn import_table_columns<T: TTable>(name: &str, ctx: &mut Context<T>) {
 }
 
 fn check_select<'ast, T: TTable>(
-    select: &'ast Select<'ast>,
+    select: &'ast Select,
     ctx: &mut Context<T>,
 ) -> Result<Vec<DuckType<'ast>>, TypeError> {
     if let Some(from) = &select.from {
@@ -561,7 +562,7 @@ fn check_create_type<T: TTable>(
 }
 
 fn check_expr<'ast, T: TTable>(
-    expr: &'ast Spanned<Expr<'ast>>,
+    expr: &'ast Spanned<Expr>,
     ctx: &Context<T>,
 ) -> Result<DuckType<'ast>, TypeError> {
     let type_map = &ctx.globals.type_map;
@@ -687,7 +688,7 @@ where
 }
 
 pub fn type_of_value<'ast>(
-    value: &'ast Value<'ast>,
+    value: &'ast Value,
     span: Option<Span>,
     types: &TypeMap,
 ) -> Result<DuckType<'ast>, TypeError> {

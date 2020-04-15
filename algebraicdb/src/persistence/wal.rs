@@ -90,7 +90,7 @@ impl WriteAheadLog {
         self.state.transaction_number.load(Ordering::Relaxed)
     }
 
-    pub async fn write(&mut self, stmt: &Stmt<'_>) -> io::Result<()> {
+    pub async fn write(&mut self, stmt: &Stmt) -> io::Result<()> {
         let data = serialize_log_msg(stmt);
 
         let mut buf = Vec::with_capacity(data.len() + *ENTRY_START_SIZE + *ENTRY_END_SIZE);

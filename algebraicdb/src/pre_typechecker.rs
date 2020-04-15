@@ -30,7 +30,7 @@ fn get_table_resource_requests(stmt: &Stmt) -> Vec<TableRequest> {
             };
 
             req.sort();
-            match req.binary_search_by(|r| r.table.as_str().cmp(ins.table)) {
+            match req.binary_search_by(|r| r.table.as_str().cmp(&ins.table)) {
                 Ok(i) => req[i].rw = RW::Write,
                 Err(i) => req.insert(
                     i,
