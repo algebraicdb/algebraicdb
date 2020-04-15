@@ -36,8 +36,8 @@ pub fn connect(state: DbmsState) -> Result<UnixStream, Box<dyn Error>> {
 
 pub async fn start_uds_server() {
     let state = startup_with_wal().await.unwrap();
-    remove_file("/tmp/adbench/socket").await.unwrap_or(());
-    create_uds_server(PathBuf::from("/tmp/adbench/socket"), state)
+    remove_file("./adbench/socket").await.unwrap_or(());
+    create_uds_server(PathBuf::from("./adbench/socket"), state)
         .await
         .unwrap();
 }
@@ -48,7 +48,7 @@ pub async fn startup_no_wal() -> Result<DbmsState, Box<dyn Error>> {
 }
 
 pub async fn startup_with_wal() -> Result<DbmsState, Box<dyn Error>> {
-    let data_dir = "/tmp/adbench".into();
+    let data_dir = "./adbench".into();
     remove_dir_all(&data_dir).await.ok();
     create_dir_all(&data_dir).await.unwrap();
 

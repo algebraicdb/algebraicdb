@@ -27,11 +27,26 @@ pub(crate) async fn execute_transaction(
     w: &mut (dyn AsyncWrite + Send + Unpin),
 ) -> Result<(), Box<dyn Error>> {
     // 1. check for disallowed statements
-    // if transaction.len() > 1 { /* check for CreateType, etc... */ }
+    // NOTE: TODO: type-checking the entire transaction before-hand is made complicated
+    // if we allow modifying table schemas or types during the transaction. For now we
+    // disallow all those kinds of operations.
+    if transaction.len() > 1 {
+        for stmt in transaction.iter() {
+            match stmt {
+                // Statements that are currently allowed in a transaction:
+                Stmt::Select(_) => {},
+                Stmt::Insert(_) => {},
+                Stmt::Delete(_) => {},
+                Stmt::Update(_) => {},
+
+                _ => panic!("NOT ALLOWED"),
+            }
+        }
+    }
 
     // 2. determine resources
     // TODO: determine resources for ALL statements (in order)
-    let request = unimplemented!();
+    let request = pre_typechecker::get_transaction_resource_request(&transaction);
 
     // 3. acquire resources
     let response = s.acquire_resources(request).await;
@@ -43,7 +58,7 @@ pub(crate) async fn execute_transaction(
                 .await?)
         }
     };
-    let resources = resources.take().await;
+    let mut resources = resources.take().await;
 
     // 4. typecheck
     for stmt in transaction.iter() {
@@ -58,7 +73,7 @@ pub(crate) async fn execute_transaction(
 
     // 5. Execute query
     for stmt in transaction {
-        execute_stmt(stmt, s, resources, WriteToWal::Yes, w).await?;
+        execute_stmt(stmt, s, &mut resources, WriteToWal::Yes, w).await?;
     }
     Ok(())
 }
@@ -91,7 +106,7 @@ pub(crate) async fn execute_query(
                 .await?)
         }
     };
-    let resources = resources.take().await;
+    let mut resources = resources.take().await;
 
     // 4. typecheck
     match typechecker::check_stmt(&ast, &resources) {
@@ -103,7 +118,7 @@ pub(crate) async fn execute_query(
     }
 
     // 5. Execute query
-    execute_stmt(ast, s, resources, WriteToWal::Yes, w).await
+    execute_stmt(ast, s, &mut resources, WriteToWal::Yes, w).await
 }
 
 pub(crate) async fn execute_replay_query(
@@ -124,17 +139,17 @@ pub(crate) async fn execute_replay_query(
                 .await?)
         }
     };
-    let resources = resources.take().await;
+    let mut resources = resources.take().await;
 
     // 5. Execute query
     // TODO: Error checking
-    execute_stmt(ast, s, resources, WriteToWal::No, w).await
+    execute_stmt(ast, s, &mut resources, WriteToWal::No, w).await
 }
 
 async fn execute_stmt(
     ast: Stmt,
     s: &mut DbmsState,
-    resources: ResourcesGuard<'_, Table>,
+    resources: &mut ResourcesGuard<'_, Table>,
     write_to_wal: WriteToWal,
     w: &mut (dyn AsyncWrite + Send + Unpin),
 ) -> Result<(), Box<dyn Error>> {
@@ -316,7 +331,7 @@ fn execute_select<'a>(
 async fn execute_create_table(
     create_table: CreateTable,
     s: &DbmsState,
-    resources: ResourcesGuard<'_, Table>,
+    resources: &mut ResourcesGuard<'_, Table>,
     w: &mut (dyn AsyncWrite + Send + Unpin),
 ) -> Result<(), Box<dyn Error>> {
     let columns: Vec<_> = create_table
@@ -349,7 +364,7 @@ async fn execute_create_table(
 
 async fn execute_create_type(
     create_type: CreateType,
-    mut resources: ResourcesGuard<'_, Table>,
+    resources: &mut ResourcesGuard<'_, Table>,
     w: &mut (dyn AsyncWrite + Send + Unpin),
 ) -> Result<(), Box<dyn Error>> {
     let types = &mut resources.type_map;
@@ -397,7 +412,7 @@ async fn execute_drop_table(
 
 async fn execute_insert(
     insert: Insert,
-    mut resources: ResourcesGuard<'_, Table>,
+    resources: &mut ResourcesGuard<'_, Table>,
     w: &mut (dyn AsyncWrite + Send + Unpin),
 ) -> Result<(), Box<dyn Error>> {
     match insert.from {

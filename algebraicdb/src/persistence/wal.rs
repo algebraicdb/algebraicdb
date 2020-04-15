@@ -7,9 +7,10 @@ use std::io;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::sync::Arc;
+use std::time::Duration;
 use tokio::fs::{rename, File, OpenOptions};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
-use tokio::sync::Mutex;
+use tokio::sync::{Mutex, Notify};
 
 /// With every transaction written to the WAL, this number is incremented by 1.
 /// The first transaction must be indexed with 1, since 0 means no transactions has happened yet.
@@ -26,9 +27,18 @@ pub struct WriteAheadLog {
 }
 
 struct WalState {
+    /// File-descriptor for the log-file
     file: Mutex<File>,
+
+    /// The current size of the log-file
     file_size: AtomicUsize,
+
+    /// A buffer for tasks waiting for their log entries to be flushed to disk
+    write_buffer: Mutex<Vec<(Vec<u8>, Arc<Notify>)>>,
+
+    /// Truncate the wal when it reaches this size
     truncate_at: NumBytes,
+
     transaction_number: AtomicU64,
     data_dir: PathBuf,
 }
@@ -72,11 +82,11 @@ impl WriteAheadLog {
         let (file_size, entries, file) = load_wal(&wal_path).await.expect("Loading WAL failed");
 
         let transaction_number = entries.last().map(|(n, _)| *n).unwrap_or(0);
-
         let wal = WriteAheadLog {
             state: Arc::new(WalState {
                 file: Mutex::new(file),
                 file_size: file_size.into(),
+                write_buffer: Mutex::new(Vec::new()),
                 truncate_at,
                 transaction_number: transaction_number.into(),
                 data_dir,
@@ -91,46 +101,87 @@ impl WriteAheadLog {
     }
 
     pub async fn write(&mut self, stmt: &Stmt) -> io::Result<()> {
-        let data = serialize_log_msg(stmt);
+        let stmt_data = serialize_log_msg(stmt);
 
-        let mut buf = Vec::with_capacity(data.len() + *ENTRY_START_SIZE + *ENTRY_END_SIZE);
+        let mut data = Vec::with_capacity(stmt_data.len() + *ENTRY_START_SIZE + *ENTRY_END_SIZE);
 
-        let mut file = self.state.file.lock().await;
-
+        // TODO: we don't acquire the file lock here anymore, double check this
+        // also changed Ordering::Relaxed to Ordering::SeqCst, maybe that's enough.
+        // vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv
         // We don't want multiple threads racing to increment this,
         // so we do it after acquiring the lock.
         let transaction_number = self
             .state
             .transaction_number
-            .fetch_add(1, Ordering::Relaxed)
+            .fetch_add(1, Ordering::SeqCst)
             + 1;
+
         let start = EntryBegin {
             transaction_number,
-            entry_size: data.len(),
+            entry_size: stmt_data.len(),
         };
 
-        bincode::serialize_into(&mut buf, &start).unwrap();
-        buf.extend_from_slice(&data);
+        bincode::serialize_into(&mut data, &start).unwrap();
+        data.extend_from_slice(&stmt_data);
 
         let end = EntryEnd {
-            checksum: checksum(&buf),
+            checksum: checksum(&data),
         };
-        bincode::serialize_into(&mut buf, &end).unwrap();
+        bincode::serialize_into(&mut data, &end).unwrap();
 
-        // Write entry to the wal-file, and make sure it's synced to disk.
-        file.write_all(&buf).await?;
-        file.sync_all().await?;
+        // Prepare a notifier
+        let notifier = Arc::new(Notify::new());
+
+        // Lock the write buffer
+        let mut write_buffer = self.state.write_buffer.lock().await;
+        if write_buffer.is_empty() {
+            let state = self.state.clone();
+            tokio::task::spawn(async move {
+                async fn flush_wal(state: Arc<WalState>) -> io::Result<()> {
+                    tokio::time::delay_for(Duration::from_millis(200)).await;
+                    // here we wait for a few µs
+                    // then we take the lock and flush the buffer
+
+                    let mut file = state.file.lock().await;
+                    let mut write_buffer = state.write_buffer.lock().await;
+
+                    for (data, _task) in write_buffer.iter() {
+                        // Write entry to the wal-file
+                        file.write_all(&data).await?;
+                        state.file_size.fetch_add(data.len(), Ordering::Relaxed);
+                    }
+
+                    file.sync_all().await?;
+
+                    // Release the lock
+                    drop(file);
+
+                    for (_data, task) in write_buffer.drain(..) {
+                        task.notify();
+                    }
+                    Ok(())
+                }
+                
+                if let Err(e) = flush_wal(state).await {
+                    error!("error writing to WAL: {}", e);
+                    panic!("error writing to WAL: {}", e);
+                }
+            });
+        }
+
+        let data_len = data.len();
+        write_buffer.push((data, notifier.clone()));
 
         // Release the lock
-        drop(file);
+        drop(write_buffer);
 
-        self.state.file_size.fetch_add(buf.len(), Ordering::Relaxed);
+        notifier.notified().await;
 
         debug!("Wrote the following to the WAL:");
         debug!("start:  {:?}", start);
         debug!("entry:  {:?}", stmt);
         debug!("end:    {:?}", end);
-        debug!("#bytes: {}", buf.len());
+        debug!("#bytes: {}", data_len);
 
         Ok(())
     }

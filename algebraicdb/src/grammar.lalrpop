@@ -64,6 +64,13 @@ match {
     r"--[^\n\r]*[\n\r]*" => {}, // `-- comment`
 }
 
+pub Instr: Instr = {
+    BEGIN TRANSACTION? ";" => Instr::BeginTransaction(),
+    END TRANSACTION? ";" => Instr::EndTransaction(),
+    COMMIT ";" => Instr::EndTransaction(),
+    <Stmt> => Instr::Stmt(<>),
+}
+
 pub Stmt: Stmt = {
     <Select> ";" => Stmt::Select(<>),
     <Insert> ";" => Stmt::Insert(<>),
@@ -72,9 +79,6 @@ pub Stmt: Stmt = {
     <Update> ";" => Stmt::Update(<>),
     <CreateType> ";" => Stmt::CreateType(<>),
     <Drop> ";" => Stmt::Drop(<>),
-    //BEGIN TRANSACTION? ";" => Stmt::BeginTransaction(),
-    //END TRANSACTION? ";" => Stmt::CommitTransaction(),
-    //COMMIT ";" => Stmt::CommitTransaction(),
 }
 
 Delete: Delete = {

@@ -1,7 +1,7 @@
 use crate::ast::Spanned;
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum Pattern {
     /// Char literal
     Char(char),

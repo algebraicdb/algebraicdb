@@ -8,6 +8,13 @@ pub fn get_resource_request(stmt: &Stmt) -> Acquire {
     }
 }
 
+pub fn get_transaction_resource_request(transaction: &[Stmt]) -> Acquire {
+    Acquire {
+        table_reqs: get_transaction_resource_requests(transaction),
+        type_map_perms: RW::Read,
+    }
+}
+
 fn get_type_map_resource_perm(stmt: &Stmt) -> RW {
     match stmt {
         Stmt::CreateType(_) => RW::Write,
@@ -15,65 +22,71 @@ fn get_type_map_resource_perm(stmt: &Stmt) -> RW {
     }
 }
 
+struct Request(Vec<TableRequest>);
+
+impl Request {
+    fn push(&mut self, table: &str, rw: RW) {
+        match self.0.binary_search_by(|r| r.table.as_str().cmp(table)) {
+            Ok(_) if rw == RW::Read => {}
+            Ok(i) => self.0[i].rw = RW::Write,
+            Err(i) => self.0.insert(
+                i,
+                TableRequest {
+                    table: table.to_string(),
+                    rw,
+                },
+            ),
+        }
+    }
+}
+
+fn get_transaction_resource_requests(transaction: &[Stmt]) -> Vec<TableRequest> {
+    let mut request = Request(vec![]);
+    for stmt in transaction.iter() {
+        get_stmt(&mut request, stmt);
+    }
+    request.0
+}
+
 fn get_table_resource_requests(stmt: &Stmt) -> Vec<TableRequest> {
+    let mut request = Request(vec![]);
+    get_stmt(&mut request, stmt);
+    request.0
+}
+
+fn get_stmt(request: &mut Request, stmt: &Stmt) {
     match stmt {
-        Stmt::Select(sel) => get_option_select(&sel.from),
-        Stmt::Update(upd) => vec![TableRequest {
-            table: upd.table.to_string(),
-            rw: RW::Write,
-        }],
+        Stmt::Select(sel) => get_option_select(request, &sel.from),
+        Stmt::Update(upd) => request.push(&upd.table, RW::Write),
         Stmt::Insert(ins) => {
-            let mut req = match &ins.from {
-                InsertFrom::Values(_) => vec![],
-
-                InsertFrom::Select(select) => get_option_select(&select.from),
-            };
-
-            req.sort();
-            match req.binary_search_by(|r| r.table.as_str().cmp(&ins.table)) {
-                Ok(i) => req[i].rw = RW::Write,
-                Err(i) => req.insert(
-                    i,
-                    TableRequest {
-                        table: ins.table.to_string(),
-                        rw: RW::Write,
-                    },
-                ),
+            match &ins.from {
+                InsertFrom::Values(_) => {}
+                InsertFrom::Select(select) => get_option_select(request, &select.from),
             }
 
-            req
+            request.push(&ins.table, RW::Write);
         }
-        Stmt::Delete(del) => vec![TableRequest {
-            table: del.table.to_string(),
-            rw: RW::Write,
-        }],
-        Stmt::CreateType(_) => vec![],
-        Stmt::CreateTable(_) => vec![],
-        Stmt::Drop(drop) => vec![TableRequest {
-            table: drop.table.to_string(),
-            rw: RW::Write,
-        }],
+        Stmt::Delete(del) => request.push(&del.table, RW::Write),
+        Stmt::CreateType(_) => {},
+        Stmt::CreateTable(_) => {},
+        Stmt::Drop(drop) => request.push(&drop.table, RW::Write),
     }
 }
 
-fn get_option_select<'a>(sel: &'a Option<SelectFrom>) -> Vec<TableRequest> {
+fn get_option_select<'a>(request: &mut Request, sel: &'a Option<SelectFrom>) {
     match sel {
-        Some(from) => get_select(&from),
-        None => vec![],
+        Some(from) => get_select(request, &from),
+        None => {},
     }
 }
 
-fn get_select(sel: &SelectFrom) -> Vec<TableRequest> {
+fn get_select(request: &mut Request, sel: &SelectFrom) {
     match &sel {
-        SelectFrom::Select(nsel) => get_option_select(&nsel.from),
-        SelectFrom::Table(tab) => vec![TableRequest {
-            table: tab.to_string(),
-            rw: RW::Read,
-        }],
+        SelectFrom::Select(nsel) => get_option_select(request, &nsel.from),
+        SelectFrom::Table(tab) => request.push(tab, RW::Read),
         SelectFrom::Join(jon) => {
-            let mut vec = get_select(&jon.table_a);
-            vec.extend(get_select(&jon.table_b));
-            vec
+            get_select(request, &jon.table_a);
+            get_select(request, &jon.table_b);
         }
     }
 }

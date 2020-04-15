@@ -8,7 +8,14 @@ use crate::types::Value;
 use serde::{Deserialize, Serialize};
 
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub enum Instr {
+    BeginTransaction(),
+    EndTransaction(),
+    Stmt(Stmt),
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub enum Stmt {
     Select(Select),
     Insert(Insert),
@@ -17,11 +24,9 @@ pub enum Stmt {
     CreateTable(CreateTable),
     CreateType(CreateType),
     Drop(Drop),
-    //BeginTransaction(),
-    //CommitTransaction(),
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub enum Expr {
     Ident(Spanned<String>),
     Value(Spanned<Value<'static>>),
@@ -35,14 +40,14 @@ pub enum Expr {
     Or(Box<(Spanned<Expr>, Spanned<Expr>)>),
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Ass {
     pub col: Spanned<String>,
 
     pub expr: Spanned<Expr>,
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Select {
     pub items: Vec<Spanned<Expr>>,
 
@@ -51,20 +56,20 @@ pub struct Select {
     pub where_clause: Option<WhereClause>,
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub enum WhereItem {
     Expr(Spanned<Expr>),
     Pattern(Spanned<String>, Spanned<Pattern>),
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub enum SelectFrom {
     Table(String),
     Select(Box<Select>),
     Join(Box<Join>),
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Join {
     pub table_a: SelectFrom,
     pub table_b: SelectFrom,
@@ -82,44 +87,44 @@ pub enum JoinType {
     FullOuter,
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct WhereClause {
     pub items: Vec<WhereItem>,
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Delete {
     pub table: String,
 
     pub where_clause: Option<WhereClause>,
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Drop {
     pub table: String,
     //  pub drop_clause: Option<DropClause>, // should be cascade or restrict
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Insert {
     pub table: String,
     pub columns: Spanned<Vec<Spanned<String>>>,
     pub from: InsertFrom,
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub enum InsertFrom {
     Values(Vec<Spanned<Vec<Spanned<Expr>>>>),
     Select(Spanned<Select>),
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct CreateTable {
     pub table: String,
     pub columns: Vec<(Spanned<String>, Spanned<String>)>,
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Update {
     pub table: String,
 
@@ -128,7 +133,7 @@ pub struct Update {
     pub where_clause: Option<WhereClause>,
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub enum CreateType {
     Variant {
         name: Spanned<String>,

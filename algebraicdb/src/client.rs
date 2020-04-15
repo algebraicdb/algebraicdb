@@ -1,7 +1,8 @@
 use crate::executor::{execute_query, execute_transaction};
+use crate::error_message::ErrorMessage;
 use crate::state::DbmsState;
-use crate::ast::Stmt;
-use crate::grammar::{StmtParser};
+use crate::ast::{Stmt, Instr};
+use crate::grammar::{InstrParser, StmtParser};
 use regex::Regex;
 use std::error::Error;
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, BufWriter};
@@ -20,7 +21,7 @@ lazy_static! {
 }
 
 lazy_static! {
-    static ref PARSER: StmtParser = StmtParser::new();
+    static ref PARSER: InstrParser = InstrParser::new();
 }
 
 pub async fn client<R, W>(
@@ -36,6 +37,7 @@ where
     let mut buf = vec![];
     let mut parsing_transaction: bool = false;
     let mut transaction: Vec<Stmt> = vec![];
+    let parser: &InstrParser = &*PARSER;
 
     loop {
         let _n: usize = match reader.read_buf(&mut buf).await? {
@@ -74,38 +76,49 @@ where
                 break;
             };
             let input = input[..end].trim();
-            //let stmt: Stmt = PARSER.parse(input).expect("lmao yeet");
 
-            /*
-            match stmt {
-                Stmt::BeginTransaction() => {
+            match parser.parse(input) {
+                Ok(Instr::BeginTransaction()) => {
                     assert!(!parsing_transaction); // TODO: error
                     parsing_transaction = true;
                 }
-                Stmt::EndTransaction() => {
+                Ok(Instr::EndTransaction()) => {
                     assert!(parsing_transaction); // TODO: error
                     parsing_transaction = false;
 
-                    execute_transaction("no input fuck u", transaction, &mut state, &mut writer).await?;
-                    transaction.clear();
-                }
-                _ if parsing_transaction => transaction.push(stmt),
-                _ => {
-                    assert_eq!(transaction.len(), 0);
-                    transaction.push(stmt);
-                    execute_transaction(input, transaction, &mut state, &mut writer).await?;
-                    transaction.clear();
-                }
-            }*/
+                    execute_transaction("no input fuck u", transaction.clone(), &mut state, &mut writer).await?;
 
+                    transaction.clear();
+
+                    writer.flush().await?;
+                }
+                Ok(Instr::Stmt(stmt)) if parsing_transaction => transaction.push(stmt),
+                Ok(Instr::Stmt(stmt)) => {
+                    assert_eq!(transaction.len(), 0);
+
+                    execute_transaction(input, vec![stmt], &mut state, &mut writer).await?;
+
+                    transaction.clear();
+
+                    writer.flush().await?;
+                }
+                Err(e) => {
+                    let error_msg = e.display(input);
+                    writer.write_all(error_msg.as_bytes()).await?;
+                    writer.flush().await?;
+                }
+            }
+
+            /*
             debug!("executing query:\n{}\n", input);
 
             // Exectue the (semicolon-terminated) string as a query
             execute_query(input, &mut state, &mut writer).await?;
 
             writer.flush().await?;
+            */
 
-            // Remove the string of the executed query from the buffer
+            // Remove the string of the parsed instruction from the buffer
             buf.drain(..end);
         }
     }
