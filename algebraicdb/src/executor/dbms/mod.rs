@@ -4,17 +4,18 @@ use self::iter::*;
 use crate::ast::*;
 use crate::error_message::ErrorMessage;
 use crate::grammar::StmtParser;
-use crate::persistence::WriteToWal;
 use crate::pre_typechecker;
-use crate::state::{DbState, DbmsState, ResourcesGuard};
-use crate::table::{Cell, Schema, Table};
+use crate::state::{DbmsState, Resource};
+use crate::table::{Cell, Schema, TableData};
 use crate::typechecker;
 use crate::types::{Type, TypeId, TypeMap, Value};
 use std::error::Error;
 use std::fmt::Write;
 use std::iter::empty;
 use std::sync::Arc;
+use std::collections::HashMap;
 use tokio::io::{AsyncWrite, AsyncWriteExt};
+use tokio::sync::Notify;
 
 lazy_static! {
     static ref PARSER: StmtParser = StmtParser::new();
@@ -50,7 +51,7 @@ pub(crate) async fn execute_transaction(
 
     // 3. acquire resources
     let response = s.acquire_resources(request).await;
-    let mut resources = match response {
+    let resources = match response {
         Ok(resources) => resources,
         Err(name) => {
             return Ok(w
@@ -58,11 +59,12 @@ pub(crate) async fn execute_transaction(
                 .await?)
         }
     };
-    let mut resources = resources.take().await;
+    let mut type_map = resources.take_type_map().await;
+    let mut table_schemas = resources.take_schemas().await;
 
     // 4. typecheck
     for stmt in transaction.iter() {
-        match typechecker::check_stmt(stmt, &resources) {
+        match typechecker::check_stmt(stmt, &type_map, &table_schemas) {
             Ok(()) => {}
             Err(e) => {
                 w.write_all(e.display(input).as_bytes()).await?;
@@ -71,9 +73,14 @@ pub(crate) async fn execute_transaction(
         }
     }
 
-    // 5. Execute query
+    // 5. write to wal
+    // TODOOOOO
+
+    let mut table_datas = resources.take_data().await;
+    
+    // 6. Execute query
     for stmt in transaction {
-        execute_stmt(stmt, s, &mut resources, WriteToWal::Yes, w).await?;
+        execute_stmt(stmt, s, &mut type_map, &mut table_schemas, &mut table_datas, w).await?;
     }
     Ok(())
 }
@@ -98,7 +105,7 @@ pub(crate) async fn execute_query(
 
     // 3. acquire resources
     let response = s.acquire_resources(request).await;
-    let mut resources = match response {
+    let resources = match response {
         Ok(resources) => resources,
         Err(name) => {
             return Ok(w
@@ -106,10 +113,11 @@ pub(crate) async fn execute_query(
                 .await?)
         }
     };
-    let mut resources = resources.take().await;
+    let mut type_map = resources.take_type_map().await;
+    let mut table_schemas = resources.take_schemas().await;
 
     // 4. typecheck
-    match typechecker::check_stmt(&ast, &resources) {
+    match typechecker::check_stmt(&ast, &type_map, &table_schemas) {
         Ok(()) => {}
         Err(e) => {
             w.write_all(e.display(input).as_bytes()).await?;
@@ -117,8 +125,19 @@ pub(crate) async fn execute_query(
         }
     }
 
-    // 5. Execute query
-    execute_stmt(ast, s, &mut resources, WriteToWal::Yes, w).await
+    // 5. write to WAL
+    let notify = log_stmt(&ast, s).await?;
+    
+    // 6. Fetch data resources
+    let mut table_datas = resources.take_data().await;
+
+    // 7. Notify the wal that we're done fetching locks
+    if let Some(notify) = notify {
+        notify.notify();
+    }
+
+    // 8. Execute query
+    execute_stmt(ast, s, &mut type_map, &mut table_schemas, &mut table_datas, w).await
 }
 
 pub(crate) async fn execute_replay_query(
@@ -131,7 +150,7 @@ pub(crate) async fn execute_replay_query(
 
     // 3. acquire resources
     let response = s.acquire_resources(request).await;
-    let mut resources = match response {
+    let resources = match response {
         Ok(resources) => resources,
         Err(name) => {
             return Ok(w
@@ -139,40 +158,51 @@ pub(crate) async fn execute_replay_query(
                 .await?)
         }
     };
-    let mut resources = resources.take().await;
 
-    // 5. Execute query
+    let mut type_map = resources.take_type_map().await;
+    let mut table_schemas = resources.take_schemas().await;
+    let mut table_datas = resources.take_data().await;
+
+    // ?. Execute query
     // TODO: Error checking
-    execute_stmt(ast, s, &mut resources, WriteToWal::No, w).await
+    execute_stmt(ast, s, &mut type_map, &mut table_schemas, &mut table_datas, w).await
 }
 
-async fn execute_stmt(
-    ast: Stmt,
+async fn log_stmt(
+    ast: &Stmt,
     s: &mut DbmsState,
-    resources: &mut ResourcesGuard<'_, Table>,
-    write_to_wal: WriteToWal,
-    w: &mut (dyn AsyncWrite + Send + Unpin),
-) -> Result<(), Box<dyn Error>> {
-    if let (WriteToWal::Yes, Some(wal)) = (write_to_wal, s.wal()) {
+) -> Result<Option<Arc<Notify>>, Box<dyn Error>> {
+    Ok(if let Some(wal) = s.wal() {
         match &ast {
             Stmt::CreateTable(_)
             | Stmt::CreateType(_)
             | Stmt::Delete(_)
             | Stmt::Update(_)
             | Stmt::Drop(_)
-            | Stmt::Insert(_) => wal.write(&ast).await?,
-            Stmt::Select(_) => { /* We're only reading, so no logging required*/ }
+            | Stmt::Insert(_) => Some(wal.write(&ast).await?),
+            Stmt::Select(_) => None/* We're only reading, so no logging required*/
         }
-    }
+    } else {
+        None
+    })
+}
+
+async fn execute_stmt(
+    ast: Stmt,
+    s: &mut DbmsState,
+    type_map: &mut Resource<'_, TypeMap>,
+    table_schemas: &mut HashMap<&str, Resource<'_, Schema>>,
+    table_datas: &mut HashMap<&str, Resource<'_, TableData>>,
+    w: &mut (dyn AsyncWrite + Send + Unpin),
+) -> Result<(), Box<dyn Error>> {
     match ast {
         Stmt::CreateTable(create_table) => {
-            execute_create_table(create_table, s, resources, w).await
+            execute_create_table(create_table, s, type_map, w).await
         }
-        Stmt::CreateType(create_type) => execute_create_type(create_type, resources, w).await,
-        Stmt::Insert(insert) => execute_insert(insert, resources, w).await,
+        Stmt::CreateType(create_type) => execute_create_type(create_type, type_map, w).await,
+        Stmt::Insert(insert) => execute_insert(insert, type_map, table_schemas, table_datas, w).await,
         Stmt::Select(select) => {
-            let type_map = &resources.type_map;
-            let table = execute_select(&select, &resources);
+            let table = execute_select(&select, type_map, table_schemas, table_datas);
             print_table(table.iter(type_map), w).await
         }
         Stmt::Drop(drop) => execute_drop_table(drop, s, w).await,
@@ -209,22 +239,21 @@ async fn print_table(
     Ok(())
 }
 
-fn full_table_scan<'a>(table: &'a Table, type_map: &'a TypeMap) -> RowIter<'a> {
+fn full_table_scan<'a>(data: &'a TableData, schema: &'a Schema, type_map: &'a TypeMap) -> RowIter<'a> {
     let mut offset = 0;
-    let bindings = table
-        .schema()
+    let bindings = schema
         .columns
         .iter()
         .map(|(name, type_id)| {
             let t = type_map.get_by_id(*type_id);
             let size = t.size_of(type_map);
             let cr = CellRef {
-                source: &table.data,
+                source: &data.data,
                 name,
                 type_id: *type_id,
                 offset,
                 size,
-                row_size: table.row_size,
+                row_size: data.row_size,
             };
 
             offset += size;
@@ -243,15 +272,17 @@ fn full_table_scan<'a>(table: &'a Table, type_map: &'a TypeMap) -> RowIter<'a> {
 
 pub fn execute_select_from<'a>(
     from: &'a SelectFrom,
-    resources: &'a ResourcesGuard<'a, Table>,
+    type_map: &'a Resource<'a, TypeMap>,
+    table_schemas: &'a HashMap<&'a str, Resource<'a, Schema>>,
+    table_datas: &'a HashMap<&'a str, Resource<'a, TableData>>,
 ) -> Rows<'a> {
-    let type_map = &resources.type_map;
     match from {
         SelectFrom::Table(table_name) => {
-            let table = resources.read_table(&table_name);
-            full_table_scan(table, type_map).into()
+            let schema = &table_schemas[table_name.as_str()];
+            let data = &table_datas[table_name.as_str()];
+            full_table_scan(data, schema, type_map).into()
         }
-        SelectFrom::Select(select) => execute_select(select, resources).into(),
+        SelectFrom::Select(select) => execute_select(select, type_map, table_schemas, table_datas).into(),
         SelectFrom::Join(join) => {
             match join.join_type {
                 JoinType::Inner => { /* This is the only one supported for now...*/ }
@@ -260,10 +291,11 @@ pub fn execute_select_from<'a>(
                 JoinType::FullOuter => unimplemented!("Full Outer Join"),
             }
 
-            let table_a = execute_select_from(&join.table_a, resources);
-            let table_b = execute_select_from(&join.table_b, resources);
+            let table_a = execute_select_from(&join.table_a, type_map, table_schemas, table_datas);
+            let table_b = execute_select_from(&join.table_b, type_map, table_schemas, table_datas);
 
-            let mut table_out = Table::new(table_a.schema().union(&table_b.schema()), type_map);
+            let schema_out = table_a.schema().union(&table_b.schema());
+            let mut data_out = TableData::new(&schema_out, type_map);
 
             let default_expr = Expr::Value(Spanned::from(Value::Bool(true)));
             let on_expr = join
@@ -292,25 +324,25 @@ pub fn execute_select_from<'a>(
                         for (_, cell) in row_a.chain(row_b) {
                             row_buf.extend_from_slice(cell.data);
                         }
-                        table_out.push_row_bytes(&row_buf);
+                        data_out.push_row_bytes(&row_buf);
                         row_buf.clear();
                     }
                 }
             }
 
-            Rows::from(table_out)
+            Rows::from((schema_out, data_out))
         }
     }
 }
 
 fn execute_select<'a>(
     select: &'a Select,
-    resources: &'a ResourcesGuard<'a, Table>,
+    type_map: &'a Resource<'a, TypeMap>,
+    table_schemas: &'a HashMap<&'a str, Resource<'a, Schema>>,
+    table_datas: &'a HashMap<&'a str, Resource<'a, TableData>>,
 ) -> Rows<'a> {
-    let type_map = &resources.type_map;
-
     let rows = match &select.from {
-        Some(from) => execute_select_from(from, resources),
+        Some(from) => execute_select_from(from, type_map, table_schemas, table_datas),
         None => unimplemented!("Selecting from nothing"),
     };
 
@@ -331,15 +363,14 @@ fn execute_select<'a>(
 async fn execute_create_table(
     create_table: CreateTable,
     s: &DbmsState,
-    resources: &mut ResourcesGuard<'_, Table>,
+    type_map: &Resource<'_, TypeMap>,
     w: &mut (dyn AsyncWrite + Send + Unpin),
 ) -> Result<(), Box<dyn Error>> {
     let columns: Vec<_> = create_table
         .columns
         .into_iter()
         .map(|(column_name, column_type)| {
-            let t_id = resources
-                .type_map
+            let t_id = type_map
                 .get_id(&column_type)
                 .expect("Type does not exist");
             (column_name.to_string(), t_id)
@@ -347,9 +378,9 @@ async fn execute_create_table(
         .collect();
 
     let schema = Schema::new(columns);
-    let table = Table::new(schema, &resources.type_map);
+    let data = TableData::new(&schema, type_map);
 
-    match s.create_table(create_table.table.to_string(), table).await {
+    match s.create_table(create_table.table.to_string(), schema, data).await {
         Ok(()) => {
             w.write_all(format!("table created: \"{}\"\n", create_table.table).as_bytes())
                 .await?
@@ -364,11 +395,9 @@ async fn execute_create_table(
 
 async fn execute_create_type(
     create_type: CreateType,
-    resources: &mut ResourcesGuard<'_, Table>,
+    types: &mut Resource<'_, TypeMap>,
     w: &mut (dyn AsyncWrite + Send + Unpin),
 ) -> Result<(), Box<dyn Error>> {
-    let types = &mut resources.type_map;
-
     match create_type {
         CreateType::Variant { name, variants } => {
             let variant_types: Vec<_> = variants
@@ -412,20 +441,23 @@ async fn execute_drop_table(
 
 async fn execute_insert(
     insert: Insert,
-    resources: &mut ResourcesGuard<'_, Table>,
+    type_map: &Resource<'_, TypeMap>,
+    table_schemas: &HashMap<&str, Resource<'_, Schema>>,
+    table_datas: &mut HashMap<&str, Resource<'_, TableData>>,
     w: &mut (dyn AsyncWrite + Send + Unpin),
 ) -> Result<(), Box<dyn Error>> {
     match insert.from {
         // case !query
         InsertFrom::Values(rows) => {
-            let (table, type_map) = resources.write_table(&insert.table);
+            let schema = &table_schemas[insert.table.as_str()];
+            let data = table_datas.get_mut(insert.table.as_str()).unwrap();
             let row_count = rows.len();
             let mut values = vec![];
             for row in rows.iter() {
                 row.iter()
                     .map(|e| execute_expr(e, empty()))
                     .for_each(|v| values.push(v));
-                table.push_row(&values, &type_map);
+                data.push_row(&values, schema, &type_map);
                 values.clear();
             }
 
@@ -436,15 +468,15 @@ async fn execute_insert(
         //case query
         InsertFrom::Select(select) => {
             let mut data = vec![];
-            let mut row_count = 0;
-            for row in execute_select(&select, &resources).iter(&resources.type_map) {
+            let mut row_count: usize = 0;
+            for row in execute_select(&select, type_map, table_schemas, table_datas).iter(type_map) {
                 row_count += 1;
                 for (_, cell) in row {
                     data.extend_from_slice(&cell.data);
                 }
             }
 
-            let (table, _) = resources.write_table(&insert.table);
+            let table = table_datas.get_mut(insert.table.as_str()).unwrap();
             table.data.extend_from_slice(&data);
 
             w.write_all(format!("{} row(s) inserted\n", row_count).as_bytes())

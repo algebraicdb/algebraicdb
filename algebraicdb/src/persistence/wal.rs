@@ -34,7 +34,9 @@ struct WalState {
     file_size: AtomicUsize,
 
     /// A buffer for tasks waiting for their log entries to be flushed to disk
-    write_buffer: Mutex<Vec<(Vec<u8>, Arc<Notify>)>>,
+    /// First notifier is for the executor to await the wal flushing the transaction to disk
+    /// Second notifier is for the wal to await the executor to access table data locks
+    write_buffer: Mutex<Vec<(Vec<u8>, Arc<Notify>, Arc<Notify>)>>,
 
     /// Truncate the wal when it reaches this size
     truncate_at: NumBytes,
@@ -100,7 +102,7 @@ impl WriteAheadLog {
         self.state.transaction_number.load(Ordering::Relaxed)
     }
 
-    pub async fn write(&mut self, stmt: &Stmt) -> io::Result<()> {
+    pub async fn write(&mut self, stmt: &Stmt) -> io::Result<Arc<Notify>> {
         let stmt_data = serialize_log_msg(stmt);
 
         let mut data = Vec::with_capacity(stmt_data.len() + *ENTRY_START_SIZE + *ENTRY_END_SIZE);
@@ -130,7 +132,8 @@ impl WriteAheadLog {
         bincode::serialize_into(&mut data, &end).unwrap();
 
         // Prepare a notifier
-        let notifier = Arc::new(Notify::new());
+        let start_task_notifier = Arc::new(Notify::new());
+        let task_started_notifier = Arc::new(Notify::new());
 
         // Lock the write buffer
         let mut write_buffer = self.state.write_buffer.lock().await;
@@ -138,14 +141,14 @@ impl WriteAheadLog {
             let state = self.state.clone();
             tokio::task::spawn(async move {
                 async fn flush_wal(state: Arc<WalState>) -> io::Result<()> {
-                    tokio::time::delay_for(Duration::from_millis(200)).await;
+                    tokio::time::delay_for(Duration::from_millis(10)).await;
                     // here we wait for a few µs
                     // then we take the lock and flush the buffer
 
                     let mut file = state.file.lock().await;
                     let mut write_buffer = state.write_buffer.lock().await;
 
-                    for (data, _task) in write_buffer.iter() {
+                    for (data, _, _) in write_buffer.iter() {
                         // Write entry to the wal-file
                         file.write_all(&data).await?;
                         state.file_size.fetch_add(data.len(), Ordering::Relaxed);
@@ -156,8 +159,9 @@ impl WriteAheadLog {
                     // Release the lock
                     drop(file);
 
-                    for (_data, task) in write_buffer.drain(..) {
-                        task.notify();
+                    for (_data, start_task, task_started) in write_buffer.drain(..) {
+                        start_task.notify();
+                        task_started.notified().await;
                     }
                     Ok(())
                 }
@@ -170,20 +174,20 @@ impl WriteAheadLog {
         }
 
         let data_len = data.len();
-        write_buffer.push((data, notifier.clone()));
+        write_buffer.push((data, start_task_notifier.clone(), task_started_notifier.clone()));
 
         // Release the lock
         drop(write_buffer);
 
-        notifier.notified().await;
-
+        start_task_notifier.notified().await;
+        
         debug!("Wrote the following to the WAL:");
         debug!("start:  {:?}", start);
         debug!("entry:  {:?}", stmt);
         debug!("end:    {:?}", end);
         debug!("#bytes: {}", data_len);
 
-        Ok(())
+        Ok(task_started_notifier)
     }
 
     /// Truncate the wal if it needs it

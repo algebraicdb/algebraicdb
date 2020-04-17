@@ -1,7 +1,6 @@
 
 use benches::tps::simplebench::start_uds_server;
 use benches::{brt, srt};
-use std::time::Duration;
 use criterion::{
     criterion_group, criterion_main, measurement::WallTime, BatchSize, BenchmarkGroup, Criterion, black_box
 };
@@ -17,9 +16,7 @@ use tokio::net::UnixStream;
 
 fn tps_bench(c: &mut Criterion) {
     let mut group = c.benchmark_group("tps_test");
-    //group.sample_size(10);
-    group.measurement_time(Duration::from_secs(60));
-    group.warm_up_time(Duration::from_secs(30));
+    group.sample_size(10);
     tps_benchmark(
         "
         DROP TABLE a;

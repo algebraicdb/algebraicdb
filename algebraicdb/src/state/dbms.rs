@@ -4,16 +4,15 @@ use crate::api::config::DbmsConfig;
 use crate::executor::execute_replay_query;
 use crate::persistence::TransactionNumber;
 use crate::persistence::{initialize_data_dir, load_db_data, spawn_snapshotter, WriteAheadLog};
-use crate::table::Table;
+use crate::table::TableData;
 use crate::types::TypeMap;
-use async_trait::async_trait;
 use std::collections::HashMap;
 use std::sync::Arc;
-use tokio::sync::{Mutex, RwLock};
+use tokio::sync::RwLock;
 
 #[derive(Clone)]
 pub struct DbmsState {
-    state: Arc<Mutex<DbData>>,
+    state: Arc<RwLock<DbData>>,
     wal: Option<WriteAheadLog>,
 }
 
@@ -24,9 +23,11 @@ pub struct DbData {
 
     /// All tables in the database
     ///
-    /// NOTE: When locking a set of tables, make sure to lock the tables
-    /// in order, sorted by their name. If not, we will have deadlocks.
-    pub tables: HashMap<String, Arc<RwLock<Table>>>,
+    /// NOTE: When locking the schema and data of a set of tables,
+    /// make sure to lock all the schemas FIRST, sorted on the name,
+    /// and THEN followed by the data, sorted on the name.
+    /// If not, we will have deadlocks.
+    pub tables: HashMap<String, (Arc<RwLock<Schema>>, Arc<RwLock<TableData>>)>,
 
     /// A map of all types in the db
     pub type_map: Arc<RwLock<TypeMap>>,
@@ -42,60 +43,74 @@ impl Default for DbData {
     }
 }
 
-#[async_trait]
-impl DbState<Table> for DbmsState {
-    async fn acquire_resources(&self, acquire: Acquire) -> Result<Resources<Table>, String> {
-        let state = self.state.lock().await;
+impl DbmsState {
+    pub async fn acquire_resources(&self, acquire: Acquire) -> Result<Resources, String> {
+        let state = self.state.read().await;
         let type_map = state.type_map.clone();
-        let resources: Result<Vec<_>, _> = acquire
-            .table_reqs
+        let table_schemas = acquire
+            .schema_reqs
             .into_iter()
             .map(|req| {
-                if let Some(lock) = state.tables.get(&req.table) {
-                    // cloning an Arc is relatively cheap
-                    Ok((req.rw, req.table, lock.clone()))
+                if let Some((schema_lock, _)) = state.tables.get(&req.table) {
+                    Ok((req.table, PermLock::new(req.rw, Arc::clone(schema_lock))))
                 } else {
                     Err(req.table)
                 }
             })
-            .collect();
+            .collect::<Result<_, _>>()?;
+        let table_datas = acquire
+            .data_reqs
+            .into_iter()
+            .map(|req| {
+                if let Some((_, data_lock)) = state.tables.get(&req.table) {
+                    Ok((req.table, PermLock::new(req.rw, Arc::clone(data_lock))))
+                } else {
+                    Err(req.table)
+                }
+            })
+            .collect::<Result<_, _>>()?;
 
-        match resources {
-            Ok(tables) => Ok(Resources::new(type_map, acquire.type_map_perms, tables)),
-            Err(err) => Err(err.to_string()),
-        }
+        Ok(Resources::new(PermLock::new(acquire.type_map_perms, type_map), table_schemas, table_datas))
     }
 
-    async fn acquire_all_resources(&self) -> Resources<Table> {
-        let state = self.state.lock().await;
+    pub async fn acquire_all_resources(&self) -> Resources {
+        let state = self.state.read().await;
         let type_map = state.type_map.clone();
 
+        let mut table_schemas = Vec::with_capacity(state.tables.len());
+        let mut table_datas = Vec::with_capacity(state.tables.len());
+
         // TODO: avoid string cloning
-        let mut tables: Vec<(RW, String, _)> = state
-            .tables
-            .iter()
-            .map(|(name, table_lock)| (RW::Read, name.clone(), table_lock.clone()))
-            .collect();
+        for (name, (schema, data)) in state.tables.iter() {
+            table_schemas.push((name.clone(), PermLock::new(RW::Read, schema.clone())));
+            table_datas.push((name.clone(), PermLock::new(RW::Read, data.clone())));
+        }
 
-        tables.sort_by(|(_, name_a, _), (_, name_b, _)| name_a.cmp(name_b));
+        // Release lock
+        drop(state);
 
-        Resources::new(type_map, RW::Read, tables)
+        table_schemas.sort_by(|(name_a, _), (name_b, _)| name_a.cmp(name_b));
+        table_datas.sort_by(|(name_a, _), (name_b, _)| name_a.cmp(name_b));
+
+        Resources::new(PermLock::new(RW::Read, type_map), table_schemas, table_datas)
     }
 
-    async fn create_table(&self, name: String, table: Table) -> Result<(), ()> {
-        let mut state = self.state.lock().await;
+    pub async fn create_table(&self, name: String, schema: Schema, data: TableData) -> Result<(), ()> {
+        let mut state = self.state.write().await;
         if state.tables.contains_key(&name) {
             Err(())
         } else {
+            let schema = Arc::new(RwLock::new(schema));
+            let data = Arc::new(RwLock::new(data));
             state
                 .tables
-                .insert(name.to_string(), Arc::new(RwLock::new(table)));
+                .insert(name.to_string(), (schema, data));
             Ok(())
         }
     }
 
-    async fn drop_table(&self, name: &str) -> Result<(), ()> {
-        let mut state = self.state.lock().await;
+    pub async fn drop_table(&self, name: &str) -> Result<(), ()> {
+        let mut state = self.state.write().await;
         state.tables.remove(name).map(|_| ()).ok_or(())
     }
 }
@@ -128,7 +143,7 @@ impl DbmsState {
             let transaction_number = db_data.transaction_number;
 
             let mut state = Self {
-                state: Arc::new(Mutex::new(db_data)),
+                state: Arc::new(RwLock::new(db_data)),
                 wal: Some(wal),
             };
 

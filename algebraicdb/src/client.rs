@@ -2,7 +2,7 @@ use crate::executor::{execute_query, execute_transaction};
 use crate::error_message::ErrorMessage;
 use crate::state::DbmsState;
 use crate::ast::{Stmt, Instr};
-use crate::grammar::{InstrParser, StmtParser};
+use crate::grammar::InstrParser;
 use regex::Regex;
 use std::error::Error;
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, BufWriter};
@@ -96,7 +96,10 @@ where
                 Ok(Instr::Stmt(stmt)) => {
                     assert_eq!(transaction.len(), 0);
 
-                    execute_transaction(input, vec![stmt], &mut state, &mut writer).await?;
+
+                    // TODO:
+                    //execute_transaction(input, vec![stmt], &mut state, &mut writer).await?;
+                    execute_query(input, &mut state, &mut writer).await?;
 
                     transaction.clear();
 

@@ -1,6 +1,6 @@
 use crate::state::types::{Resource, Resources};
-use crate::state::{DbState, DbmsState};
-use crate::table::Table;
+use crate::state::DbmsState;
+use crate::table::{Schema, TableData};
 use crate::types::TypeMap;
 use futures::future::join_all;
 use std::io;
@@ -45,8 +45,11 @@ pub(super) async fn snapshot(
     info!("data snapshot starting...");
 
     // Acquire and lock all tables
-    let mut resources: Resources<_> = dbms.acquire_all_resources().await;
-    let resources = resources.take().await;
+    let resources: Resources = dbms.acquire_all_resources().await;
+
+    let type_map = resources.take_type_map().await;
+    let table_schemas = resources.take_schemas().await;
+    let table_datas = resources.take_data().await;
 
     // Ordering::Relaxed should be fine since we have also locked all tables, which means no one is writing to the WAL.
     let transaction_number = dbms.wal().unwrap().transaction_number();
@@ -63,10 +66,10 @@ pub(super) async fn snapshot(
     create_dir(transaction_folder.join(TABLES_DIR_NAME)).await?;
 
     // Spawn tasks to flush the tables to disk
-    let tasks: Vec<_> = resources
-        .tables
-        .into_iter()
-        .map(|(name, table)| snapshot_table(&transaction_folder, name, table))
+    let tasks: Vec<_> = table_schemas
+        .iter()
+        .zip(table_datas.iter())
+        .map(|((name, schema), (_, data))| snapshot_table(&transaction_folder, name, &schema, &data))
         .collect();
 
     // Await all table flush tasks concurrently.
@@ -75,7 +78,7 @@ pub(super) async fn snapshot(
         task?
     }
 
-    snapshot_type_map(&transaction_folder, resources.type_map).await?;
+    snapshot_type_map(&transaction_folder, type_map).await?;
 
     write_tnum(data_dir, transaction_number).await?;
 
@@ -116,10 +119,11 @@ async fn snapshot_type_map(folder: &PathBuf, type_map: Resource<'_, TypeMap>) ->
 async fn snapshot_table(
     folder: &PathBuf,
     name: &str,
-    table: Resource<'_, Table>,
+    schema: &Schema,
+    data: &TableData,
 ) -> io::Result<()> {
     debug!("snapshotting table \"{}\"", name);
-    let data = bincode::serialize(table.deref()).unwrap();
+    let data = bincode::serialize(&(schema, data)).unwrap();
     let file_path = folder.join(TABLES_DIR_NAME).join(name);
     flush_to_file(&file_path, &data, true).await
 }

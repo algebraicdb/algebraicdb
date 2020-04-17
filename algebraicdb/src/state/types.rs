@@ -2,6 +2,9 @@ use crate::types::TypeMap;
 use std::ops::{Deref, DerefMut};
 use std::sync::Arc;
 use tokio::sync::{RwLock, RwLockReadGuard, RwLockWriteGuard};
+use std::sync::atomic::{AtomicBool, Ordering};
+use crate::table::{Schema, TableData};
+use std::collections::HashMap;
 
 #[derive(Clone, Copy, Debug, PartialOrd, Ord, PartialEq, Eq)]
 pub enum RW {
@@ -17,7 +20,8 @@ pub struct TableRequest {
 
 #[derive(Debug)]
 pub struct Acquire {
-    pub table_reqs: Vec<TableRequest>,
+    pub schema_reqs: Vec<TableRequest>,
+    pub data_reqs: Vec<TableRequest>,
     pub type_map_perms: RW,
 }
 
@@ -27,65 +31,112 @@ pub enum CreateTableResponse {
     TableAlreadyExists,
 }
 
-pub struct Resources<T> {
-    dirty: bool,
-    type_map_perms: RW,
-    type_map: Arc<RwLock<TypeMap>>,
-    tables: Vec<(RW, String, Arc<RwLock<T>>)>,
+pub struct PermLock<T> {
+    pub perm: RW,
+    pub lock: Arc<RwLock<T>>,
 }
 
-pub struct ResourcesGuard<'a, T> {
-    pub type_map: Resource<'a, TypeMap>,
-    pub tables: Vec<(&'a str, Resource<'a, T>)>,
+impl<T> PermLock<T> {
+    pub fn new(perm: RW, lock: Arc<RwLock<T>>) -> Self {
+        Self {
+            perm,
+            lock,
+        }
+    }
 }
+
+struct TakeOnce<T> {
+    item: T,
+    dirty: AtomicBool,
+}
+
+/// This struct lets you acquire read/write access to the requested resources.
+///
+/// In ensures that you can only take the locks ONCE, and that you take the locks in an ordered manner.
+/// Any violation of these rules will result in a panic.
+pub struct Resources {
+    type_map: TakeOnce<PermLock<TypeMap>>,
+    table_schemas: TakeOnce<Vec<(String, PermLock<Schema>)>>,
+    table_datas: TakeOnce<Vec<(String, PermLock<TableData>)>>,
+}
+
+/*
+pub struct ResourcesGuard<'a> {
+    pub type_map: Resource<'a, TypeMap>,
+    pub table_schemas: Vec<(&'a str, Resource<'a, Schema>)>,
+    pub table_datas: Vec<(&'a str, Resource<'a, TableData>)>,
+}
+*/
 
 pub enum Resource<'a, T> {
     Write(RwLockWriteGuard<'a, T>),
     Read(RwLockReadGuard<'a, T>),
 }
 
-impl<T> Resources<T> {
+impl Resources {
     pub fn new(
-        type_map: Arc<RwLock<TypeMap>>,
-        type_map_perms: RW,
-        tables: Vec<(RW, String, Arc<RwLock<T>>)>,
+        type_map: PermLock<TypeMap>,
+        table_schemas: Vec<(String, PermLock<Schema>)>,
+        table_datas: Vec<(String, PermLock<TableData>)>,
     ) -> Self {
         Self {
-            dirty: false,
-            type_map,
-            type_map_perms,
-            tables,
+            type_map: TakeOnce::new(type_map),
+            table_schemas: TakeOnce::new(table_schemas),
+            table_datas: TakeOnce::new(table_datas),
         }
     }
 
-    /// Actually acquire read/write access to the requested resources.
-    ///
-    /// This function will take the locks of all requested resources.
-    /// The guard that is returned will release the locks when dropped.
-    ///
-    /// You may only call this function once. This is to ensure atomicness. That is,
-    /// to not drop the guard (and the locks) until you are done with the resources.
-    pub async fn take<'a>(&'a mut self) -> ResourcesGuard<'a, T> {
-        assert_eq!(self.dirty, false);
-        self.dirty = true;
+    pub async fn take_type_map<'a>(&'a self) -> Resource<'a, TypeMap> {
+        self.type_map.take().lock().await
+    }
 
-        let mut tables = Vec::with_capacity(self.tables.len());
-        for (rw, name, lock) in self.tables.iter() {
-            let resource = match rw {
-                RW::Read => Resource::Read(lock.read().await),
-                RW::Write => Resource::Write(lock.write().await),
-            };
+    pub async fn take_schemas<'a>(&'a self) -> HashMap<&'a str, Resource<'a, Schema>> {
+        self.type_map.set_dirty(); // the type map must be taken before the schemas
 
-            tables.push((name.as_str(), resource));
+        let mut table_schemas = HashMap::new();
+        for (name, lock) in self.table_schemas.take().iter() {
+            table_schemas.insert(name.as_str(), lock.lock().await);
         }
+        table_schemas
+    }
+    pub async fn take_data<'a>(&'a self) -> HashMap<&'a str, Resource<'a, TableData>> {
+        self.type_map.set_dirty(); // the type map must be taken before the schemas
+        self.table_schemas.set_dirty(); // the schemas must be taken before the data
 
-        ResourcesGuard {
-            type_map: match self.type_map_perms {
-                RW::Read => Resource::Read(self.type_map.read().await),
-                RW::Write => Resource::Write(self.type_map.write().await),
-            },
-            tables,
+        let mut table_datas = HashMap::new();
+        for (name, lock) in self.table_datas.take().iter() {
+            table_datas.insert(name.as_str(), lock.lock().await);
         }
+        table_datas
+    }
+}
+
+impl<T> PermLock<T> {
+    pub async fn lock<'a>(&'a self) -> Resource<'a, T> {
+        match self.perm {
+            RW::Read => Resource::Read(self.lock.read().await),
+            RW::Write => Resource::Write(self.lock.write().await),
+        }
+    }
+}
+
+impl<T> TakeOnce<T> {
+    pub fn new(item: T) -> Self {
+        Self {
+            dirty: AtomicBool::from(false),
+            item,
+        }
+    }
+
+    pub fn set_dirty(&self) {
+        self.dirty.store(true, Ordering::Release);
+    }
+
+    /// May only be called once
+    pub fn take(&self) -> &T {
+        assert!(!self.dirty.load(Ordering::Acquire));
+        self.set_dirty();
+        &self.item
     }
 }
 
@@ -109,7 +160,7 @@ impl<'a, T> DerefMut for Resource<'a, T> {
         }
     }
 }
-
+/*
 impl<'a, T> ResourcesGuard<'a, T> {
     // Get a read-only handle to a table.
     //
@@ -131,4 +182,4 @@ impl<'a, T> ResourcesGuard<'a, T> {
             .unwrap();
         (table, &self.type_map)
     }
-}
+}*/

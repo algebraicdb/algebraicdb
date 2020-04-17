@@ -92,7 +92,6 @@ Drop: Drop = {
     DROP TABLE
     <table:Ident> => Drop {
         table,
-        // TODO drop_clause postgres uses cascade / restrict etc, restrict by default
     },
 }
 

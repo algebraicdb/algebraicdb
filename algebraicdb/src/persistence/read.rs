@@ -1,6 +1,6 @@
 use crate::persistence::TransactionNumber;
 use crate::state::DbData;
-use crate::table::Table;
+use crate::table::{Schema, TableData};
 use crate::types::TypeMap;
 use std::collections::HashMap;
 use std::io;
@@ -79,8 +79,8 @@ pub async fn load_db_data(data_dir: &PathBuf) -> io::Result<DbData> {
     while let Some(entry) = tables_dir.next().await {
         let entry = entry?;
         let name = entry.file_name().into_string().unwrap();
-        let table = read_table(entry.path()).await?;
-        tables.insert(name, Arc::new(RwLock::new(table)));
+        let (schema, data) = read_table(entry.path()).await?;
+        tables.insert(name, (Arc::new(RwLock::new(schema)), Arc::new(RwLock::new(data))));
     }
 
     let type_map = read_type_map(&snapshot_dir).await?;
@@ -100,9 +100,9 @@ pub async fn get_current_transaction_number(data_dir: &PathBuf) -> io::Result<Tr
         .expect("Parsing transaction number file failed"))
 }
 
-pub async fn read_table(path: PathBuf) -> io::Result<Table> {
+pub async fn read_table(path: PathBuf) -> io::Result<(Schema, TableData)> {
     let binary = fs::read(path).await?;
-    let decoded: Table = bincode::deserialize(&binary).unwrap();
+    let decoded = bincode::deserialize(&binary).unwrap();
     Ok(decoded)
 }
 

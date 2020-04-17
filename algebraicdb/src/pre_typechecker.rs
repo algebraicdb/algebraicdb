@@ -2,17 +2,11 @@ use crate::ast::*;
 use crate::state::*;
 
 pub fn get_resource_request(stmt: &Stmt) -> Acquire {
-    Acquire {
-        table_reqs: get_table_resource_requests(stmt),
-        type_map_perms: get_type_map_resource_perm(stmt),
-    }
+    get_table_resource_requests(stmt).into_acquire(get_type_map_resource_perm(stmt))
 }
 
 pub fn get_transaction_resource_request(transaction: &[Stmt]) -> Acquire {
-    Acquire {
-        table_reqs: get_transaction_resource_requests(transaction),
-        type_map_perms: RW::Read,
-    }
+    get_transaction_resource_requests(transaction).into_acquire(RW::Read)
 }
 
 fn get_type_map_resource_perm(stmt: &Stmt) -> RW {
@@ -22,14 +16,23 @@ fn get_type_map_resource_perm(stmt: &Stmt) -> RW {
     }
 }
 
-struct Request(Vec<TableRequest>);
+#[derive(Default)]
+struct Request {
+    schema_reqs: Vec<TableRequest>,
+    data_reqs: Vec<TableRequest>,
+}
 
 impl Request {
-    fn push(&mut self, table: &str, rw: RW) {
-        match self.0.binary_search_by(|r| r.table.as_str().cmp(table)) {
+    fn push_req(&mut self, table: &str, schema_perm: RW, data_perm: RW) {
+        self.push_schema_req(table, schema_perm);
+        self.push_data_req(table, data_perm);
+    }
+
+    fn push_schema_req(&mut self, table: &str, rw: RW) {
+        match self.schema_reqs.binary_search_by(|r| r.table.as_str().cmp(table)) {
             Ok(_) if rw == RW::Read => {}
-            Ok(i) => self.0[i].rw = RW::Write,
-            Err(i) => self.0.insert(
+            Ok(i) => self.schema_reqs[i].rw = RW::Write,
+            Err(i) => self.schema_reqs.insert(
                 i,
                 TableRequest {
                     table: table.to_string(),
@@ -38,38 +41,59 @@ impl Request {
             ),
         }
     }
+
+    fn push_data_req(&mut self, table: &str, rw: RW) {
+        match self.data_reqs.binary_search_by(|r| r.table.as_str().cmp(table)) {
+            Ok(_) if rw == RW::Read => {}
+            Ok(i) => self.data_reqs[i].rw = RW::Write,
+            Err(i) => self.data_reqs.insert(
+                i,
+                TableRequest {
+                    table: table.to_string(),
+                    rw,
+                },
+            ),
+        }
+    }
+
+    fn into_acquire(self, type_map_perms: RW) -> Acquire {
+        Acquire {
+            schema_reqs: self.schema_reqs,
+            data_reqs: self.data_reqs,
+            type_map_perms,
+        }
+    }
 }
 
-fn get_transaction_resource_requests(transaction: &[Stmt]) -> Vec<TableRequest> {
-    let mut request = Request(vec![]);
+fn get_transaction_resource_requests(transaction: &[Stmt]) -> Request {
+    let mut request = Request::default();
     for stmt in transaction.iter() {
         get_stmt(&mut request, stmt);
     }
-    request.0
+    request
 }
 
-fn get_table_resource_requests(stmt: &Stmt) -> Vec<TableRequest> {
-    let mut request = Request(vec![]);
+fn get_table_resource_requests(stmt: &Stmt) -> Request {
+    let mut request = Request::default();
     get_stmt(&mut request, stmt);
-    request.0
+    request
 }
 
 fn get_stmt(request: &mut Request, stmt: &Stmt) {
     match stmt {
         Stmt::Select(sel) => get_option_select(request, &sel.from),
-        Stmt::Update(upd) => request.push(&upd.table, RW::Write),
+        Stmt::Update(upd) => request.push_req(&upd.table, RW::Read, RW::Write),
         Stmt::Insert(ins) => {
             match &ins.from {
                 InsertFrom::Values(_) => {}
                 InsertFrom::Select(select) => get_option_select(request, &select.from),
             }
-
-            request.push(&ins.table, RW::Write);
+            request.push_req(&ins.table, RW::Read, RW::Write);
         }
-        Stmt::Delete(del) => request.push(&del.table, RW::Write),
+        Stmt::Delete(del) => request.push_req(&del.table, RW::Read, RW::Write),
         Stmt::CreateType(_) => {},
         Stmt::CreateTable(_) => {},
-        Stmt::Drop(drop) => request.push(&drop.table, RW::Write),
+        Stmt::Drop(drop) => request.push_req(&drop.table, RW::Write, RW::Write), // TODO: do we even need this?
     }
 }
 
@@ -83,7 +107,7 @@ fn get_option_select<'a>(request: &mut Request, sel: &'a Option<SelectFrom>) {
 fn get_select(request: &mut Request, sel: &SelectFrom) {
     match &sel {
         SelectFrom::Select(nsel) => get_option_select(request, &nsel.from),
-        SelectFrom::Table(tab) => request.push(tab, RW::Read),
+        SelectFrom::Table(tab) => request.push_req(tab, RW::Read, RW::Read),
         SelectFrom::Join(jon) => {
             get_select(request, &jon.table_a);
             get_select(request, &jon.table_b);

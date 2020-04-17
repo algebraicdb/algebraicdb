@@ -2,7 +2,7 @@ use super::{Row, Table};
 
 #[derive(Clone, Copy)]
 pub struct RowIter<'tb> {
-    table: &'tb Table,
+    table: &'tb Table<'tb>,
     row: usize,
 }
 
@@ -16,7 +16,7 @@ impl<'tb> Iterator for RowIter<'tb> {
     type Item = Row<'tb>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        if self.row >= self.table.row_count() {
+        if self.row >= self.table.table_data.row_count() {
             return None;
         }
 

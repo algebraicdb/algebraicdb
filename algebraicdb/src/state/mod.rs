@@ -18,8 +18,8 @@ pub trait DbState<T>
 where
     T: TTable,
 {
-    async fn acquire_resources(&self, acquire: Acquire) -> Result<Resources<T>, String>;
-    async fn acquire_all_resources(&self) -> Resources<T>;
+    async fn acquire_resources(&self, acquire: Acquire) -> Result<Resources, String>;
+    async fn acquire_all_resources(&self) -> Resources;
     async fn create_table(&self, name: String, table: T) -> Result<(), ()>;
     async fn drop_table(&self, name: &str) -> Result<(), ()>;
 }

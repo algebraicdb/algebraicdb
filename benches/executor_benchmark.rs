@@ -9,6 +9,7 @@ use tokio::sync::RwLock;
 
 use benches::rt;
 
+
 fn execute_select_from_benchmark(c: &mut Criterion) {
     // Create the table
     let types = TypeMap::new();

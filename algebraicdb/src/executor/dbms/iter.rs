@@ -1,5 +1,5 @@
 use crate::ast::{Expr, Pattern, Spanned, WhereItem};
-use crate::table::{Cell, Schema, Table};
+use crate::table::{Cell, Schema, TableData};
 use crate::types::{EnumTag, Type, TypeId, TypeMap};
 use bincode::serialize;
 use std::cmp::Ordering;
@@ -13,7 +13,8 @@ pub enum ModIter<'a> {
 pub enum Rows<'a> {
     Scan(RowIter<'a>),
     Materialized {
-        table: Table,
+        schema: Schema,
+        data: TableData,
         mods: Vec<ModIter<'a>>,
     },
 }
@@ -24,10 +25,11 @@ impl<'a> From<RowIter<'a>> for Rows<'a> {
     }
 }
 
-impl From<Table> for Rows<'static> {
-    fn from(table: Table) -> Self {
+impl From<(Schema, TableData)> for Rows<'static> {
+    fn from((schema, data): (Schema, TableData)) -> Self {
         Rows::Materialized {
-            table,
+            schema,
+            data,
             mods: vec![],
         }
     }
@@ -43,16 +45,16 @@ impl<'a> Rows<'a> {
                     .map(|cr| (cr.name.to_owned(), cr.type_id))
                     .collect(),
             ),
-            Rows::Materialized { table, .. } => table.schema().clone(),
+            Rows::Materialized { schema, .. } => schema.clone(),
         }
     }
 
     pub fn iter<'b>(&'b self, type_map: &'b TypeMap) -> RowIter<'b> {
         match self {
             Rows::Scan(iter) => iter.clone(),
-            Rows::Materialized { table, mods } => {
+            Rows::Materialized { schema, data, mods } => {
                 use super::full_table_scan;
-                let mut scan = full_table_scan(&table, type_map);
+                let mut scan = full_table_scan(&data, &schema, type_map);
                 for m in mods {
                     match m {
                         ModIter::Select(selects) => {
@@ -142,6 +144,7 @@ pub struct CellFilter<'a> {
     value: Arc<[u8]>,
 }
 
+/*
 struct JoinIter {
     result: Table,
 }
@@ -150,6 +153,7 @@ enum SelectIter<'a> {
     FromTable(RowIter<'a>),
     FromJoin(JoinIter),
 }
+*/
 
 impl<'a> Iterator for RowIter<'a> {
     type Item = CellIter<'a>;

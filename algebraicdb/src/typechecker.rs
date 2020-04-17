@@ -1,11 +1,14 @@
 use crate::ast::*;
-use crate::state::{ResourcesGuard, TTable};
+use crate::state::Resource;
+use crate::table::Schema;
 use crate::types::*;
 use std::collections::HashMap;
 use std::collections::HashSet;
 
-pub struct Context<'ast, T> {
-    pub globals: &'ast ResourcesGuard<'ast, T>,
+pub struct Context<'ast> {
+    //pub globals: &'ast ResourcesGuard<'ast, T>,
+    pub type_map: &'ast Resource<'ast, TypeMap>,
+    pub schemas: &'ast HashMap<&'ast str, Resource<'ast, Schema>>,
     locals: Vec<Scope>,
 }
 
@@ -64,10 +67,12 @@ impl From<TypeId> for DuckType<'static> {
     }
 }
 
-impl<'ast, T: TTable> Context<'ast, T> {
-    pub fn new(globals: &'ast ResourcesGuard<'ast, T>) -> Self {
+impl<'ast> Context<'ast> {
+    pub fn new(type_map: &'ast Resource<'ast, TypeMap>, schemas: &'ast HashMap<&'ast str, Resource<'ast, Schema>>) -> Self {
         Context {
-            globals,
+            //globals,
+            type_map,
+            schemas,
             locals: vec![HashMap::new()],
         }
     }
@@ -129,8 +134,12 @@ impl<'ast, T: TTable> Context<'ast, T> {
     }
 }
 
-pub fn check_stmt<T: TTable>(stmt: &Stmt, globals: &ResourcesGuard<T>) -> Result<(), TypeError> {
-    let mut ctx = Context::new(globals);
+pub fn check_stmt(
+    stmt: &Stmt,
+    type_map: &Resource<TypeMap>,
+    schemas: &HashMap<&str, Resource<Schema>>,
+) -> Result<(), TypeError> {
+    let mut ctx = Context::new(type_map, schemas);
 
     match stmt {
         Stmt::Select(select) => check_select(select, &mut ctx).map(|_| ()),
@@ -140,22 +149,20 @@ pub fn check_stmt<T: TTable>(stmt: &Stmt, globals: &ResourcesGuard<T>) -> Result
         Stmt::Insert(insert) => check_insert(insert, &mut ctx),
         Stmt::CreateTable(create_table) => check_create_table(create_table, &mut ctx),
         Stmt::CreateType(create_type) => check_create_type(create_type, &mut ctx),
-        _ => unimplemented!(),
     }
 }
 
-fn import_table_columns<T: TTable>(name: &str, ctx: &mut Context<T>) {
-    let table = ctx.globals.read_table(name);
-    let schema = table.get_schema();
+fn import_table_columns(name: &str, ctx: &mut Context) {
+    let schema = &ctx.schemas[name];
 
     for (name, type_id) in &schema.columns {
         ctx.push_local(name.clone(), *type_id);
     }
 }
 
-fn check_select<'ast, T: TTable>(
+fn check_select<'ast>(
     select: &'ast Select,
-    ctx: &mut Context<T>,
+    ctx: &mut Context,
 ) -> Result<Vec<DuckType<'ast>>, TypeError> {
     if let Some(from) = &select.from {
         check_select_from(from, ctx)?;
@@ -173,7 +180,7 @@ fn check_select<'ast, T: TTable>(
         .collect()
 }
 
-fn check_select_from<T: TTable>(from: &SelectFrom, ctx: &mut Context<T>) -> Result<(), TypeError> {
+fn check_select_from(from: &SelectFrom, ctx: &mut Context) -> Result<(), TypeError> {
     match from {
         SelectFrom::Select(nsel) => {
             check_select(&nsel, ctx)?;
@@ -193,7 +200,7 @@ fn check_select_from<T: TTable>(from: &SelectFrom, ctx: &mut Context<T>) -> Resu
 
             if let Some(on_clause) = &join.on_clause {
                 let clause_type = check_expr(on_clause, ctx)?;
-                let type_map = &ctx.globals.type_map;
+                let type_map = &ctx.type_map;
                 assert_type_as(
                     clause_type,
                     type_map.get_base_id(BaseType::Bool),
@@ -206,14 +213,14 @@ fn check_select_from<T: TTable>(from: &SelectFrom, ctx: &mut Context<T>) -> Resu
     Ok(())
 }
 
-fn check_where_clause<T: TTable>(
+fn check_where_clause(
     clause: &WhereClause,
-    ctx: &mut Context<T>,
+    ctx: &mut Context,
 ) -> Result<(), TypeError> {
-    let type_map = &ctx.globals.type_map;
     for item in &clause.items {
         match item {
             WhereItem::Expr(expr) => {
+                let type_map = &ctx.type_map;
                 let expr_type = check_expr(expr, ctx)?;
                 let bool_id = type_map.get_base_id(BaseType::Bool);
                 assert_type_as(expr_type, bool_id, expr.span, type_map)?;
@@ -227,12 +234,12 @@ fn check_where_clause<T: TTable>(
     Ok(())
 }
 
-fn check_pattern<T: TTable>(
+fn check_pattern(
     pattern: &Spanned<Pattern>,
     type_id: TypeId,
-    ctx: &mut Context<T>,
+    ctx: &mut Context,
 ) -> Result<(), TypeError> {
-    let type_map = &ctx.globals.type_map;
+    let type_map = &ctx.type_map;
     match &pattern.value {
         Pattern::Char(_) => {
             assert_type_as(
@@ -273,7 +280,7 @@ fn check_pattern<T: TTable>(
             name,
             sub_patterns,
         } => {
-            let type_map = &ctx.globals.type_map;
+            let type_map = &ctx.type_map;
             if let Some(namespace) = namespace {
                 let actual_type_id =
                     type_map
@@ -344,10 +351,9 @@ fn check_pattern<T: TTable>(
     Ok(())
 }
 
-fn check_update<T: TTable>(update: &Update, ctx: &mut Context<T>) -> Result<(), TypeError> {
+fn check_update(update: &Update, ctx: &mut Context) -> Result<(), TypeError> {
     import_table_columns(&update.table, ctx);
-    let table = ctx.globals.read_table(&update.table);
-    let schema = table.get_schema();
+    let schema = &ctx.schemas[update.table.as_str()];
 
     for assignment in &update.ass {
         match schema.column(&assignment.col) {
@@ -366,7 +372,7 @@ fn check_update<T: TTable>(update: &Update, ctx: &mut Context<T>) -> Result<(), 
                     expr_type,
                     expected_type_id,
                     assignment.expr.span,
-                    &ctx.globals.type_map,
+                    &ctx.type_map,
                 )?;
             }
         }
@@ -375,7 +381,7 @@ fn check_update<T: TTable>(update: &Update, ctx: &mut Context<T>) -> Result<(), 
     Ok(())
 }
 
-fn check_delete<T: TTable>(delete: &Delete, ctx: &mut Context<T>) -> Result<(), TypeError> {
+fn check_delete(delete: &Delete, ctx: &mut Context) -> Result<(), TypeError> {
     match &delete.where_clause {
         Some(clause) => {
             import_table_columns(&delete.table, ctx);
@@ -386,9 +392,8 @@ fn check_delete<T: TTable>(delete: &Delete, ctx: &mut Context<T>) -> Result<(), 
     }
 }
 
-fn check_insert<T: TTable>(insert: &Insert, ctx: &mut Context<T>) -> Result<(), TypeError> {
-    let table = ctx.globals.read_table(&insert.table);
-    let schema = table.get_schema();
+fn check_insert(insert: &Insert, ctx: &mut Context) -> Result<(), TypeError> {
+    let schema = &ctx.schemas[insert.table.as_str()];
 
     let mut populated_columns: HashSet<&str> = HashSet::new();
 
@@ -415,7 +420,7 @@ fn check_insert<T: TTable>(insert: &Insert, ctx: &mut Context<T>) -> Result<(), 
                             item: column.to_string(),
                         })?;
                     let actual_type = check_expr(expr, ctx)?;
-                    assert_type_as(actual_type, expected_type, expr.span, &ctx.globals.type_map)?;
+                    assert_type_as(actual_type, expected_type, expr.span, &ctx.type_map)?;
 
                     // Make sure the user doesn't assign to the same column twice
                     if !populated_columns.insert(column) {
@@ -427,7 +432,7 @@ fn check_insert<T: TTable>(insert: &Insert, ctx: &mut Context<T>) -> Result<(), 
                 }
 
                 // Make sure all columns have a value
-                for (column, _) in &table.get_schema().columns {
+                for (column, _) in &schema.columns {
                     if populated_columns.get(column.as_str()).is_none() {
                         // TODO: Support for default values
                         return Err(TypeError::MissingColumn {
@@ -464,7 +469,7 @@ fn check_insert<T: TTable>(insert: &Insert, ctx: &mut Context<T>) -> Result<(), 
                     actual_type,
                     expected_type,
                     select.span,
-                    &ctx.globals.type_map,
+                    &ctx.type_map,
                 )?;
 
                 // Make sure the user doesn't assign to the same column twice
@@ -477,7 +482,7 @@ fn check_insert<T: TTable>(insert: &Insert, ctx: &mut Context<T>) -> Result<(), 
             }
 
             // Make sure all columns have a value
-            for (column, _) in &table.get_schema().columns {
+            for (column, _) in &schema.columns {
                 if populated_columns.get(column.as_str()).is_none() {
                     // TODO: Support for default values
                     return Err(TypeError::MissingColumn {
@@ -493,9 +498,9 @@ fn check_insert<T: TTable>(insert: &Insert, ctx: &mut Context<T>) -> Result<(), 
     Ok(())
 }
 
-fn check_create_table<T: TTable>(
+fn check_create_table(
     create_table: &CreateTable,
-    ctx: &mut Context<T>,
+    ctx: &mut Context,
 ) -> Result<(), TypeError> {
     if create_table.columns.len() == 0 {
         return Err(TypeError::NotSupported("Creating empty tables"));
@@ -503,7 +508,7 @@ fn check_create_table<T: TTable>(
 
     let columns = &create_table.columns;
     for (_, column_type) in columns {
-        if ctx.globals.type_map.get(column_type).is_none() {
+        if ctx.type_map.get(column_type).is_none() {
             return Err(TypeError::Undefined {
                 span: column_type.span,
                 kind: "type",
@@ -527,9 +532,9 @@ fn check_create_table<T: TTable>(
     Ok(())
 }
 
-fn check_create_type<T: TTable>(
+fn check_create_type(
     create: &CreateType,
-    ctx: &mut Context<T>,
+    ctx: &mut Context,
 ) -> Result<(), TypeError> {
     // For a type:
     // MyVariant = Var1 TypeA | Var2 TypeB TypeC
@@ -538,7 +543,7 @@ fn check_create_type<T: TTable>(
     // TODO: recursive types
     match create {
         CreateType::Variant { name, variants } => {
-            if ctx.globals.type_map.get_id(name).is_some() {
+            if ctx.type_map.get_id(name).is_some() {
                 return Err(TypeError::AlreadyDefined {
                     span: name.span,
                     ident: name.to_string(),
@@ -547,7 +552,7 @@ fn check_create_type<T: TTable>(
 
             for (_variant, types) in variants {
                 for t_name in types {
-                    if ctx.globals.type_map.get_id(t_name).is_none() {
+                    if ctx.type_map.get_id(t_name).is_none() {
                         return Err(TypeError::Undefined {
                             span: t_name.span,
                             kind: "type",
@@ -561,11 +566,11 @@ fn check_create_type<T: TTable>(
     Ok(())
 }
 
-fn check_expr<'ast, T: TTable>(
+fn check_expr<'ast>(
     expr: &'ast Spanned<Expr>,
-    ctx: &Context<T>,
+    ctx: &Context,
 ) -> Result<DuckType<'ast>, TypeError> {
-    let type_map = &ctx.globals.type_map;
+    let type_map = &ctx.type_map;
     match &expr.value {
         Expr::Ident(ident) => Ok(ctx.search_locals(ident)?.into()),
 
@@ -737,13 +742,10 @@ mod tests {
         let (_ids, type_map) = create_type_map();
         let type_map = Arc::new(RwLock::new(type_map));
 
-        let dummy_ctx: Context<Table> = Context {
-            globals: &ResourcesGuard {
-                type_map: Resource::Read(block_on(type_map.read())),
-                tables: vec![],
-            },
-            locals: vec![],
-        };
+        let dummy_ctx: Context<Table> = Context::new(
+            Resource::Read(block_on(type_map.read())),
+            &[],
+        );
 
         let valid_examples = vec![
             Expr::Eql(box (

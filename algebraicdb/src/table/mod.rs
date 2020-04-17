@@ -8,7 +8,7 @@ pub use self::iter::RowIter;
 pub use self::row::Row;
 pub use self::schema::Schema;
 
-use crate::state::TTable;
+//use crate::state::TTable;
 use crate::types::{TypeId, TypeMap, Value};
 use serde::{Deserialize, Serialize};
 
@@ -19,20 +19,26 @@ pub struct Column {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-pub struct Table {
-    pub schema: Schema,
+pub struct TableData {
     pub data: Vec<u8>,
     pub row_size: usize,
 }
 
-impl TTable for Table {
-    fn get_schema(&self) -> &Schema {
-        &self.schema
-    }
+
+/// Constructed from existing schema and tabledata
+pub struct Table<'a> {
+    pub schema: &'a Schema,
+    pub table_data: &'a TableData,
 }
 
-impl Table {
-    pub fn new(schema: Schema, types: &TypeMap) -> Self {
+//impl TTable for Table {
+//    fn get_schema(&self) -> &Schema {
+//        &self.schema
+//    }
+//}
+
+impl TableData {
+    pub fn new(schema: &Schema, types: &TypeMap) -> Self {
         Self {
             data: vec![],
             row_size: schema
@@ -41,37 +47,11 @@ impl Table {
                 .map(|(_, t_id)| &types[t_id])
                 .map(|t| t.size_of(types))
                 .sum(),
-            schema,
+            //schema,
         }
     }
-
-    pub fn schema(&self) -> &Schema {
-        &self.schema
-    }
-
-    pub fn iter<'a>(&'a self) -> RowIter<'a> {
-        RowIter::new(self)
-    }
-
-    pub fn get_row<'a>(&'a self, row: usize) -> Row<'a> {
-        let start = self.row_start(row);
-        let end = start + self.row_size;
-
-        Row::new(&self.schema, &self.data[start..end])
-    }
-
-    pub fn get_row_value(&self, row: usize, types: &TypeMap) -> Vec<Value> {
-        let mut output = vec![];
-        let mut data = &self.data[self.row_start(row)..];
-        for (_, t_id) in self.schema.columns.iter() {
-            let t = &types[t_id];
-            let t_size = t.size_of(types);
-            output.push(t.from_bytes(&data[..t_size], types).unwrap());
-            data = &data[t_size..];
-        }
-
-        output
-    }
+}
+impl TableData {
 
     pub fn row_count(&self) -> usize {
         assert_eq!(self.data.len() % self.row_size, 0);
@@ -88,19 +68,65 @@ impl Table {
         self.data.extend_from_slice(row);
     }
 
-    pub fn push_row(&mut self, cells: &[Value], types: &TypeMap) {
+    pub fn push_row(&mut self, cells: &[Value], schema: &Schema, types: &TypeMap) {
         assert_eq!(self.data.len() % self.row_size, 0);
-
-        for (t_id, value) in self.schema.columns.iter().map(|(_, t)| t).zip(cells.iter()) {
+        for (t_id, value) in schema.columns.iter().map(|(_, t)| t).zip(cells.iter()) {
             value.to_bytes(&mut self.data, types, &types[t_id])
         }
 
         assert_eq!(self.data.len() % self.row_size, 0);
     }
+    
 }
 
+
+
+impl<'a> Table<'a> {
+
+    pub fn iter(&'a self) -> RowIter<'a> {
+        RowIter::new(self)
+    }
+    pub fn get_row(&'a self, row: usize) -> Row<'a> {
+        let start = self.table_data.row_start(row);
+        let end = start + self.table_data.row_size;
+
+        Row::new(&self.schema, &self.table_data.data[start..end])
+    }
+    pub fn new(schema: &'a Schema, table_data: &'a TableData) -> Self {
+        Self {
+            schema,
+            table_data,
+        }
+    }
+
+    pub fn schema(&self) -> &Schema {
+        &self.schema
+    }
+
+    pub fn get_row_value(&self, row: usize, types: &TypeMap) -> Vec<Value> {
+        let mut output = vec![];
+        let mut data = &self.table_data.data[self.table_data.row_start(row)..];
+        for (_, t_id) in self.schema.columns.iter() {
+            let t = &types[t_id];
+            let t_size = t.size_of(types);
+            output.push(t.from_bytes(&data[..t_size], types).unwrap());
+            data = &data[t_size..];
+        }
+
+        output
+    }
+
+}
+
+
+ /*
 #[cfg(test)]
 pub mod tests {
+
+
+
+
+
     use super::*;
     use crate::types::{BaseType, Type, TypeMap, Value};
 
@@ -263,3 +289,4 @@ pub mod tests {
         }
     }
 }
+*/
