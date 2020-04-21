@@ -46,8 +46,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let (address, port) = (config.address, config.port);
 
     #[cfg(unix)]
-    let uds_address = config.uds_address;
-    
+    let (uds_address, uds_state) = (config.uds_address, state.clone());
+
     tokio::spawn(async move {
         create_tcp_server(address.as_str(), port, state)
             .await
