@@ -19,6 +19,7 @@ pub struct TableRequest {
 pub enum Request<T> {
     Acquire(Acquire),
     CreateTable(String, T),
+    DropTable(String),
 }
 
 #[derive(Debug)]
@@ -37,6 +38,7 @@ pub enum Response<T> {
     AcquiredResources(Resources<T>),
     NoSuchTable(String),
     CreateTable(Result<(), ()>),
+    DropTable(Result<(), ()>),
     // TODO add future table deleted???????
 }
 

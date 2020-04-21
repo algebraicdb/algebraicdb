@@ -1,14 +1,15 @@
 use super::types::*;
 use super::*;
+use crate::grammar::StmtParser;
 use crate::table::Schema;
 use crate::types::TypeMap;
 use async_trait::async_trait;
+use lazy_static::*;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::mpsc;
 use tokio::sync::oneshot;
 use tokio::sync::RwLock;
-use tokio_postgres;
 use tokio_postgres::{Client, Config, NoTls};
 
 type RequestSender = mpsc::UnboundedSender<(Request<Schema>, oneshot::Sender<Response<Schema>>)>;
@@ -50,35 +51,22 @@ impl DbState<Schema> for WrapperState {
             _ => unreachable!(),
         }
     }
+
+    async fn drop_table(&self, name: String) -> Result<(), ()> {
+        match self.send_request(Request::DropTable(name)).await {
+            Response::DropTable(resp) => resp,
+            _ => unreachable!(),
+        }
+    }
 }
 
 impl WrapperState {
-    pub async fn new() -> Self {
-        use tokio_postgres::config::SslMode;
-        let mut config = Config::new();
-
-        config
-            .user("postgres")
-            .password("example")
-            .host("localhost")
-            .port(5432)
-            .dbname("postgres")
-            .ssl_mode(SslMode::Disable);
-        let (client, bit_coooonnect) = config.connect(NoTls).await.unwrap();
-        let refcli = Arc::new(client);
-        // The connection object performs the actual communication with the database,
-        // so spawn it off to run on its own.
-        tokio::spawn(async move {
-            if let Err(e) = bit_coooonnect.await {
-                eprintln!("connection error: {}", e);
-            }
-        });
-
+    pub async fn new(client: Arc<Client>) -> Self {
         let (requests_in, requests_out) = mpsc::unbounded_channel();
-        tokio::spawn(resource_manager(requests_out, refcli.clone()));
+        tokio::spawn(resource_manager(requests_out, client.clone()));
         Self {
             channel: requests_in,
-            client: refcli,
+            client: client,
         }
     }
 }
@@ -120,6 +108,15 @@ async fn resource_manager(mut requests: RequestReceiver, client: Arc<Client>) {
                     Err(err) => response_ch.send(err),
                 }
                 .unwrap_or_else(|_| eprintln!("global::manager: response channel closed."));
+            }
+            Request::DropTable(name) => {
+                let query = translator::translate_drop(&name);
+                client.execute(query.as_str(), &[]).await.unwrap();
+                let _ = tables.remove(&name);
+
+                response_ch
+                    .send(Response::DropTable(Ok(())))
+                    .unwrap_or_else(|_| eprintln!("global::manager: response channel closed."));
             }
             Request::CreateTable(name, table) => {
                 if tables.contains_key(&name) {

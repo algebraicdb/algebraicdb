@@ -1,10 +1,19 @@
 use crate::executor::wrapper::execute_query;
 use crate::local;
+use lazy_static::*;
 use regex::Regex;
 use std::error::Error;
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, BufWriter};
 
 pub type State = local::WrapperState;
+
+lazy_static! {
+    // This regex matches the entire string from the start to the first non-quoted semi-colon.
+    // It also properly handles escaped quotes
+    // valid string: SELECT "this is a quote -> \", this is a semicolon -> ;.";
+    static ref TOKENIZER_REGEX: Regex = Regex::new(r#"^(("((\\.)|[^"])*")|[^";])*;"#).expect("Invalid regex");
+
+}
 
 pub async fn client<R, W>(mut reader: R, writer: W, state: State) -> Result<(), Box<dyn Error>>
 where
@@ -13,11 +22,6 @@ where
 {
     let mut writer = BufWriter::new(writer);
     let mut buf = vec![];
-
-    // This regex matches the entire string from the start to the first non-quoted semi-colon.
-    // It also properly handles escaped quotes
-    // valid string: SELECT "this is a quote -> \", this is a semicolon -> ;.";
-    let r = Regex::new(r#"^(("((\\.)|[^"])*")|[^";])*;"#).expect("Invalid regex");
 
     loop {
         let _n: usize = match reader.read_buf(&mut buf).await? {
@@ -48,7 +52,7 @@ where
             };
 
             // Match string against regex
-            let (input, end) = match r.find(input) {
+            let (input, end) = match TOKENIZER_REGEX.find(input) {
                 Some(matches) => (matches.as_str(), matches.end()),
                 None => break,
             };

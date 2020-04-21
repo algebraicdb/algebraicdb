@@ -1,14 +1,20 @@
 use crate::ast::*;
+use crate::grammar::StmtParser;
 use crate::local::{DbState, ResourcesGuard, WrapperState};
 use crate::pre_typechecker;
 use crate::psqlwrapper::translator::*;
 use crate::table::Schema;
 use crate::typechecker;
 use crate::types::{Type, TypeId, Value};
+use lazy_static::*;
 use serde_json;
 use std::error::Error;
 use tokio::io::{AsyncWrite, AsyncWriteExt};
 use tokio_postgres::types::Type as PostgresType;
+
+lazy_static! {
+    static ref PARSER: StmtParser = StmtParser::new();
+}
 struct Context {
     // TODO
 }
@@ -25,9 +31,8 @@ pub async fn execute_query(
     w: &mut (dyn AsyncWrite + Send + Unpin),
 ) -> Result<(), Box<dyn Error>> {
     // 1. Parse
-    use crate::grammar::StmtParser;
 
-    let result: Result<Stmt, _> = StmtParser::new().parse(&input);
+    let result: Result<Stmt, _> = PARSER.parse(&input);
 
     let ast = match result {
         Ok(ast) => ast,
@@ -74,6 +79,7 @@ async fn execute_stmt(
         Stmt::CreateType(create_type) => execute_create_type(create_type, resources, w).await,
         Stmt::Insert(insert) => execute_insert(insert, resources, w, &s).await,
         Stmt::Select(select) => execute_select(select, &s, resources, w).await,
+        Stmt::Drop(drop) => execute_drop(drop, &s, w).await,
         _ => unimplemented!("Not implemented: {:?}", ast),
     }
 }
@@ -168,6 +174,24 @@ async fn execute_create_table(
     let schema = Schema::new(columns);
     s.create_table(create_table.table, schema).await.unwrap();
     w.write_all("Table created\n".as_bytes()).await?;
+    Ok(())
+}
+
+async fn execute_drop(
+    drop: Drop,
+    s: &WrapperState,
+    w: &mut (dyn AsyncWrite + Send + Unpin),
+) -> Result<(), Box<dyn Error>> {
+    match s.drop_table(drop.table.clone()).await {
+        Ok(()) => {
+            w.write_all(format!("table dropped: \"{}\"\n", drop.table).as_bytes())
+                .await?
+        }
+        Err(()) => {
+            w.write_all(format!("no such table: \"{}\"\n", drop.table).as_bytes())
+                .await?
+        }
+    }
     Ok(())
 }
 

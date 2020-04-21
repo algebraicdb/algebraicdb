@@ -46,6 +46,10 @@ impl DbState<Table> for DbmsState {
             _ => unreachable!(),
         }
     }
+
+    async fn drop_table(&self, _name: String) -> Result<(), ()> {
+        unimplemented!()
+    }
 }
 
 impl DbmsState {
@@ -110,6 +114,8 @@ fn resource_manager(mut requests: RequestReceiver) {
                         .unwrap_or_else(|_| eprintln!("global::manager: response channel closed."));
                 }
             }
+
+            Request::DropTable(_) => unimplemented!(),
         }
     }
 }

@@ -29,7 +29,7 @@ pub async fn create_uds_server(path: PathBuf, state: WrapperState) -> Result<!, 
     loop {
         match listener.accept().await {
             Ok((mut socket, client_address)) => {
-                println!("new client [{:?}] connected", client_address);
+                // println!("new client [{:?}] connected", client_address);
 
                 // Copy state accessor, not the state itself.
                 let state = state.clone();
@@ -38,10 +38,10 @@ pub async fn create_uds_server(path: PathBuf, state: WrapperState) -> Result<!, 
                     let (reader, writer) = socket.split();
                     match client(reader, writer, state).await {
                         Ok(()) => {
-                            println!("client [{:?}] socket closed", client_address);
+                            // println!("client [{:?}] socket closed", client_address);
                         }
                         Err(e) => {
-                            println!("client [{:?}] errored: {}", client_address, e);
+                            // println!("client [{:?}] errored: {}", client_address, e);
                         }
                     }
                 });

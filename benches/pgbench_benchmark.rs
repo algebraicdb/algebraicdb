@@ -12,6 +12,7 @@ use tokio::stream::StreamExt;
 use criterion::Throughput;
 use futures::future::join_all;
 
+use algebraicdb::{drop_all_tables, psqlwrapper::db_connection::connect_db};
 use tokio::net::UnixStream;
 
 fn tps_bench(c: &mut Criterion) {
@@ -30,7 +31,7 @@ fn tps_bench(c: &mut Criterion) {
         INSERT INTO a (b) SELECT b FROM a;
     ",
         b"SELECT b FROM a;",
-        50,
+        10,
         100,
         "simple_select",
         &mut group,
@@ -47,7 +48,7 @@ fn tps_bench(c: &mut Criterion) {
         INSERT INTO a (b) SELECT b FROM a;
     ",
         b"INSERT INTO a (b) VALUES (1);",
-        50,
+        1,
         100,
         "simple_insert",
         &mut group,
@@ -68,7 +69,10 @@ fn tps_benchmark(
 
     let srt = srt();
 
-    srt.spawn(start_uds_server());
+    srt.spawn(async {
+        let cli = connect_db().await.unwrap();
+        start_uds_server(cli).await
+    });
 
     std::thread::sleep(std::time::Duration::from_secs(3));
 
