@@ -29,5 +29,7 @@ mod util;
 pub use api::config::DbmsConfig;
 pub use api::custom::create_with_writers;
 pub use api::tcp_api::create_tcp_server;
-pub use api::uds_api::create_uds_server;
 pub use util::Timing;
+
+#[cfg(unix)]
+pub use api::uds_api::create_uds_server;

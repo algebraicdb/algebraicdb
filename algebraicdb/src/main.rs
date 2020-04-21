@@ -2,18 +2,21 @@
 
 use algebraicdb::state::DbmsState;
 use algebraicdb::DbmsConfig;
-use algebraicdb::{create_tcp_server, create_uds_server};
+use algebraicdb::create_tcp_server;
 use log::{debug, info, LevelFilter};
 use std::error::Error;
-use std::path::PathBuf;
 use structopt::StructOpt;
 use tokio::signal::ctrl_c;
+
+#[cfg(unix)]
+use algebraicdb::create_uds_server;
 
 #[derive(StructOpt)]
 struct Config {
     #[structopt(short, long, default_value = "localhost")]
     address: String,
 
+    #[cfg(unix)]
     #[structopt(short, long, default_value = "/tmp/adbsocket")]
     uds_address: String,
 
@@ -39,15 +42,20 @@ async fn main() -> Result<(), Box<dyn Error>> {
     info!("setting up server");
 
     let state: DbmsState = DbmsState::new(config.dbms_config).await;
-    let uds_state = state.clone();
-    let (address, port, uds_address) = (config.address, config.port, config.uds_address);
 
+    let (address, port) = (config.address, config.port);
+
+    #[cfg(unix)]
+    let uds_address = config.uds_address;
+    
     tokio::spawn(async move {
         create_tcp_server(address.as_str(), port, state)
             .await
             .unwrap()
     });
+    #[cfg(unix)]
     tokio::spawn(async move {
+        use std::path::PathBuf;
         create_uds_server(PathBuf::from(uds_address), uds_state)
             .await
             .unwrap()
