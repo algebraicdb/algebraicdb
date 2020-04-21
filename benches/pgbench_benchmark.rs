@@ -31,7 +31,7 @@ fn tps_bench(c: &mut Criterion) {
         INSERT INTO a (b) SELECT b FROM a;
     ",
         b"SELECT b FROM a;",
-        10,
+        50,
         100,
         "simple_select",
         &mut group,
@@ -48,7 +48,7 @@ fn tps_bench(c: &mut Criterion) {
         INSERT INTO a (b) SELECT b FROM a;
     ",
         b"INSERT INTO a (b) VALUES (1);",
-        1,
+        50,
         100,
         "simple_insert",
         &mut group,
