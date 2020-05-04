@@ -22,8 +22,8 @@ lazy_static! {
 }
 
 pub(crate) async fn execute_transaction(
-    input: &str,
-    transaction: Vec<Stmt>,
+    query_strings: &[String],
+    transaction: &[Stmt],
     s: &mut DbmsState,
     w: &mut (dyn AsyncWrite + Send + Unpin),
 ) -> Result<(), Box<dyn Error>> {
@@ -46,7 +46,6 @@ pub(crate) async fn execute_transaction(
     }
 
     // 2. determine resources
-    // TODO: determine resources for ALL statements (in order)
     let request = pre_typechecker::get_transaction_resource_request(&transaction);
 
     // 3. acquire resources
@@ -63,7 +62,7 @@ pub(crate) async fn execute_transaction(
     let mut table_schemas = resources.take_schemas().await;
 
     // 4. typecheck
-    for stmt in transaction.iter() {
+    for (input, stmt) in query_strings.iter().zip(transaction.iter()) {
         match typechecker::check_stmt(stmt, &type_map, &table_schemas) {
             Ok(()) => {}
             Err(e) => {
@@ -77,7 +76,7 @@ pub(crate) async fn execute_transaction(
     // TODOOOOO
 
     let mut table_datas = resources.take_data().await;
-    
+
     // 6. Execute query
     for stmt in transaction {
         execute_stmt(stmt, s, &mut type_map, &mut table_schemas, &mut table_datas, w).await?;
@@ -92,8 +91,8 @@ pub(crate) async fn execute_query(
 ) -> Result<(), Box<dyn Error>> {
     // 1. parse
     let result: Result<Stmt, _> = PARSER.parse(&input);
-    let ast = match result {
-        Ok(ast) => ast,
+    let stmt = match result {
+        Ok(stmt) => stmt,
         Err(e) => {
             w.write_all(e.display(input).as_bytes()).await?;
             return Ok(());
@@ -101,7 +100,7 @@ pub(crate) async fn execute_query(
     };
 
     // 2. determine resources
-    let request = pre_typechecker::get_resource_request(&ast);
+    let request = pre_typechecker::get_resource_request(&stmt);
 
     // 3. acquire resources
     let response = s.acquire_resources(request).await;
@@ -117,7 +116,7 @@ pub(crate) async fn execute_query(
     let mut table_schemas = resources.take_schemas().await;
 
     // 4. typecheck
-    match typechecker::check_stmt(&ast, &type_map, &table_schemas) {
+    match typechecker::check_stmt(&stmt, &type_map, &table_schemas) {
         Ok(()) => {}
         Err(e) => {
             w.write_all(e.display(input).as_bytes()).await?;
@@ -126,8 +125,8 @@ pub(crate) async fn execute_query(
     }
 
     // 5. write to WAL
-    let notify = log_stmt(&ast, s).await?;
-    
+    let notify = log_stmt(&stmt, s).await?;
+
     // 6. Fetch data resources
     let mut table_datas = resources.take_data().await;
 
@@ -137,16 +136,16 @@ pub(crate) async fn execute_query(
     }
 
     // 8. Execute query
-    execute_stmt(ast, s, &mut type_map, &mut table_schemas, &mut table_datas, w).await
+    execute_stmt(&stmt, s, &mut type_map, &mut table_schemas, &mut table_datas, w).await
 }
 
 pub(crate) async fn execute_replay_query(
-    ast: Stmt,
+    stmt: &Stmt,
     s: &mut DbmsState,
     w: &mut (dyn AsyncWrite + Send + Unpin),
 ) -> Result<(), Box<dyn Error>> {
     // 2. determine resources
-    let request = pre_typechecker::get_resource_request(&ast);
+    let request = pre_typechecker::get_resource_request(&stmt);
 
     // 3. acquire resources
     let response = s.acquire_resources(request).await;
@@ -165,7 +164,7 @@ pub(crate) async fn execute_replay_query(
 
     // ?. Execute query
     // TODO: Error checking
-    execute_stmt(ast, s, &mut type_map, &mut table_schemas, &mut table_datas, w).await
+    execute_stmt(&stmt, s, &mut type_map, &mut table_schemas, &mut table_datas, w).await
 }
 
 async fn log_stmt(
@@ -188,7 +187,7 @@ async fn log_stmt(
 }
 
 async fn execute_stmt(
-    ast: Stmt,
+    ast: &Stmt,
     s: &mut DbmsState,
     type_map: &mut Resource<'_, TypeMap>,
     table_schemas: &mut HashMap<&str, Resource<'_, Schema>>,
@@ -206,8 +205,8 @@ async fn execute_stmt(
             print_table(table.iter(type_map), w).await
         }
         Stmt::Drop(drop) => execute_drop_table(drop, s, w).await,
-        ast @ Stmt::Delete(_) => unimplemented!("Not implemented: {:?}", ast),
-        ast @ Stmt::Update(_) => unimplemented!("Not implemented: {:?}", ast),
+        stmt @ Stmt::Delete(_) => unimplemented!("Not implemented: {:?}", stmt),
+        stmt @ Stmt::Update(_) => unimplemented!("Not implemented: {:?}", stmt),
     }
 }
 
@@ -361,17 +360,17 @@ fn execute_select<'a>(
 }
 
 async fn execute_create_table(
-    create_table: CreateTable,
+    create_table: &CreateTable,
     s: &DbmsState,
     type_map: &Resource<'_, TypeMap>,
     w: &mut (dyn AsyncWrite + Send + Unpin),
 ) -> Result<(), Box<dyn Error>> {
     let columns: Vec<_> = create_table
         .columns
-        .into_iter()
+        .iter()
         .map(|(column_name, column_type)| {
             let t_id = type_map
-                .get_id(&column_type)
+                .get_id(column_type)
                 .expect("Type does not exist");
             (column_name.to_string(), t_id)
         })
@@ -394,7 +393,7 @@ async fn execute_create_table(
 }
 
 async fn execute_create_type(
-    create_type: CreateType,
+    create_type: &CreateType,
     types: &mut Resource<'_, TypeMap>,
     w: &mut (dyn AsyncWrite + Send + Unpin),
 ) -> Result<(), Box<dyn Error>> {
@@ -415,14 +414,14 @@ async fn execute_create_type(
             w.write_all(b"type ").await?;
             w.write_all(name.as_bytes()).await?;
             w.write_all(b" created\n").await?;
-            types.insert(name.value, Type::Sum(variant_types));
+            types.insert(name.value.to_string(), Type::Sum(variant_types));
         }
     }
     Ok(())
 }
 
 async fn execute_drop_table(
-    drop: Drop,
+    drop: &Drop,
     s: &DbmsState,
     w: &mut (dyn AsyncWrite + Send + Unpin),
 ) -> Result<(), Box<dyn Error>> {
@@ -440,13 +439,13 @@ async fn execute_drop_table(
 }
 
 async fn execute_insert(
-    insert: Insert,
+    insert: &Insert,
     type_map: &Resource<'_, TypeMap>,
     table_schemas: &HashMap<&str, Resource<'_, Schema>>,
     table_datas: &mut HashMap<&str, Resource<'_, TableData>>,
     w: &mut (dyn AsyncWrite + Send + Unpin),
 ) -> Result<(), Box<dyn Error>> {
-    match insert.from {
+    match &insert.from {
         // case !query
         InsertFrom::Values(rows) => {
             let schema = &table_schemas[insert.table.as_str()];

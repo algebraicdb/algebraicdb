@@ -37,6 +37,7 @@ where
     let mut buf = vec![];
     let mut parsing_transaction: bool = false;
     let mut transaction: Vec<Stmt> = vec![];
+    let mut query_strings: Vec<String> = vec![];
     let parser: &InstrParser = &*PARSER;
 
     loop {
@@ -86,19 +87,22 @@ where
                     assert!(parsing_transaction); // TODO: error
                     parsing_transaction = false;
 
-                    execute_transaction("no input fuck u", transaction.clone(), &mut state, &mut writer).await?;
+                    execute_transaction(&query_strings, &transaction, &mut state, &mut writer).await?;
 
                     transaction.clear();
+                    query_strings.clear();
 
                     writer.flush().await?;
                 }
-                Ok(Instr::Stmt(stmt)) if parsing_transaction => transaction.push(stmt),
+                Ok(Instr::Stmt(stmt)) if parsing_transaction => {
+                    query_strings.push(input.to_string());
+                    transaction.push(stmt);
+                }
                 Ok(Instr::Stmt(stmt)) => {
                     assert_eq!(transaction.len(), 0);
 
-
                     // TODO:
-                    //execute_transaction(input, vec![stmt], &mut state, &mut writer).await?;
+                    //execute_transaction(input, &[stmt], &mut state, &mut writer).await?;
                     execute_query(input, &mut state, &mut writer).await?;
 
                     transaction.clear();

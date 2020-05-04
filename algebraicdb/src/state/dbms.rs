@@ -153,7 +153,7 @@ impl DbmsState {
                     if let Some(query_data) = query_data {
                         debug!("replaying transaction {}", entry_tn);
                         let query = bincode::deserialize(&query_data).unwrap();
-                        execute_replay_query(query, &mut state, &mut Vec::<u8>::new())
+                        execute_replay_query(&query, &mut state, &mut Vec::<u8>::new())
                             .await
                             .unwrap();
                     }
