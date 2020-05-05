@@ -5,7 +5,7 @@ use criterion::{
     criterion_group, criterion_main, measurement::WallTime, BatchSize, BenchmarkGroup, Criterion, black_box
 };
 
-use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader, BufWriter};
+use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader, BufWriter};
 
 use tokio::stream::StreamExt;
 
@@ -120,7 +120,7 @@ async fn actual_bench(
     mut stream: UnixStream,
     test_instrs: &[String],
 ) -> Result<(), ()> {
-    let (reader, writer) = stream.split();
+    let (mut reader, writer) = stream.split();
     let mut buf_writer = BufWriter::new(writer);
     for instr in test_instrs.iter() {
         buf_writer.write_all(black_box(instr.as_bytes())).await.unwrap();
@@ -128,10 +128,14 @@ async fn actual_bench(
     buf_writer.shutdown().await.unwrap();
 
     // Await for results to be ready
-    let buf_reader = BufReader::new(reader);
-    let _: Vec<String> = buf_reader.lines().collect::<Result<_, _>>().await.unwrap();
-
-    Ok(())
+    let mut buf = [0u8; 4096];
+    loop {
+        match reader.read(&mut buf).await {
+            Ok(0) => break Ok(()),
+            Ok(_) => {},
+            Err(_) => return Err(()),
+        }
+    }
 }
 
 criterion_group!(benches, tps_bench);
