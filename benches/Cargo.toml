@@ -22,10 +22,10 @@ name = "parsing_benchmark"
 path = "parsing_benchmark.rs"
 harness = false
 
-# [[bench]]
-# name = "executor_benchmark"
-# path = "executor_benchmark.rs"
-# harness = false
+[[bench]]
+name = "executor_benchmark"
+path = "executor_benchmark.rs"
+harness = false
 
 [[bench]]
 name = "integration_tests_benchmark"

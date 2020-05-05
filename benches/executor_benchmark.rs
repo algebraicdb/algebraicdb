@@ -1,9 +1,10 @@
 use algebraicdb::ast::SelectFrom;
 use algebraicdb::executor::dbms::execute_select_from;
-use algebraicdb::state::types::{Resource, ResourcesGuard};
-use algebraicdb::table::{Schema, Table};
+use algebraicdb::state::types::{PermLock, RW};
+use algebraicdb::table::{Schema, TableData};
 use algebraicdb::types::{BaseType, TypeMap, Value};
 
+use std::sync::Arc;
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use tokio::sync::RwLock;
 
@@ -16,30 +17,36 @@ fn execute_select_from_benchmark(c: &mut Criterion) {
     let int_id = types.get_base_id(BaseType::Integer);
     let columns = vec![(String::from("col1"), int_id)];
     let schema = Schema { columns };
-    let mut table = Table::new(schema.clone(), &types);
+    let mut table = TableData::new(&schema, &types);
 
     for i in 0..1000 {
-        table.push_row(&[Value::Integer(i)], &types);
+        table.push_row(&[Value::Integer(i)], &schema, &types);
     }
 
-    let lock = RwLock::new(table);
-    let type_lock = RwLock::new(types.clone());
+    let schema_lock = PermLock::new(RW::Read, Arc::new(RwLock::new(schema)));
+    let data_lock = PermLock::new(RW::Read, Arc::new(RwLock::new(table)));
+    let type_lock = PermLock::new(RW::Read, Arc::new(RwLock::new(types.clone())));
 
     let mut rt = rt();
-    let res_guard: ResourcesGuard<Table> = {
-        rt.block_on(async {
-            ResourcesGuard {
-                tables: vec![("tab", Resource::Read(lock.read().await))],
-                type_map: Resource::Read(type_lock.read().await),
-            }
-        })
-    };
+
+    let (type_guard, data_guards, schema_guards) = rt.block_on(async {
+        let type_guard = type_lock.lock().await;
+        let data_guards = vec![("tab", data_lock.lock().await)].into_iter().collect();
+        let schema_guards = vec![("tab", schema_lock.lock().await)].into_iter().collect();
+
+        (type_guard, data_guards, schema_guards)
+    });
 
     let s_from = SelectFrom::Table("tab".to_string());
 
     c.bench_function("Executor Benchmark: execute_select_from size 1", |b| {
         b.iter(|| {
-            execute_select_from(black_box(&s_from), black_box(&res_guard))
+            execute_select_from(
+                black_box(&s_from),
+                &type_guard,
+                &schema_guards,
+                &data_guards,
+            )
                 .iter(&types)
                 .for_each(|_row| ());
         })
