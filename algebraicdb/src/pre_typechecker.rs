@@ -2,18 +2,22 @@ use crate::ast::*;
 use crate::state::*;
 
 pub fn get_resource_request(stmt: &Stmt) -> Acquire {
-    get_table_resource_requests(stmt).into_acquire(get_type_map_resource_perm(stmt))
+    get_table_resource_requests(stmt).into_acquire(RW::Write)
 }
 
 pub fn get_transaction_resource_request(transaction: &[Stmt]) -> Acquire {
-    get_transaction_resource_requests(transaction).into_acquire(RW::Read)
+    get_transaction_resource_requests(transaction).into_acquire(get_type_map_resource_perm(transaction))
 }
-
-fn get_type_map_resource_perm(stmt: &Stmt) -> RW {
-    match stmt {
-        Stmt::CreateType(_) => RW::Write,
-        _ => RW::Read,
+// I BELEIVE
+// THAT THE DEVIL HAS A HOLD OF YOU
+fn get_type_map_resource_perm(transaction: &[Stmt]) -> RW {
+    for stmt in transaction {
+        match stmt {
+            Stmt::CreateType(_) => return RW::Write,
+            _ => {} ,
+        }
     }
+    RW::Read
 }
 
 #[derive(Default)]

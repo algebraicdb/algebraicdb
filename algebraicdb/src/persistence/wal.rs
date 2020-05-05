@@ -79,7 +79,7 @@ impl WriteAheadLog {
     pub async fn new(
         data_dir: PathBuf,
         truncate_at: NumBytes,
-    ) -> (Self, Vec<(TransactionNumber, Option<Vec<u8>>)>) {
+    ) -> (Self, Vec<(TransactionNumber, Option<Vec<Stmt>>)>) {
         let wal_path = data_dir.join(WAL_FILE_NAME);
         let (file_size, entries, file) = load_wal(&wal_path).await.expect("Loading WAL failed");
 
@@ -102,10 +102,10 @@ impl WriteAheadLog {
         self.state.transaction_number.load(Ordering::Relaxed)
     }
 
-    pub async fn write(&mut self, stmt: &Stmt) -> io::Result<Arc<Notify>> {
-        let stmt_data = serialize_log_msg(stmt);
+    pub async fn write(&mut self, stmts: &Vec<Stmt>) -> io::Result<Arc<Notify>> {
+        let stmts_data = serialize_log_msg(stmts);
 
-        let mut data = Vec::with_capacity(stmt_data.len() + *ENTRY_START_SIZE + *ENTRY_END_SIZE);
+        let mut data = Vec::with_capacity(stmts_data.len() + *ENTRY_START_SIZE + *ENTRY_END_SIZE);
 
         // TODO: we don't acquire the file lock here anymore, double check this
         // also changed Ordering::Relaxed to Ordering::SeqCst, maybe that's enough.
@@ -120,11 +120,11 @@ impl WriteAheadLog {
 
         let start = EntryBegin {
             transaction_number,
-            entry_size: stmt_data.len(),
+            entry_size: stmts_data.len(),
         };
 
         bincode::serialize_into(&mut data, &start).unwrap();
-        data.extend_from_slice(&stmt_data);
+        data.extend_from_slice(&stmts_data);
 
         let end = EntryEnd {
             checksum: checksum(&data),
@@ -183,7 +183,7 @@ impl WriteAheadLog {
         
         debug!("Wrote the following to the WAL:");
         debug!("start:  {:?}", start);
-        debug!("entry:  {:?}", stmt);
+        debug!("entry:  {:#?}", stmts);
         debug!("end:    {:?}", end);
         debug!("#bytes: {}", data_len);
 
@@ -262,7 +262,7 @@ impl WriteAheadLog {
     }
 }
 
-fn serialize_log_msg(msg: &Stmt) -> Vec<u8> {
+fn serialize_log_msg(msg: &Vec<Stmt>) -> Vec<u8> {
     let mut data = Vec::new();
     bincode::serialize_into(&mut data, msg).unwrap();
     data
@@ -278,7 +278,7 @@ fn checksum(data: &[u8]) -> u64 {
 
 pub async fn load_wal(
     path: &PathBuf,
-) -> io::Result<(usize, Vec<(TransactionNumber, Option<Vec<u8>>)>, File)> {
+) -> io::Result<(usize, Vec<(TransactionNumber, Option<Vec<Stmt>>)>, File)> {
     let mut file: File = OpenOptions::new()
         .write(true)
         .read(true)
@@ -317,12 +317,15 @@ pub async fn load_wal(
 
             let mut query = None;
             if start.entry_size > 0 {
-                query = Some(data[..start.entry_size].into());
+                query = Some(match bincode::deserialize(&data[..start.entry_size]) {
+                    Ok(stmts) => stmts,
+                    Err(_) => panic!("Corrupt WAL"),
+                });
                 data = &data[start.entry_size..];
             }
 
             let end: EntryEnd = match bincode::deserialize(&data[..*ENTRY_END_SIZE]) {
-                Ok(stmt) => stmt,
+                Ok(end) => end,
                 Err(_) => panic!("Corrupt WAL"),
             };
             data = &data[*ENTRY_END_SIZE..];

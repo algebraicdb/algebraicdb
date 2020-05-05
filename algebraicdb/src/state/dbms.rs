@@ -148,11 +148,10 @@ impl DbmsState {
             };
 
             // TODO: This can probably be optimized
-            for (entry_tn, query_data) in wal_entries {
+            for (entry_tn, transaction) in wal_entries {
                 if entry_tn > transaction_number {
-                    if let Some(query_data) = query_data {
-                        debug!("replaying transaction {}", entry_tn);
-                        let query = bincode::deserialize(&query_data).unwrap();
+                    debug!("replaying transaction {}", entry_tn);
+                    for query in transaction.unwrap_or(vec![]) {
                         execute_replay_query(&query, &mut state, &mut Vec::<u8>::new())
                             .await
                             .unwrap();

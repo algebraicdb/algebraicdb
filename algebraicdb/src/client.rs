@@ -1,4 +1,4 @@
-use crate::executor::{execute_query, execute_transaction};
+use crate::executor::{execute_transaction};
 use crate::error_message::ErrorMessage;
 use crate::state::DbmsState;
 use crate::ast::{Stmt, Instr};
@@ -59,7 +59,7 @@ where
                 Ok(input) => input,
                 Err(e) => {
                     writer
-                        .write_all(format!("Error: {}\n", e).as_bytes())
+                        .write_all(format!("error: {}\n", e).as_bytes())
                         .await?;
                     writer.flush().await?;
                     return Err(e.into());
@@ -100,30 +100,19 @@ where
                 }
                 Ok(Instr::Stmt(stmt)) => {
                     assert_eq!(transaction.len(), 0);
-
-                    // TODO:
-                    //execute_transaction(input, &[stmt], &mut state, &mut writer).await?;
-                    execute_query(input, &mut state, &mut writer).await?;
-
-                    transaction.clear();
-
+                    execute_transaction(&[input.to_string()], &vec![stmt], &mut state, &mut writer).await?;
                     writer.flush().await?;
                 }
                 Err(e) => {
                     let error_msg = e.display(input);
                     writer.write_all(error_msg.as_bytes()).await?;
                     writer.flush().await?;
+
+                    parsing_transaction = false;
+                    transaction.clear();
+                    query_strings.clear();
                 }
             }
-
-            /*
-            debug!("executing query:\n{}\n", input);
-
-            // Exectue the (semicolon-terminated) string as a query
-            execute_query(input, &mut state, &mut writer).await?;
-
-            writer.flush().await?;
-            */
 
             // Remove the string of the parsed instruction from the buffer
             buf.drain(..end);

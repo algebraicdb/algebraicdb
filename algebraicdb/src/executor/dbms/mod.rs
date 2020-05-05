@@ -23,16 +23,18 @@ lazy_static! {
 
 pub(crate) async fn execute_transaction(
     query_strings: &[String],
-    transaction: &[Stmt],
+    transaction: &Vec<Stmt>,
     s: &mut DbmsState,
     w: &mut (dyn AsyncWrite + Send + Unpin),
 ) -> Result<(), Box<dyn Error>> {
+    debug_assert_eq!(query_strings.len(), transaction.len());
+
     // 1. check for disallowed statements
     // NOTE: TODO: type-checking the entire transaction before-hand is made complicated
     // if we allow modifying table schemas or types during the transaction. For now we
     // disallow all those kinds of operations.
-    if transaction.len() > 1 {
-        for stmt in transaction.iter() {
+    if transaction.len() >= 2 {
+        for (input, stmt) in query_strings.iter().zip(transaction.iter()) {
             match stmt {
                 // Statements that are currently allowed in a transaction:
                 Stmt::Select(_) => {},
@@ -40,7 +42,11 @@ pub(crate) async fn execute_transaction(
                 Stmt::Delete(_) => {},
                 Stmt::Update(_) => {},
 
-                _ => panic!("NOT ALLOWED"),
+                _ => {
+                    return Ok(w
+                        .write_all(format!("ERROR: this kind of statement is not yet allowed in a transaction block:\n{}\n", input).as_bytes())
+                        .await?)
+                }
             }
         }
     }
@@ -73,17 +79,23 @@ pub(crate) async fn execute_transaction(
     }
 
     // 5. write to wal
-    // TODOOOOO
+    let notify = log_transaction(transaction, s).await?;
 
+    // 6. lol
     let mut table_datas = resources.take_data().await;
+    
+    // 7. Notify the wal that we're done fetching locks
+    if let Some(notify) = notify {
+        notify.notify();
+    }
 
-    // 6. Execute query
+    // 8. Execute query
     for stmt in transaction {
         execute_stmt(stmt, s, &mut type_map, &mut table_schemas, &mut table_datas, w).await?;
     }
     Ok(())
 }
-
+/*
 pub(crate) async fn execute_query(
     input: &str,
     s: &mut DbmsState,
@@ -138,7 +150,7 @@ pub(crate) async fn execute_query(
     // 8. Execute query
     execute_stmt(&stmt, s, &mut type_map, &mut table_schemas, &mut table_datas, w).await
 }
-
+*/
 pub(crate) async fn execute_replay_query(
     stmt: &Stmt,
     s: &mut DbmsState,
@@ -167,20 +179,26 @@ pub(crate) async fn execute_replay_query(
     execute_stmt(&stmt, s, &mut type_map, &mut table_schemas, &mut table_datas, w).await
 }
 
-async fn log_stmt(
-    ast: &Stmt,
+async fn log_transaction(
+    transaction: &Vec<Stmt>,
     s: &mut DbmsState,
 ) -> Result<Option<Arc<Notify>>, Box<dyn Error>> {
-    Ok(if let Some(wal) = s.wal() {
-        match &ast {
+    if let None = transaction.iter()
+        .filter(|stmt| match stmt {
             Stmt::CreateTable(_)
             | Stmt::CreateType(_)
             | Stmt::Delete(_)
             | Stmt::Update(_)
             | Stmt::Drop(_)
-            | Stmt::Insert(_) => Some(wal.write(&ast).await?),
-            Stmt::Select(_) => None/* We're only reading, so no logging required*/
-        }
+            | Stmt::Insert(_) => true,
+            Stmt::Select(_) => false,/* We're only reading, so no logging required*/
+        })
+        .next() {
+        return Ok(None);
+    }
+
+    Ok(if let Some(wal) = s.wal() {
+        Some(wal.write(&transaction).await?)
     } else {
         None
     })
