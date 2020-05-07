@@ -8,8 +8,10 @@ use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
-use tokio::fs::{rename, File, OpenOptions};
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
+//use tokio::fs::{rename, File, OpenOptions};
+use std::fs::{File, OpenOptions, rename};
+use std::io::{Write, Read};
+
 use tokio::sync::{Mutex, Notify};
 
 /// With every transaction written to the WAL, this number is incremented by 1.
@@ -150,11 +152,11 @@ impl WriteAheadLog {
 
                     for (data, _, _) in write_buffer.iter() {
                         // Write entry to the wal-file
-                        file.write_all(&data).await?;
+                        file.write_all(&data)?;
                         state.file_size.fetch_add(data.len(), Ordering::Relaxed);
                     }
 
-                    file.sync_all().await?;
+                    file.sync_all()?;
 
                     // Release the lock
                     drop(file);
@@ -238,12 +240,11 @@ impl WriteAheadLog {
         let mut new_file = OpenOptions::new()
             .write(true)
             .create_new(true)
-            .open(&tmp_file_path)
-            .await?;
+            .open(&tmp_file_path)?;
 
         // Write the initial entry to the file
-        new_file.write_all(&buf).await?;
-        new_file.sync_all().await?;
+        new_file.write_all(&buf)?;
+        new_file.sync_all()?;
 
         // Replace the new file with the old one in our state
         std::mem::swap(&mut new_file, &mut file);
@@ -252,7 +253,7 @@ impl WriteAheadLog {
         // Replace the old file with the new one on disk.
         // _Should_ be no need to sync this, since the file
         // will get synced anyway after its first write.
-        rename(&tmp_file_path, &file_path).await?;
+        rename(&tmp_file_path, &file_path)?;
 
         drop(file);
 
@@ -283,14 +284,13 @@ pub async fn load_wal(
         .write(true)
         .read(true)
         .create(true)
-        .open(path)
-        .await?;
+        .open(path)?;
 
     let mut data = Vec::new();
     let mut entries = Vec::new();
 
     {
-        file.read_to_end(&mut data).await?;
+        file.read_to_end(&mut data)?;
         let mut data = &data[..];
         loop {
             if data.is_empty() {
