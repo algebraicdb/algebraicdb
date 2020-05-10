@@ -34,23 +34,115 @@ fn tps_bench(c: &mut Criterion) {
         "simple_select",
         &mut group,
     );
-    tps_benchmark(
-        "
+    // tps_benchmark(
+    //     "
+    //     DROP TABLE a;
+    //     CREATE TABLE a (b Integer);
+    //     INSERT INTO a (b) VALUES (1), (2), (3), (4), (5), (6), (7), (8);
+    //     INSERT INTO a (b) SELECT b FROM a;
+    //     INSERT INTO a (b) SELECT b FROM a;
+    //     INSERT INTO a (b) SELECT b FROM a;
+    //     INSERT INTO a (b) SELECT b FROM a;
+    //     INSERT INTO a (b) SELECT b FROM a;
+    //     ",
+    //     "INSERT INTO a (b) VALUES ({{random_i32}});",
+    //     50,
+    //     100,
+    //     "simple_insert",
+    //     &mut group,
+    // );
+    
+    
+    let maybe_init = "
+        CREATE TYPE MaybeInt AS VARIANT {
+            Some (Integer),
+            None (),
+        };
+        DROP TABLE a;
+        CREATE TABLE a (b MaybeInt);
+        INSERT INTO a(b) VALUES
+        (Some(1)),
+        (Some(2)),
+        (None()),
+        (None()),
+        (Some(3)),
+        (None()),
+        (Some(4));
+        INSERT INTO a (b) SELECT b FROM a;
+        INSERT INTO a (b) SELECT b FROM a;
+        INSERT INTO a (b) SELECT b FROM a;
+        INSERT INTO a (b) SELECT b FROM a;
+        INSERT INTO a (b) SELECT b FROM a;
+        INSERT INTO a (b) SELECT b FROM a;
+        INSERT INTO a (b) SELECT b FROM a;
+        INSERT INTO a (b) SELECT b FROM a;
+        INSERT INTO a (b) SELECT b FROM a;
+        INSERT INTO a (b) SELECT b FROM a;
+        INSERT INTO a (b) SELECT b FROM a;
+        INSERT INTO a (b) SELECT b FROM a;
+        INSERT INTO a (b) SELECT b FROM a;
+        INSERT INTO a (b) SELECT b FROM a;
+        INSERT INTO a (b) VALUES (Some(42));
+        INSERT INTO a (b) VALUES (Some(42));
+        INSERT INTO a (b) VALUES (Some(42));
+        INSERT INTO a (b) SELECT b FROM a;
+        ";
+    let int_init = "
         DROP TABLE a;
         CREATE TABLE a (b Integer);
-        INSERT INTO a (b) VALUES (1), (2), (3), (4), (5), (6), (7), (8);
+        INSERT INTO a(b) VALUES
+            (1),
+            (2),
+            (0),
+            (0),
+            (3),
+            (0),
+            (4);
         INSERT INTO a (b) SELECT b FROM a;
         INSERT INTO a (b) SELECT b FROM a;
         INSERT INTO a (b) SELECT b FROM a;
         INSERT INTO a (b) SELECT b FROM a;
         INSERT INTO a (b) SELECT b FROM a;
-        ",
-        "INSERT INTO a (b) VALUES ({{random_i32}});",
+        INSERT INTO a (b) SELECT b FROM a;
+        INSERT INTO a (b) SELECT b FROM a;
+        INSERT INTO a (b) SELECT b FROM a;
+        INSERT INTO a (b) SELECT b FROM a;
+        INSERT INTO a (b) SELECT b FROM a;
+        INSERT INTO a (b) SELECT b FROM a;
+        INSERT INTO a (b) SELECT b FROM a;
+        INSERT INTO a (b) SELECT b FROM a;
+        INSERT INTO a (b) SELECT b FROM a;
+        INSERT INTO a (b) VALUES (42);
+        INSERT INTO a (b) VALUES (42);
+        INSERT INTO a (b) VALUES (42);
+        INSERT INTO a (b) SELECT b FROM a;
+    ";
+    
+    //tps_benchmark(
+        //maybe_init,
+        //"SELECT inner FROM a WHERE b: Some(inner);",
+        //1,
+        //100,
+        //"simple_select_some",
+        //&mut group,
+    //);
+    tps_benchmark(
+        maybe_init,
+        "SELECT b FROM a WHERE b: Some(42);",
         50,
         100,
-        "simple_insert",
+        "simple_pattern_select",
         &mut group,
     );
+    tps_benchmark(
+        int_init,
+        "SELECT b FROM a WHERE b: 42;",
+        50,
+        100,
+        "simple_reg_select",
+        &mut group,
+    );
+    
 }
 
 fn tps_benchmark(
@@ -132,8 +224,8 @@ async fn actual_bench(
     loop {
         match reader.read(&mut buf).await {
             Ok(0) => break Ok(()),
-            Ok(_) => {},
-            Err(_) => return Err(()),
+            Ok(_) => {}
+            Err(_) => panic!("error reading from benchmarking server"),
         }
     }
 }
